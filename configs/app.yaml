@@ -1,0 +1,4 @@
+app:
+  name: master
+  environment: local
+  default_timeout_seconds: 300
