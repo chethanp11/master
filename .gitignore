@@ -1,18 +1,72 @@
+# ==============================
+# Python Virtual Environments
+# ==============================
+.venv/
+venv/
+ENV/
+env/
 
-# Secrets
+# ==============================
+# Environment Variables
+# ==============================
 .env
+.env.*
+!.env.example
+
+# ==============================
+# Secrets
+# ==============================
 secrets/secrets.yaml
 secrets/*.key
 secrets/*.pem
+secrets/*.crt
+secrets/*.p12
+secrets/*.jks
 
-# Runtime data
+# ==============================
+# Runtime Storage (generated)
+# ==============================
 storage/
 logs/
 
-# Python
+# ==============================
+# Python Cache / Build Artifacts
+# ==============================
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
 
-# OS
+# ==============================
+# Test Artifacts
+# ==============================
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# ==============================
+# OS / Editor Files
+# ==============================
 .DS_Store
-.venv/
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ==============================
+# Notebooks
+# ==============================
+.ipynb_checkpoints/
+
+# ==============================
+# Misc
+# ==============================
+.cache/
+.mypy_cache/
+.ruff_cache/

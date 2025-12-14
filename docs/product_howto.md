@@ -1,0 +1,239 @@
+# Product How-To — master/
+
+This document explains **how to build a new product** on top of the `master/` agentic platform.
+
+It is written for product teams and prototype builders.
+No core changes are required.
+
+---
+
+## 1. What Is a Product?
+
+A product is a **thin, isolated package** that defines:
+- Flows
+- Agents
+- Tools
+- Prompts
+- Product-level config
+
+A product **does not**:
+- Modify core logic
+- Implement orchestration
+- Handle persistence
+- Enforce governance
+
+---
+
+## 2. Product Location
+
+All products live under:
+
+products/<product_name>/
+
+Example:
+
+products/sandbox/
+
+---
+
+## 3. Required Product Structure
+
+products//
+├── flows/
+├── agents/
+├── tools/
+├── prompts/
+├── config/
+│   └── product.yaml
+└── tests/
+
+---
+
+## 4. Step-by-Step: Creating a New Product
+
+### Step 1: Scaffold the Product
+
+python scripts/create_product.py sandbox
+
+(Or create the folders manually.)
+
+⸻
+
+### Step 2: Define Product Config
+
+File:
+
+products/sandbox/config/product.yaml
+
+Example:
+
+name: sandbox
+default_flow: hello_world
+expose_api: true
+ui_enabled: true
+
+
+⸻
+
+### Step 3: Create a Flow
+
+File:
+
+products/sandbox/flows/hello_world.yaml
+
+Example:
+
+id: hello_world
+autonomy_level: semi_auto
+
+steps:
+  - id: generate
+    type: agent
+    agent: simple_agent
+
+  - id: approve
+    type: human_approval
+    message: "Approve output?"
+
+  - id: finish
+    type: agent
+    agent: simple_agent
+
+
+⸻
+
+### Step 4: Create an Agent
+
+File:
+
+products/sandbox/agents/simple_agent.py
+
+Rules:
+	•	Inherit from BaseAgent
+	•	Implement run(context)
+	•	Return AgentResult
+
+⸻
+
+### Step 5: Register the Agent
+
+Agents register themselves when imported.
+
+Ensure product agent modules are imported by the product loader.
+
+⸻
+
+### Step 6: (Optional) Create a Tool
+
+File:
+
+products/sandbox/tools/echo_tool.py
+
+Rules:
+	•	Inherit from BaseTool
+	•	Define input/output schema
+	•	Register via tool registry
+
+⸻
+
+### Step 7: Define Prompts (Optional)
+
+File:
+
+products/sandbox/prompts/simple_agent.yaml
+
+Prompts are resolved by agent name.
+
+⸻
+
+## 5. Running the Product
+
+Run via API
+
+POST /api/run/sandbox/hello_world
+
+
+⸻
+
+Run via UI
+
+Open:
+
+http://localhost:8000/sandbox
+
+
+⸻
+
+Run via CLI
+
+python -m gateway.cli run-flow sandbox hello_world
+
+
+⸻
+
+## 6. Testing a Product
+
+Agent Tests
+
+pytest products/sandbox/tests/test_agents.py
+
+
+⸻
+
+Flow Tests
+
+pytest products/sandbox/tests/test_flows.py
+
+
+⸻
+
+## 7. Product Isolation Rules
+
+Products:
+	•	Cannot import other products
+	•	Cannot import core internals
+	•	Cannot bypass governance
+	•	Cannot write to storage directly
+
+⸻
+
+## 8. What Product Teams Should NOT Do
+
+❌ Add logic to core
+❌ Call tools directly
+❌ Read environment variables
+❌ Write files or databases
+❌ Implement their own approval logic
+
+⸻
+
+## 9. Adding a Second Flow
+
+Just add another YAML file in:
+
+products/<product>/flows/
+
+No code changes required.
+
+⸻
+
+## 10. Promoting a Product
+
+When ready:
+	•	Add governance policies
+	•	Enable API exposure
+	•	Enable UI panels
+	•	Run integration tests
+
+⸻
+
+## 11. Product Lifecycle
+	1.	Prototype (suggest_only)
+	2.	Semi-autonomous (semi_auto + HITL)
+	3.	Controlled autonomy (full_auto with policies)
+	4.	Platform-ready
+
+⸻
+
+This structure allows teams to build fast, safe, and consistent agentic prototypes without touching the platform core.
+
