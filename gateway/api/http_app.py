@@ -12,3 +12,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="master", version="0.1.0")
     app.include_router(run_router, prefix="/api")
     return app
+
+# ==============================
+# ASGI entrypoint for uvicorn
+# ==============================
+
+app = create_app()

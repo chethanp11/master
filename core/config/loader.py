@@ -17,6 +17,18 @@ Testability:
 - No hardcoded absolute paths.
 """
 
+# High-level load flow:
+# 1. Determine paths and environment variables (env, .env).
+# 2. Load base YAML configs from configs/ directory.
+# 3. Load secrets from secrets.yaml if present.
+# 4. Load .env file and merge into environment variables without overriding real env.
+# 5. Apply env var overrides with MASTER__ prefix to merged config.
+# 6. Inject repo_root path into config to ensure deterministic path.
+# 7. Validate merged config against pydantic Settings schema.
+# 8. Hydrate provider secrets into models config respecting precedence.
+# 9. Return validated Settings object (and optionally raw merged dict).
+
+
 from __future__ import annotations
 
 import os
@@ -35,24 +47,31 @@ from core.config.schema import Settings
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
+    # Return empty dict if file does not exist
     if not path.exists():
         return {}
     raw = path.read_text(encoding="utf-8").strip()
+    # Return empty dict if file is empty or whitespace only
     if not raw:
         return {}
     data = yaml.safe_load(raw)
+    # Guard against non-dict YAML content, return empty dict if not a dict
     return data if isinstance(data, dict) else {}
 
 
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """
     Deep-merge dictionaries: override wins.
+
+    Recursively merges nested dicts, with values from 'override' taking precedence.
     """
     out: Dict[str, Any] = dict(base)
     for k, v in override.items():
         if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            # Recursively merge nested dictionaries
             out[k] = _deep_merge(out[k], v)
         else:
+            # Override scalar or non-dict values
             out[k] = v
     return out
 
@@ -61,20 +80,27 @@ def _section(data: Dict[str, Any], key: str) -> Dict[str, Any]:
     """
     Config files may either namespace their contents (app: {...}) or provide the
     raw fields directly. Normalize to the inner dict for merging.
+
+    This supports legacy configs that either wrap all settings under a top-level key
+    or flatten them at the root level.
     """
     value = data.get(key)
     if isinstance(value, dict):
         return value
+    # If no top-level key or not a dict, assume data is already the inner dict
     return data
 
 
 def _normalize_app_config(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Legacy configs used `name/environment/default_timeout_seconds`. Map/strip them.
+
+    This function normalizes old config keys to current expected keys and removes deprecated ones.
     """
     out = dict(data)
     if "environment" in out and "env" not in out:
         out["env"] = out["environment"]
+    # Remove deprecated keys
     out.pop("environment", None)
     out.pop("name", None)
     out.pop("default_timeout_seconds", None)
@@ -91,6 +117,9 @@ def _read_dotenv(dotenv_path: Path) -> Dict[str, str]:
     Minimal .env parser (KEY=VALUE).
     - Ignores comments and blank lines.
     - Strips surrounding quotes.
+
+    We use a minimal parser instead of python-dotenv to avoid extra dependencies and
+    because we only need basic parsing for this loader.
     """
     if not dotenv_path.exists():
         return {}
@@ -121,6 +150,13 @@ Rules:
 - Split by '__' after prefix MASTER__
 - Lowercase keys for dict insertion
 - Coerce booleans/ints/floats when obvious
+
+The MASTER__ prefix is chosen to clearly namespace overrides for this application,
+avoiding collisions with other env vars.
+
+Lowercasing keys ensures consistent dict keys regardless of env var casing.
+
+Coercion attempts to convert strings to bool/int/float for convenience.
     """
     out = dict(cfg)
     prefix = "MASTER__"
@@ -194,12 +230,13 @@ Inputs:
     if secrets_file is not None and secrets_path is not None:
         raise ValueError("Provide only one of secrets_file or secrets_path.")
 
+    # --- Environment variable resolution ---
     env_vars = dict(env) if env is not None else dict(os.environ)
 
     root = Path(repo_root or os.getcwd()).expanduser().resolve()
     cfg_dir = root / (configs_dir or "configs")
 
-    # base configs
+    # --- Load base config YAML files ---
     app_cfg = _read_yaml(cfg_dir / "app.yaml")
     models_cfg = _read_yaml(cfg_dir / "models.yaml")
     policies_cfg = _read_yaml(cfg_dir / "policies.yaml")
@@ -213,12 +250,12 @@ Inputs:
     merged = _deep_merge(merged, {"logging": _section(logging_cfg, "logging")})
     merged = _deep_merge(merged, {"products": _section(products_cfg, "products")})
 
-    # secrets.yaml (optional)
+    # --- Load secrets.yaml (optional) ---
     sec_path = Path(secrets_file or secrets_path) if (secrets_file or secrets_path) else (root / "secrets" / "secrets.yaml")
     secrets_cfg = _read_yaml(sec_path)
     merged = _deep_merge(merged, {"secrets": _section(secrets_cfg, "secrets")})
 
-    # .env (optional) -> treated as env overrides (highest)
+    # --- Load .env file and merge with env vars ---
     dotenv_path = Path(dotenv_file) if dotenv_file else (root / ".env")
     dotenv_vars = _read_dotenv(dotenv_path)
     effective_env = dict(env_vars)
@@ -226,19 +263,22 @@ Inputs:
     for k, v in dotenv_vars.items():
         effective_env.setdefault(k, v)
 
+    # --- Apply MASTER__ env var overrides ---
     merged = _apply_env_overrides(merged, effective_env)
 
-    # ensure repo_root is set deterministically (override configs)
+    # --- Inject repo_root path to ensure deterministic path ---
     merged = _deep_merge(merged, {"app": {"paths": {"repo_root": str(root)}}})
 
+    # --- Validate merged config against pydantic schema ---
     try:
         settings = Settings.model_validate(merged)
     except ValidationError as e:
         # raise with helpful context for debugging
         raise ValueError(f"Invalid configuration: {e}") from e
 
-    # convenience wiring: populate common secret fields into provider configs
-    # (still respecting precedence: if models.openai.api_key already set by env override, keep it)
+    # --- Hydrate provider secrets after validation ---
+    # This happens after validation to avoid breaking precedence rules
+    # and to ensure the final Settings object has secrets injected appropriately.
     settings = _hydrate_provider_secrets(settings)
 
     if include_raw:
@@ -249,6 +289,11 @@ Inputs:
 def _hydrate_provider_secrets(settings: Settings) -> Settings:
     """
     Map secrets into provider configs without breaking precedence.
+
+    This function injects secrets (like API keys) into the models config if they
+    are not already set by higher-precedence sources (env vars or configs).
+
+    It runs after validation to preserve the precedence and avoid validation errors.
     """
     data = settings.model_dump()
     secrets = data.get("secrets", {}) or {}
