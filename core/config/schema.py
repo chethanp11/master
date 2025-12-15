@@ -1,0 +1,171 @@
+# ==============================
+# Config Schemas (Pydantic)
+# ==============================
+"""
+Pydantic settings models for master/.
+
+Notes:
+- Keep these schemas stable: many modules will depend on them.
+- No env reads here. No file IO here. Pure types + defaults.
+- loader.py builds a single Settings object with precedence merging.
+
+Precedence (implemented in loader.py):
+env > secrets/secrets.yaml > configs/*.yaml > defaults
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+# ==============================
+# App Settings
+# ==============================
+
+
+class PathsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repo_root: str = Field(default=".", description="Repo root (relative or absolute)")
+    configs_dir: str = Field(default="configs", description="Configs directory")
+    secrets_dir: str = Field(default="secrets", description="Secrets directory")
+    storage_dir: str = Field(default="storage", description="Runtime storage directory")
+    logs_dir: str = Field(default="logs", description="Logs directory")
+    docs_dir: str = Field(default="docs", description="Docs directory")
+
+
+class AppConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    env: str = Field(default="local", description="Environment name (local/stage/prod)")
+    debug: bool = Field(default=False)
+    host: str = Field(default="0.0.0.0")
+    port: int = Field(default=8000)
+    ui_port: int = Field(default=8501, description="If using Streamlit/Chainlit etc.")
+    default_product: str = Field(default="sandbox")
+    default_flow: str = Field(default="hello_world")
+    paths: PathsConfig = Field(default_factory=PathsConfig)
+
+
+# ==============================
+# Models Settings
+# ==============================
+
+
+class OpenAIConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    api_base: Optional[str] = Field(default=None)
+    api_key: Optional[str] = Field(default=None, description="Resolved via loader from env/secrets only")
+    timeout_seconds: float = Field(default=30.0)
+
+
+class ModelRoutingConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    default_provider: str = Field(default="openai")
+    default_model: str = Field(default="gpt-4o-mini")
+
+    # Optional overrides
+    by_product: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    by_purpose: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
+class ModelsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    routing: ModelRoutingConfig = Field(default_factory=ModelRoutingConfig)
+    openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
+
+    # Placeholder for future providers
+    providers: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
+# ==============================
+# Policies / Governance Settings
+# ==============================
+
+
+class PoliciesConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # High-level switches
+    enforce: bool = Field(default=True)
+    allow_full_autonomy: bool = Field(default=False)
+
+    # Allow/deny lists (names resolved by registries)
+    allowed_tools: List[str] = Field(default_factory=list)
+    blocked_tools: List[str] = Field(default_factory=list)
+
+    allowed_models: List[str] = Field(default_factory=list)
+    blocked_models: List[str] = Field(default_factory=list)
+
+    # Per-product policy overrides
+    by_product: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
+# ==============================
+# Logging / Observability Settings
+# ==============================
+
+
+class LoggingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: str = Field(default="INFO")
+    json: bool = Field(default=True, description="Emit JSON logs where possible")
+    log_to_file: bool = Field(default=True)
+    file_name: str = Field(default="app.log")
+    redact: bool = Field(default=True)
+    redact_patterns: List[str] = Field(default_factory=list)
+    trace_to_memory: bool = Field(default=True, description="Persist trace events via memory backend")
+    console: bool = Field(default=True)
+
+
+# ==============================
+# Products Settings
+# ==============================
+
+
+class ProductsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Where products live (relative to repo_root)
+    products_dir: str = Field(default="products")
+    discovery_paths: List[str] = Field(default_factory=lambda: ["products"])
+    enabled: List[str] = Field(default_factory=list, description="If empty, all discovered products are enabled")
+
+
+# ==============================
+# Secrets Settings
+# ==============================
+
+
+class SecretsConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    # Common secret surfaces. Keep optional; loader fills.
+    openai_api_key: Optional[str] = Field(default=None)
+    memory_db_path: Optional[str] = Field(default=None)
+
+
+# ==============================
+# Top-Level Settings
+# ==============================
+
+
+class Settings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    app: AppConfig = Field(default_factory=AppConfig)
+    models: ModelsConfig = Field(default_factory=ModelsConfig)
+    policies: PoliciesConfig = Field(default_factory=PoliciesConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    products: ProductsConfig = Field(default_factory=ProductsConfig)
+    secrets: SecretsConfig = Field(default_factory=SecretsConfig)
+
+    def repo_root_path(self) -> Path:
+        return Path(self.app.paths.repo_root).expanduser().resolve()

@@ -1,0 +1,16 @@
+# ==============================
+# Governance Policies
+# ==============================
+enforce: true
+allow_full_autonomy: false
+
+# If empty -> allow all unless blocked_tools is set.
+allowed_tools: []
+blocked_tools: []
+
+# If empty -> allow all unless blocked_models is set.
+allowed_models: []
+blocked_models: []
+
+# Per-product policy overrides (optional)
+by_product: {}

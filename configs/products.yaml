@@ -1,0 +1,9 @@
+# ==============================
+# Product Discovery
+# ==============================
+products_dir: products
+discovery_paths:
+  - products
+
+# If empty: enable all discovered products
+enabled: []
