@@ -321,6 +321,7 @@ Rules:
   - formatting hints
   - domain vocabulary
   - stylistic guidance (if required)
+- Prompts are optional implementation details and must never be required for correct execution.
 
 ---
 

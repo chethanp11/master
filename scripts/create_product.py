@@ -19,7 +19,6 @@ Rules:
       flows/.keep
       agents/__init__.py
       tools/__init__.py
-      prompts/.keep
       config/product.yaml
       tests/__init__.py
       tests/test_smoke.py
@@ -198,7 +197,6 @@ def main(argv: list[str]) -> int:
     (product_dir / "flows").mkdir(parents=True, exist_ok=True)
     (product_dir / "agents").mkdir(parents=True, exist_ok=True)
     (product_dir / "tools").mkdir(parents=True, exist_ok=True)
-    (product_dir / "prompts").mkdir(parents=True, exist_ok=True)
     (product_dir / "config").mkdir(parents=True, exist_ok=True)
     (product_dir / "tests").mkdir(parents=True, exist_ok=True)
 
@@ -213,7 +211,6 @@ def main(argv: list[str]) -> int:
     # Keep placeholders
     # ==============================
     touch_keep(product_dir / "flows" / ".keep")
-    touch_keep(product_dir / "prompts" / ".keep")
 
     # ==============================
     # Starter manifest + product config
