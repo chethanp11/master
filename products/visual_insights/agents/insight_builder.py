@@ -1,0 +1,1 @@
+"""Insight builder agent placeholder."""

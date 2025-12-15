@@ -1,0 +1,1 @@
+"""Insight planner agent placeholder."""

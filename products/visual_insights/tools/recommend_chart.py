@@ -1,0 +1,1 @@
+"""Recommend chart tool stub."""

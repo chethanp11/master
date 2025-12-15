@@ -1,23 +1,20 @@
-# Product manifest (tracked in git)
+# Product manifest (short)
 name: "visual_insights"
 display_name: "Visual Insights"
-description: "TODO: describe this product"
+description: "Agentic dashboard for CSV/PDF datasets."
 version: "0.1.0"
 
-default_flow: "hello_world"
+default_flow: "v1_flow"
 
 exposed_api:
   enabled: true
   allowed_flows:
-    - "hello_world"
+    - "v1_flow"
 
 ui_enabled: true
 ui:
   enabled: true
   nav_label: "Visual Insights"
-  panels:
-    - id: "runner"
-      title: "Run a Flow"
 
 flows:
-  - "hello_world"
+  - "v1_flow"
