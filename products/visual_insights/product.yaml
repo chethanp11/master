@@ -1,8 +1,15 @@
-id: "visual_insights"
-name: "Visual Insights"
-description: "Visual Insights v1 ingests CSV/PDF data, plans insights, and renders traceable cards."
-config_path: "products/visual_insights/configs/visual_insights.yaml"
-default_flow: "v1"
-flows:
-  v1:
-    entrypoint: "products.visual_insights.flows.v1_flow:run_visual_insights_v1"
+# Product config (tracked in git)
+# Override global defaults for this product only (no secrets here).
+name: "visual_insights"
+
+defaults:
+  autonomy_level: "semi_auto"
+  model: "default"
+
+limits:
+  max_steps: 50
+  max_tool_calls: 50
+
+flags:
+  enable_tools: true
+  enable_knowledge: true
