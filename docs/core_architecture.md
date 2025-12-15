@@ -22,7 +22,7 @@ Everything in `products/` is **domain-specific**.
 ---
 
 ## 2. High-Level Layering
-
+```
 ┌───────────────────────────────┐
 │           Products            │  ← Business logic only
 │  (flows, agents, tools)       │
@@ -38,11 +38,11 @@ Everything in `products/` is **domain-specific**.
 │            Gateway            │  ← API, UI, CLI
 │  HTTP, UI routing, auth stub  │
 └───────────────────────────────┘
-
+```
 ---
 
 ## 3. Core Folder Structure (Detailed)
-
+```
 core/
 ├── orchestrator/        # Flow engine and execution control
 ├── agents/              # Agent contracts and registry
@@ -54,7 +54,7 @@ core/
 ├── logging/             # Tracing, logging, metrics
 ├── prompts/             # Shared prompt templates and helpers
 └── utils/               # Cross-cutting helpers (config, product loader, etc.)
-
+```
 Each module is described below.
 
 ---
@@ -63,7 +63,7 @@ Each module is described below.
 
 **Purpose:**  
 Controls flow execution, step sequencing, retries, HITL pauses, and resume.
-
+```
 core/orchestrator/
 ├── engine.py
 ├── flow_loader.py
@@ -72,7 +72,7 @@ core/orchestrator/
 ├── state.py
 ├── error_policy.py
 └── hitl.py
-
+```
 ### Responsibilities
 - Load flow definitions (YAML/manifest) via `FlowLoader`
 - Execute steps in order, honoring retry policies & backoff
@@ -92,12 +92,12 @@ core/orchestrator/
 
 **Purpose:**  
 Encapsulate reasoning logic. Agents decide *what* to do, not *how* to do it.
-
+```
 core/agents/
 ├── base.py
 ├── registry.py
 └── utils.py
-
+```
 ### Responsibilities
 - Consume `RunContext`/`StepContext` supplied via orchestrator
 - Perform reasoning or planning purely in-memory
@@ -116,7 +116,7 @@ core/agents/
 
 **Purpose:**  
 Encapsulate external actions (APIs, scripts, DB access).
-
+```
 core/tools/
 ├── base.py
 ├── registry.py
@@ -125,7 +125,7 @@ core/tools/
 ├── local_backend.py
 ├── remote_backend.py
 └── mcp_backend.py
-
+```
 ### Responsibilities
 - Validate inputs via Pydantic contracts
 - Execute actions via registered backends (local, future adapters)
@@ -143,13 +143,13 @@ core/tools/
 
 **Purpose:**  
 Persist everything needed to audit, pause, and resume execution.
-
+```
 core/memory/
 ├── base.py
 ├── sqlite_backend.py
 ├── in_memory.py
 └── router.py
-
+```
 ### Stores
 - Runs, steps, approvals, trace events, artifacts, governance metadata
 ### Key Guarantee
@@ -164,13 +164,13 @@ core/memory/
 
 **Purpose:**  
 Provide retrieval capability for agents.
-
+```
 core/knowledge/
 ├── base.py
 ├── vector_store.py
 ├── retriever.py
 └── structured.py
-
+```
 ### Supports
 - Unstructured vector retrieval from the local sqlite vector store in `storage/vectors`
 - Structured helpers for CSV ingestion/querying (pandas fallback)
@@ -182,13 +182,13 @@ core/knowledge/
 
 **Purpose:**  
 Centralize all LLM / embedding access.
-
+```
 core/models/
 ├── router.py
 └── providers/
 ├── openai_provider.py
 └── other_provider.py
-
+```
 ### Responsibilities
 - Select models via a routing table (`core/models/router.py`)
 - Abstract vendor SDKs behind providers
@@ -203,12 +203,12 @@ core/models/
 
 **Purpose:**  
 Enforce safety, policy, and enterprise constraints.
-
+```
 core/governance/
 ├── policies.py
 ├── security.py
 └── hooks.py
-
+```
 ### Enforces
 - Allowed tools, autonomy levels, and model choices
 - Data redaction before logging/tracing
@@ -225,12 +225,12 @@ Governance hooks run:
 
 **Purpose:**  
 Provide full traceability.
-
+```
 core/logging/
 ├── logger.py
 ├── tracing.py
 └── metrics.py
-
+```
 ### Guarantees
 - Every step, tool, pause, resume, and error is traced (`tracing.py`)
 - Trace events persist via the memory router for API/UI visibility
@@ -242,12 +242,12 @@ core/logging/
 
 **Purpose:**  
 Centralize prompt templates.
-
+```
 core/prompts/
 ├── system/
 ├── tasks/
 └── fewshot/
-
+```
 Used by products and agents but owned by the platform.
 
 ---
@@ -256,7 +256,7 @@ Used by products and agents but owned by the platform.
 
 **Purpose:**  
 Define business logic without touching core.
-
+```
 products//
 ├── flows/
 ├── agents/
@@ -264,7 +264,7 @@ products//
 ├── prompts/
 ├── config/
 └── tests/
-
+```
 ### Product Capabilities
 - Define flows (`flows/*.yaml`) that reference registered agents/tools
 - Provide agents/tools that obey platform laws
@@ -281,12 +281,12 @@ products//
 
 **Purpose:**  
 Expose the platform.
-
+```
 gateway/
 ├── api/
 ├── ui/
 └── cli/
-
+```
 ### API
 - Run flows (`/api/run/{product}/{flow}`)
 - Resume HITL approvals (`/api/resume_run/{run_id}`)
