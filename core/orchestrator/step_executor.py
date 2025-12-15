@@ -3,15 +3,17 @@
 # ==============================
 from __future__ import annotations
 
-from typing import Dict, Optional
+import time
+from typing import Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
-from core.contracts.flow_schema import StepDef, StepType
+from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
 from core.tools.executor import ToolExecutor
+from core.orchestrator.error_policy import evaluate_retry
 
 
 class StepExecutor:
@@ -24,9 +26,11 @@ class StepExecutor:
         *,
         tool_executor: ToolExecutor,
         agent_registry: AgentRegistry = AgentRegistry,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self.tool_executor = tool_executor
         self.agent_registry = agent_registry
+        self.sleep_fn = sleep_fn
 
     def execute(
         self,
@@ -64,10 +68,43 @@ class StepExecutor:
             raise ValueError("tool step missing 'tool' field")
 
         params = step_def.params or {}
-        result = self.tool_executor.execute(tool_name=step_def.tool, params=params, ctx=step_ctx)
-        if not result.ok:
-            raise RuntimeError(result.error.message if result.error else "tool_failed")
-        return result
+        attempt = 1
+        retry_policy: Optional[RetryPolicy] = step_def.retry
+        while True:
+            step_ctx.emit("tool_call_attempt_started", {"attempt": attempt, "tool": step_def.tool})
+            result = self.tool_executor.execute(tool_name=step_def.tool, params=params, ctx=step_ctx)
+            if result.ok:
+                step_ctx.emit("tool_call_succeeded", {"attempt": attempt, "tool": step_def.tool})
+                return result
+
+            error_code = None
+            error_type = None
+            if result.error:
+                error_code = result.error.code.value if hasattr(result.error.code, "value") else str(result.error.code)
+                error_type = result.error.code.name if hasattr(result.error.code, "name") else type(result.error).__name__
+            step_ctx.emit(
+                "tool_call_attempt_failed",
+                {
+                    "attempt": attempt,
+                    "tool": step_def.tool,
+                    "error_code": error_code,
+                    "error_type": error_type,
+                    "message": result.error.message if result.error else "tool_failed",
+                },
+            )
+
+            decision = evaluate_retry(attempt_index=attempt, retry_policy=retry_policy, error_code=error_code)
+            if not decision.should_retry:
+                raise RuntimeError(result.error.message if result.error else "tool_failed")
+
+            delay = decision.next_backoff_seconds
+            step_ctx.emit(
+                "tool_call_retry_scheduled",
+                {"attempt": attempt + 1, "tool": step_def.tool, "delay_ms": int(delay * 1000)},
+            )
+            if delay > 0:
+                self.sleep_fn(delay)
+            attempt += 1
 
 
 def build_step_context(run_ctx: RunContext, *, step_id: str, step_def: StepDef) -> StepContext:

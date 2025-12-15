@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
@@ -58,6 +59,7 @@ class OrchestratorEngine:
         *,
         memory: Optional[MemoryRouter] = None,
         tracer: Optional[Tracer] = None,
+        sleep_fn: Optional[Callable[[float], None]] = None,
     ) -> "OrchestratorEngine":
         repo_root = settings.repo_root_path()
         products_root = repo_root / settings.products.products_dir
@@ -67,7 +69,11 @@ class OrchestratorEngine:
         tracer_instance = tracer or Tracer(memory=memory_router, redactor=redactor)
         governance = GovernanceHooks(settings=settings, redactor=redactor)
         tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
-        step_executor = StepExecutor(tool_executor=tool_executor, agent_registry=AgentRegistry)
+        step_executor = StepExecutor(
+            tool_executor=tool_executor,
+            agent_registry=AgentRegistry,
+            sleep_fn=sleep_fn or time.sleep,
+        )
         return cls(
             flow_loader=flow_loader,
             step_executor=step_executor,

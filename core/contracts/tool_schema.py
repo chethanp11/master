@@ -51,6 +51,7 @@ class ToolErrorCode(str, Enum):
     BACKEND_ERROR = "backend_error"
     CONTRACT_VIOLATION = "contract_violation"
     UNKNOWN = "unknown"
+    TEMPORARY = "TEMPORARY"
 
 
 # ==============================

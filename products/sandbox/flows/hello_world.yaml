@@ -21,7 +21,7 @@ steps:
     retry:
       max_attempts: 2
       backoff_seconds: 1
-      retry_on: ["TEMPORARY"]
+      retry_on: ["TEMPORARY", "timeout"]
 
   - id: "approval"
     type: "human_approval"
