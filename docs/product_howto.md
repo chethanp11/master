@@ -1,286 +1,119 @@
 # Product How-To — master/
 
-This document explains **how to build a new product** on top of the `master/` agentic platform.
-
-It is written for product teams and prototype builders.
-No core changes are required.
+This document explains **how to build and ship a product** on top of the `master/` platform.  
+Products are thin bundles that plug into the shared runtime; **no core changes are needed**.
 
 ---
 
-## 1. What Is a Product?
+## 1. Product Principles
 
-A product is a **thin, isolated package** that defines:
-- Flows
-- Agents
-- Tools
-- Prompts
-- Product-level config
+- Thin: products only define flows, agents, tools, prompts, and config.
+- Safe: obey the platform laws (no env reads outside config loader, no persistence outside `core/memory`, no direct tool execution).
+- Declarative: flows/prompts/policies belong in YAML; behavior is wired via manifests.
+- Testable: each product can ship regression suites that run via sqlite.
 
-A product **does not**:
-- Modify core logic
-- Implement orchestration
-- Handle persistence
-- Enforce governance
+## 2. Product Layout
 
----
+Products live under `products/<product_name>/` with the following required structure:
 
-## 2. Product Location
-
-All products live under:
-
-products/<product_name>/
-
-Example:
-
-products/sandbox/
-
----
-
-## 3. Required Product Structure
-
+```
 products/<product>/
-├── flows/
-├── agents/
-├── tools/
-├── prompts/
-├── manifest.yaml
+├── manifest.yaml                  # Metadata + flows + UI/API flags
 ├── config/
-│   └── product.yaml
-├── registry.py
-└── tests/
-
----
-
-## 4. Step-by-Step: Creating a New Product
-
-### Step 1: Scaffold the Product
-
-python scripts/create_product.py sandbox
-
-(Or create the folders manually.)
-
-⸻
-
-### Step 2: Define Product Config
-
-Files:
-
-- products/sandbox/manifest.yaml
-- products/sandbox/config/product.yaml
-
-Example `manifest.yaml`:
-
-```
-name: sandbox
-display_name: "Sandbox"
-description: "Demo product"
-version: "0.1.0"
-
-default_flow: "hello_world"
-
-exposed_api:
-  enabled: true
-  allowed_flows:
-    - "hello_world"
-
-ui_enabled: true
-ui:
-  enabled: true
-  nav_label: "Sandbox"
-  panels:
-    - id: "runner"
-      title: "Run a Flow"
-
-flows:
-  - "hello_world"
+│   └── product.yaml               # Product-specific defaults injected into Settings
+├── flows/                         # Flow definitions (YAML)
+├── agents/                        # BaseAgent implementations
+├── tools/                         # BaseTool implementations
+├── registry.py                    # Safe registration hook (ProductRegistries)
+├── prompts/                       # Optional prompt assets
+└── tests/                         # Optional product-level regression tests
 ```
 
-Example `config/product.yaml`:
+`scripts/create_product.py <name>` scaffolds this layout with placeholder manifest/config/registry files. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
 
-```
-name: sandbox
+## 3. Manifest & Config
 
-defaults:
-  autonomy_level: "semi_auto"
+`manifest.yaml` declares the product catalog entry. Provide:
 
-limits:
-  max_steps: 50
+- `name`, `display_name`, `description`, `version`
+- `default_flow`
+- `exposed_api` / `ui` flags+panels (used by gateway & Streamlit UI)
+- `flows`: list of flow IDs published by the product
+- Optional metadata (category, icon, gallery)
 
-flags:
-  enable_tools: true
-```
+`config/product.yaml` stores product defaults (autonomy, budgets, flags). It is merged into the global Settings object and can be injected into agents/tools via dependency injection.
 
+## 4. Flow Definitions
 
-⸻
+Flows live under `flows/*.yaml`. Each flow defines a linear/graphical sequence of steps referencing registered agents/tools or the built-in `human_approval`. Example snippet:
 
-### Step 3: Create a Flow
-
-File:
-
-products/sandbox/flows/hello_world.yaml
-
-Example:
-
+```yaml
 id: hello_world
-autonomy_level: semi_auto
+autonomy_level: suggest_only
 
 steps:
-  - id: generate
-    type: agent
-    agent: simple_agent
-
-  - id: approve
+  - id: echo
+    type: tool
+    tool: echo_tool
+    backend: local
+    params:
+      message: "{{payload.message}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+  - id: approval
     type: human_approval
-    message: "Approve output?"
-
-  - id: finish
+    title: Review the echoed message
+    message: Please approve or reject the output.
+  - id: summary
     type: agent
     agent: simple_agent
+```
 
+The flow loader normalizes step IDs, enforces retry policies, and wires the step definitions to the registered agents/tools.
 
-⸻
+## 5. Agents & Tools
 
-### Step 4: Create an Agent
+Agents (`BaseAgent`) operate on `StepContext`, inspect payload/artifacts, and return an `AgentResult`. They must not execute tools directly, call vendors, or write to disk.
 
-File:
+Tools (`BaseTool`) validate inputs (Pydantic), perform deterministic actions, and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks, retries, and redaction.
 
-products/sandbox/agents/simple_agent.py
+## 6. Registration
 
-Rules:
-	•	Inherit from BaseAgent
-	•	Implement run(context)
-	•	Return AgentResult
-
-⸻
-
-### Step 5: Register the Agent & Tools
-
-Every product must provide `products/<name>/registry.py` with a safe entrypoint:
+Every product must provide `products/<name>/registry.py` with:
 
 ```python
 from core.utils.product_loader import ProductRegistries
-from products.sandbox.agents.simple_agent import build as build_agent
-from products.sandbox.tools.echo_tool import build as build_tool
 
 def register(registries: ProductRegistries) -> None:
-    registries.agent_registry.register(build_agent().name, build_agent)
-    registries.tool_registry.register(build_tool().name, build_tool)
+    registries.agent_registry.register("simple_agent", build_agent)
+    registries.tool_registry.register("echo_tool", build_tool)
 ```
 
-The product loader imports this module and calls `register(...)` with sandboxed registries + settings.
+`ProductRegistries` bundles the global `AgentRegistry` and `ToolRegistry` plus settings. The loader imports each registry module, calls `register(...)`, and only then exposes the product's flows to the API/UI. Keep registry imports side-effect-free and idempotent.
 
-⸻
+## 7. Testing & Validation
 
-### Step 6: (Optional) Create a Tool
+Product tests belong under `products/<name>/tests/`. Sandbox ships `products/sandbox/tests/test_sandbox_flow.py`, which:
 
-File:
+- Boots settings via `load_settings(configs_dir=..., secrets_path=...)` to point the sqlite backend into a temp path
+- Discovers/registers the sandbox product
+- Runs `hello_world`, asserts the run pauses for HITL, resumes with an approval payload, and inspects persisted step outputs (echo + summary)
 
-products/sandbox/tools/echo_tool.py
+Use pytest to keep the golden path deterministic (sqlite backend only, no network).
 
-Rules:
-	•	Inherit from BaseTool
-	•	Define input/output schema
-	•	Register via tool registry
+## 8. Running the Product
 
-⸻
+Once registered, the gateway exposes:
 
-### Step 7: Define Prompts (Optional)
+- `GET /api/products` + `/api/products/{product}/flows` (driven by manifests + discovery)
+- `POST /api/run/{product}/{flow}` to start flows
+- `POST /api/resume_run/{run_id}` to resolve HITL approvals
+- CLI commands (`master list-products`, `master run`, `master resume`, `master approvals`)
+- Streamlit control center (`gateway/ui/platform_app.py`) that lists products, flows, run history, and approvals
 
-File:
+## Recap
 
-products/sandbox/prompts/simple_agent.yaml
-
-Prompts are resolved by agent name.
-
-⸻
-
-## 5. Running the Product
-
-Run via API
-
-POST /api/run/sandbox/hello_world
-
-
-⸻
-
-Run via UI
-
-Open:
-
-http://localhost:8000/sandbox
-
-
-⸻
-
-Run via CLI
-
-python -m gateway.cli run-flow sandbox hello_world
-
-
-⸻
-
-## 6. Testing a Product
-
-Agent Tests
-
-pytest products/sandbox/tests/test_agents.py
-
-
-⸻
-
-Flow Tests
-
-pytest products/sandbox/tests/test_flows.py
-
-
-⸻
-
-## 7. Product Isolation Rules
-
-Products:
-	•	Cannot import other products
-	•	Cannot import core internals
-	•	Cannot bypass governance
-	•	Cannot write to storage directly
-
-⸻
-
-## 8. What Product Teams Should NOT Do
-
-❌ Add logic to core
-❌ Call tools directly
-❌ Read environment variables
-❌ Write files or databases
-❌ Implement their own approval logic
-
-⸻
-
-## 9. Adding a Second Flow
-
-Just add another YAML file in:
-
-products/<product>/flows/
-
-No code changes required.
-
-⸻
-
-## 10. Promoting a Product
-
-When ready:
-	•	Add governance policies
-	•	Enable API exposure
-	•	Enable UI panels
-	•	Run integration tests
-
-⸻
-
-## 11. Product Lifecycle
-	1.	Prototype (suggest_only)
-	2.	Semi-autonomous (semi_auto + HITL)
-	3.	Controlled autonomy (full_auto with policies)
-	4.	Platform-ready
-
-⸻
-
-This structure allows teams to build fast, safe, and consistent agentic prototypes without touching the platform core.
+- Products ship manifests, configs, flows, agents, tools, registries, and optional prompts/tests.
+- The product loader discovers manifests deterministically, registers components safely, and feeds the gateway/orchestrator.
+- Tests run via sqlite to prove the golden path (`tool → HITL → agent summary`) behaves under audit-ready persistence.

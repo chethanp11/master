@@ -99,16 +99,16 @@ Key rules:
 Location:
 core/tools/
 Responsibilities:
-- Execute external actions (APIs, DBs, scripts)
-- Enforce typed inputs/outputs
-- Apply governance before execution
+- Execute external actions (files, HTTP, DBs) through registered backends
+- Validate inputs/outputs via Pydantic and wrap errors in `ToolResult`
+- Apply governance decisions before/after every call
 
 Execution flow:
-Agent → Tool Executor → Governance → Backend → Result
+Agent → StepExecutor → ToolExecutor → Governance hooks → Backend → ToolResult
 Backends supported:
-- Local Python functions
-- Remote HTTP/gRPC services
-- MCP (optional / future)
+- Local Python functions (e.g., sandbox tools)
+- Remote HTTP/gRPC adapters (via pluggable backends)
+- MCP / custom adapters (future)
 
 ---
 
@@ -116,30 +116,29 @@ Backends supported:
 Location:
 core/memory/
 Responsibilities:
-- Store run metadata
-- Store step results and traces
-- Enable pause/resume
-- Enable audit & replay
+- Persist runs, steps, approvals, trace events, artifacts, and governance metadata
+- Expose a router that chooses between SQLite (production/dev) or in-memory stores (tests)
+- Guarantee run recovery even after crashes via durable step snapshots
 
 Memory types:
-- Short-term: in-run context
-- Long-term: persisted runs & outcomes
-- Episodic: traces, events, artifacts
+- SQLite backend (`storage/memory/*.db`) with schema versioning, indices, and migrations
+- In-memory backend for fast tests
+- Router that unifies CRUD operations and supports HITL
 
 ---
 
-### 3.5 Knowledge (RAG + Structured Data)
+### 3.5 Knowledge (Vector + Structured)
 Location:
 core/knowledge/
 Responsibilities:
-- Retrieve unstructured knowledge (docs, PDFs)
-- Access structured data (CSV, Pandas, SQL)
-- Feed retrieved context into agents
+- Offer deterministic vector retrieval (`storage/vectors/knowledge.sqlite`)
+- Provide structured helpers for CSV ingestion/querying (pandas fallback)
+- Feed retrieved chunks & metadata into agents via retrievers
 
 Design:
-- Vector store abstraction
-- Retriever orchestration
-- Structured access isolated from agent logic
+- Chunk schema + vector store abstraction
+- Retriever orchestrates filters/top_k pulls
+- Ingestion CLI (`scripts/ingest_knowledge.py`) chunks markdown/txt/json/csv with overlap and idempotent upserts
 
 ---
 
@@ -147,30 +146,14 @@ Design:
 Location:
 core/governance/
 Responsibilities:
-- Enforce policies defined in `configs/policies.yaml`
-- Block disallowed tools or flows
-- Redact PII and secrets from logs
-- Inject hooks at key lifecycle points
+- Apply policies defined in `configs/policies.yaml` (tool allowlists, autonomy, approvals)
+- Redact secrets/PII through `security.py`
+- Expose hooks (`hooks.py`) consumed by the orchestrator, tool executor, and tracer
 
-Governance hooks:
-- Before step execution
-- Before tool execution
-- Before run completion
-
----
-
-### 3.7 Logging, Tracing & Metrics
-Location:
-Responsibilities:
-- Enforce policies defined in `configs/policies.yaml`
-- Block disallowed tools or flows
-- Redact PII and secrets from logs
-- Inject hooks at key lifecycle points
-
-Governance hooks:
-- Before step execution
-- Before tool execution
-- Before run completion
+Governance hooks run:
+- Before each step
+- Before each tool execution
+- Before run completion/resume
 
 ---
 
@@ -178,14 +161,14 @@ Governance hooks:
 Location:
 core/logging/
 Responsibilities:
-- Centralized logging
-- Structured tracing for every run
-- Metrics for runs, steps, failures
+- Emit structured trace events for runs, steps, tools, retries, approvals
+- Persist traces via the memory router for API/UI visibility
+- Surface metrics + OTEL-friendly logs via `tracing.py`/`metrics.py`
 
 Guarantees:
-- No execution without trace emission
-- Logs sanitized before persistence
-- Replayable execution history
+- Every state transition, HITL pause/resume, and failure is traceable
+- Trace payloads are sanitized/redacted before storage
+- Logs avoid secrets and follow governance policies
 
 ---
 
