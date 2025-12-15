@@ -3,7 +3,7 @@
 # ==============================
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
@@ -28,26 +28,29 @@ class SimpleAgent(BaseAgent):
     def run(self, step_context: StepContext) -> AgentResult:
         try:
             params = SimpleAgentParams.model_validate(step_context.step.params or {})
-            artifacts = step_context.run.artifacts or {}
+            payload = step_context.run.payload or {}
+            message = payload.get("message") or ""
+            approved = payload.get("approved", True)
+            notes = payload.get("notes") or ""
 
-            echo_out: Dict[str, Any] = artifacts.get("tool.echo.output", {}) or {}
-            approval: Dict[str, Any] = artifacts.get("hitl.approval", {}) or {}
-
-            approved = approval.get("approved")
-            notes = approval.get("notes", "")
-
-            msg = echo_out.get("echo") or echo_out.get("message") or echo_out.get("input") or ""
+            approval_status = "approved" if approved else "rejected"
             summary = (
                 f"{params.template}\n\n"
-                f"- Echoed message: {msg!r}\n"
-                f"- Approved: {approved}\n"
-                f"- Notes: {notes!r}\n"
+                f"- Echoed message: {message!r}\n"
+                f"- Approval status: {approval_status}\n"
+                f"- Notes provided: {notes!r}\n"
             )
+            details = {
+                "message": message,
+                "approved": approved,
+                "notes": notes,
+                "approval_status": approval_status,
+            }
 
-            meta = AgentMeta(agent_name=self.name)
-            return AgentResult(ok=True, data={"summary": summary}, error=None, meta=meta)
-        except Exception as e:
-            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(e))
+            meta = AgentMeta(agent_name=self.name, tags={"product": step_context.run.product, "flow": step_context.run.flow})
+            return AgentResult(ok=True, data={"summary": summary, "details": details}, error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(ok=False, data=None, error=err, meta=meta)
 

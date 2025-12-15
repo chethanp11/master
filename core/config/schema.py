@@ -47,6 +47,10 @@ class AppConfig(BaseModel):
     ui_port: int = Field(default=8501, description="If using Streamlit/Chainlit etc.")
     default_product: str = Field(default="sandbox")
     default_flow: str = Field(default="hello_world")
+    api_base_url: Optional[str] = Field(
+        default=None,
+        description="Base URL for Gateway API used by UI clients.",
+    )
     paths: PathsConfig = Field(default_factory=PathsConfig)
 
 

@@ -74,6 +74,23 @@ def test_sandbox_hello_world_end_to_end(tmp_path: Path) -> None:
         status2 = engine.get_run(run_id=run_id)
         assert status2.ok, status2.error
         assert status2.data and status2.data.get("run", {}).get("status") in ("COMPLETED", "completed")
+
+        steps = status2.data["steps"]
+        assert steps, "Expected persisted steps for sandbox run"
+        echo_step = next((s for s in steps if s["step_id"] == "echo"), None)
+        assert echo_step is not None
+        echo_output = echo_step["output"]
+        assert echo_output and echo_output["data"]["echo"] == "hello"
+        assert "timestamp" in echo_output["data"]
+
+        summary_step = next((s for s in steps if s["step_id"] == "summary"), None)
+        assert summary_step is not None
+        summary_output = summary_step["output"]
+        assert summary_output and summary_output.get("ok") is True
+        summary_data = summary_output["data"]
+        assert summary_data["details"]["message"] == "hello"
+        assert summary_data["details"]["approved"] is True
+        assert "summary" in summary_data
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()

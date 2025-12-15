@@ -1,253 +1,273 @@
 # ==============================
-# Platform UI (Streamlit) - v1 Single File
+# Platform UI (Streamlit) - v1 Control Center
 # ==============================
 """
-Streamlit control-center UI for master/.
+Streamlit-based Platform Control Center for master/.
 
-Features (v1):
-- Home: list products + flows
-- Run: JSON payload input, trigger run via API
-- Runs: list runs + run detail view
-- Approvals: list pending approvals + approve/reject -> resume API
+Capabilities:
+- Discover enabled products + flows via /api/products
+- Trigger flow runs with JSON payloads
+- View run history + details via /api/run/{run_id}
+- Inspect and resolve pending approvals via POST /api/resume_run/{run_id}
 
-Notes:
-- UI calls the Gateway API over HTTP (same host by default).
-- API base URL is read from Settings (configs/app.yaml via core/config/loader.py).
-- Keep templates/static folders in repo for future non-Streamlit UI.
+UI architecture:
+- Home: product/flow overview
+- Run: product+flow selection + payload editor
+- Runs: history + detail view
+- Approvals: list pending approvals + actions
+
+All actions go through the Gateway API. No direct core imports besides settings.
 """
 
 from __future__ import annotations
 
-# ==============================
-# Repo root bootstrap for Streamlit
-# ==============================
-
-import sys
-from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-
-
 import json
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import streamlit as st
 
 from core.config.loader import load_settings
-from core.utils.product_loader import discover_products
 
 
-# ==============================
-# Helpers
-# ==============================
-def _safe_json_loads(s: str) -> Tuple[bool, Dict[str, Any], str]:
+@dataclass(frozen=True)
+class ApiResponse:
+    ok: bool
+    body: Optional[Dict[str, Any]]
+    error: Optional[str]
+
+
+class ApiClient:
+    def __init__(self, base_url: str, timeout: int = 15) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _request(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> ApiResponse:
+        url = f"{self.base_url}{path}"
+        try:
+            resp = getattr(requests, method.lower())(url, json=payload, timeout=self.timeout)
+        except requests.RequestException as exc:
+            return ApiResponse(ok=False, body=None, error=str(exc))
+
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+
+        if not resp.ok:
+            return ApiResponse(ok=False, body=body, error=body.get("error", {}).get("message") if body else resp.text)
+
+        if isinstance(body, dict) and not body.get("ok", True):
+            return ApiResponse(ok=False, body=body, error=body.get("error", {}).get("message", "API error"))
+
+        return ApiResponse(ok=True, body=body, error=None)
+
+    def list_products(self) -> ApiResponse:
+        return self._request("GET", "/api/products")
+
+    def list_flows(self, product: str) -> ApiResponse:
+        return self._request("GET", f"/api/products/{product}/flows")
+
+    def run_flow(self, product: str, flow: str, payload: Dict[str, Any]) -> ApiResponse:
+        return self._request("POST", f"/api/run/{product}/{flow}", {"payload": payload})
+
+    def get_run(self, run_id: str) -> ApiResponse:
+        return self._request("GET", f"/api/run/{run_id}")
+
+    def resume_run(self, run_id: str, payload: Dict[str, Any]) -> ApiResponse:
+        return self._request("POST", f"/api/resume_run/{run_id}", {"approval_payload": payload})
+
+
+def _api_base_url(settings: Any) -> str:
+    candidate = getattr(getattr(settings, "app", None), "api_base_url", None)
+    if isinstance(candidate, str) and candidate.strip():
+        return candidate.strip().rstrip("/")
+    host = getattr(settings.app, "host", "localhost")
+    port = getattr(settings.app, "port", 8000)
+    scheme = "https" if getattr(settings.app, "debug", False) is False else "http"
+    return f"{scheme}://{host}:{port}"
+
+
+def _safe_json_loads(value: str) -> Tuple[bool, Dict[str, Any], str]:
     try:
-        v = json.loads(s or "{}")
-        if not isinstance(v, dict):
-            return False, {}, "JSON must be an object (e.g., {\"k\":\"v\"})"
-        return True, v, ""
-    except Exception as e:
-        return False, {}, str(e)
+        parsed = json.loads(value or "{}")
+        if not isinstance(parsed, dict):
+            return False, {}, "JSON must be an object (e.g., {\"k\": \"v\"})"
+        return True, parsed, ""
+    except Exception as exc:
+        return False, {}, str(exc)
 
 
 def _pretty(obj: Any) -> str:
     return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
 
 
-def _api_base_url(settings) -> str:
-    # Settings schema should provide gateway.api_base_url (or fall back).
-    # Keep defensive to avoid hard dependency on exact field names.
-    val = getattr(getattr(settings, "app", None), "api_base_url", None)
-    if isinstance(val, str) and val.strip():
-        return val.strip().rstrip("/")
-    # fallback: assume same host:8000
-    return "http://localhost:8000"
+def _append_history(run_id: str) -> None:
+    history = st.session_state.setdefault("run_history", [])
+    if run_id in history:
+        history.remove(run_id)
+    history.append(run_id)
 
 
-def _http_post(url: str, json_body: Dict[str, Any], timeout_s: int = 30) -> Dict[str, Any]:
-    r = requests.post(url, json=json_body, timeout=timeout_s)
-    try:
-        return {"status": r.status_code, "json": r.json()}
-    except Exception:
-        return {"status": r.status_code, "text": r.text}
+def _render_product_summary(products: List[Dict[str, Any]]) -> None:
+    st.subheader("Products")
+    if not products:
+        st.info("No enabled products were discovered.")
+        return
+
+    for product in sorted(products, key=lambda p: p["name"]):
+        header = f"{product['display_name']} ({product['name']})"
+        with st.expander(header, expanded=False):
+            st.write(product.get("description") or "No description provided.")
+            st.markdown("**Flows**")
+            flows = sorted(product.get("flows", []))
+            st.write(", ".join(flows) if flows else "_No flows defined yet_")
 
 
-def _http_get(url: str, timeout_s: int = 30) -> Dict[str, Any]:
-    r = requests.get(url, timeout=timeout_s)
-    try:
-        return {"status": r.status_code, "json": r.json()}
-    except Exception:
-        return {"status": r.status_code, "text": r.text}
+def _render_run_history(client: ApiClient) -> None:
+    st.subheader("Recent runs")
+    history = list(reversed(st.session_state.get("run_history", [])))
+    if not history:
+        st.info("No runs have been triggered yet.")
+        return
+
+    for run_id in history[:10]:
+        resp = client.get_run(run_id)
+        if not resp.ok or not resp.body:
+            st.warning(f"Unable to fetch run {run_id}: {resp.error or 'unknown error'}")
+            continue
+
+        run = resp.body["data"]["run"]
+        steps = resp.body["data"].get("steps", [])
+        status = run["status"]
+        title = f"{run_id} — {run['product']}/{run['flow']} ({status})"
+        with st.expander(title, expanded=False):
+            st.write(f"Started: {run.get('started_at')}")
+            st.write(f"Summary: {json.dumps(run.get('summary', {}), indent=2)}")
+            if run.get("error"):
+                st.error(f"Error: {run['error']}")
+            if steps:
+                st.table(
+                    [
+                        {
+                            "step_id": step["step_id"],
+                            "name": step["name"],
+                            "type": step["type"],
+                            "status": step["status"],
+                        }
+                        for step in steps
+                    ]
+                )
+            else:
+                st.write("No steps recorded yet.")
 
 
-# ==============================
-# Data access via API
-# ==============================
-def api_run_flow(api_base: str, product: str, flow: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    return _http_post(f"{api_base}/api/run/{product}/{flow}", {"payload": payload})
+def _render_approvals(client: ApiClient) -> None:
+    st.subheader("Pending approvals")
+    pending_runs: List[str] = []
+    history = st.session_state.get("run_history", [])
+    for run_id in history:
+        resp = client.get_run(run_id)
+        if resp.ok and resp.body:
+            status = resp.body["data"]["run"]["status"]
+            if status == "PENDING_HUMAN":
+                pending_runs.append(run_id)
+
+    if not pending_runs:
+        st.info("No pending approvals in recent runs.")
+    else:
+        st.write("Pending run approvals:")
+        for run_id in pending_runs:
+            st.write(f"- {run_id}")
+
+    st.markdown("### Resume a run")
+    run_id = st.text_input("Run ID", value=st.session_state.get("approval_run_id", ""))
+    st.session_state["approval_run_id"] = run_id
+    payload_input = st.text_area("Approval payload (JSON)", value='{"approved": true}', height=140)
+    ok, payload, err = _safe_json_loads(payload_input)
+    if not ok:
+        st.error(f"Invalid approval JSON: {err}")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Approve", type="primary", disabled=(not ok or not run_id.strip())):
+            resp = client.resume_run(run_id.strip(), payload)
+            if resp.ok:
+                st.success(f"Run resumed (approved): {run_id.strip()}")
+                _append_history(run_id.strip())
+            else:
+                st.error(f"Failed to resume run: {resp.error or resp.body}")
+    with col2:
+        if st.button("Reject", disabled=(not ok or not run_id.strip())):
+            reject_payload = dict(payload)
+            reject_payload["approved"] = False
+            resp = client.resume_run(run_id.strip(), reject_payload)
+            if resp.ok:
+                st.success(f"Run resumed (rejected): {run_id.strip()}")
+                _append_history(run_id.strip())
+            else:
+                st.error(f"Failed to reject run: {resp.error or resp.body}")
 
 
-def api_get_run(api_base: str, run_id: str) -> Dict[str, Any]:
-    return _http_get(f"{api_base}/api/run/{run_id}")
-
-
-def api_resume_run(api_base: str, run_id: str, approval_payload: Dict[str, Any]) -> Dict[str, Any]:
-    return _http_post(f"{api_base}/api/resume_run/{run_id}", {"approval_payload": approval_payload})
-
-
-def api_list_runs_v1(api_base: str) -> Dict[str, Any]:
-    # Optional endpoint (not in your strict list). Fallback to memory list via a future endpoint.
-    # For v1, we use Memory list via a lightweight backend route IF you add it later.
-    return {"status": 501, "text": "List runs endpoint not implemented. Use run_id lookup."}
-
-
-def api_list_pending_approvals_v1(api_base: str) -> Dict[str, Any]:
-    # Optional endpoint (not in your strict list). We'll display a placeholder unless you expose it.
-    return {"status": 501, "text": "Pending approvals endpoint not implemented. Add /api/approvals/pending later."}
-
-
-# ==============================
-# UI
-# ==============================
 def main() -> None:
     st.set_page_config(page_title="master platform", layout="wide")
-    st.title("master platform")
-
     settings = load_settings()
     api_base = _api_base_url(settings)
+    client = ApiClient(api_base)
 
-    catalog = discover_products(settings)
-    products = [meta for meta in catalog.products.values() if meta.enabled]
-
-    # Sidebar
     st.sidebar.header("Navigation")
-    page = st.sidebar.radio("Page", ["Home", "Run", "Runs", "Approvals"], index=0)
-    st.sidebar.markdown("---")
+    page = st.sidebar.radio("Section", ["Home", "Run", "Runs", "Approvals"])
     st.sidebar.caption(f"API base: {api_base}")
 
+    st.session_state.setdefault("run_history", [])
+
+    products_resp = client.list_products()
+    if not products_resp.ok or not products_resp.body:
+        st.error(f"Cannot load products: {products_resp.error or 'Unknown error'}")
+        return
+
+    products = sorted(products_resp.body["data"]["products"], key=lambda p: p["name"])
+
     if page == "Home":
-        st.subheader("Products")
-        if not products:
-            st.warning("No products discovered. Check products/*/manifest.yaml")
-            return
-
-        for meta in products:
-            with st.expander(f"{meta.display_name}  —  /{meta.name}", expanded=False):
-                st.write(meta.description or "")
-                st.code(
-                    _pretty(
-                        {
-                            "default_flow": meta.default_flow,
-                            "flows": catalog.flows.get(meta.name, []),
-                            "expose_api": meta.expose_api,
-                            "ui_enabled": meta.ui_enabled,
-                        }
-                    ),
-                    language="json",
-                )
-
-        st.subheader("Flows")
-        st.write("Flows are discovered per-product by scanning `products/<product>/flows/*.yaml` locally.")
-        cols = st.columns(2)
-        with cols[0]:
-            prod_name = st.selectbox("Select product", [p.name for p in products])
-        with cols[1]:
-            st.write("")
-        st.markdown("")
-
-        flow_names = catalog.flows.get(prod_name, [])
-        st.write(f"Found {len(flow_names)} flows under products/{prod_name}/flows/")
-        st.code("\n".join(flow_names) if flow_names else "(none)", language="text")
+        _render_product_summary(products)
 
     elif page == "Run":
-        st.subheader("Run a flow")
+        st.subheader("Trigger a flow")
         if not products:
-            st.warning("No products discovered.")
+            st.info("No enabled products discovered.")
+            return
+        prod = st.selectbox("Product", [prod["name"] for prod in products])
+        flows_resp = client.list_flows(prod)
+        if not flows_resp.ok or not flows_resp.body:
+            st.warning(f"Unable to get flows for '{prod}': {flows_resp.error or flows_resp.body}")
+            flows = []
+        else:
+            flows = sorted(flows_resp.body["data"]["flows"])
+
+        if not flows:
+            st.info(f"No flows defined for {prod}.")
             return
 
-        col1, col2 = st.columns([1, 2])
-
-        with col1:
-            prod_name = st.selectbox("Product", [p.name for p in products])
-            flow_names = catalog.flows.get(prod_name, [])
-            flow = st.selectbox("Flow", flow_names if flow_names else ["(none)"])
-            st.caption(f"UI URL: /{prod_name}")
-
-        with col2:
-            st.write("Payload (JSON object)")
-            payload_text = st.text_area("payload", value="{}", height=220)
-            ok, payload, err = _safe_json_loads(payload_text)
-            if not ok:
-                st.error(f"Invalid JSON: {err}")
-
-            if st.button("Run", type="primary", disabled=(not ok or flow == "(none)")):
-                res = api_run_flow(api_base, prod_name, flow, payload)
-                st.markdown("**Response**")
-                st.code(_pretty(res), language="json")
-
-                run_id = None
-                if isinstance(res.get("json"), dict):
-                    run_id = res["json"].get("data", {}).get("run_id") or res["json"].get("run_id")
-                if run_id:
-                    st.success(f"Run started: {run_id}")
-                    st.session_state["last_run_id"] = run_id
-
-        if st.session_state.get("last_run_id"):
-            st.info(f"Last run: {st.session_state['last_run_id']}")
-
-    elif page == "Runs":
-        st.subheader("Run lookup + details")
-        st.write("v1 supports run lookup by run_id. Add list endpoints later if needed.")
-
-        run_id = st.text_input("Run ID", value=st.session_state.get("last_run_id", ""))
-        col1, col2 = st.columns([1, 1])
-
-        with col1:
-            if st.button("Get run"):
-                if not run_id.strip():
-                    st.error("Provide a run_id")
-                else:
-                    res = api_get_run(api_base, run_id.strip())
-                    st.markdown("**Run response**")
-                    st.code(_pretty(res), language="json")
-
-        with col2:
-            st.caption("Tip: copy run_id from Run page response.")
-
-    elif page == "Approvals":
-        st.subheader("Approvals queue")
-        st.write("v1 needs a pending approvals endpoint for a real queue view.")
-        st.caption("Recommended endpoint (future): GET /api/approvals/pending")
-
-        # Placeholder: allow resume if user knows run_id
-        st.markdown("### Resume by run_id")
-        run_id = st.text_input("Run ID to resume", value="")
-        approval_text = st.text_area("Approval payload (JSON object)", value='{"approved": true, "notes": ""}', height=140)
-        ok, approval_payload, err = _safe_json_loads(approval_text)
+        flow = st.selectbox("Flow", flows)
+        payload_text = st.text_area("Payload (JSON)", value="{}", height=220)
+        ok, payload, err = _safe_json_loads(payload_text)
         if not ok:
             st.error(f"Invalid JSON: {err}")
+        if flow and st.button("Run flow", disabled=(not ok)):
+            resp = client.run_flow(prod, flow, payload)
+            st.code(_pretty(resp.body or resp.error), language="json")
+            if resp.ok and resp.body:
+                run_id = resp.body.get("data", {}).get("run_id")
+                if run_id:
+                    st.success(f"Run started: {run_id}")
+                    _append_history(run_id)
 
-        colA, colB = st.columns([1, 1])
-        with colA:
-            if st.button("Approve (resume)", type="primary", disabled=(not ok or not run_id.strip())):
-                res = api_resume_run(api_base, run_id.strip(), approval_payload)
-                st.code(_pretty(res), language="json")
+    elif page == "Runs":
+        _render_run_history(client)
 
-        with colB:
-            if st.button("Reject (resume)", disabled=(not ok or not run_id.strip())):
-                payload = dict(approval_payload)
-                payload.setdefault("approved", False)
-                res = api_resume_run(api_base, run_id.strip(), payload)
-                st.code(_pretty(res), language="json")
-
-        st.markdown("---")
-        st.markdown("### Pending approvals (when endpoint exists)")
-        res = api_list_pending_approvals_v1(api_base)
-        st.code(_pretty(res), language="json")
+    elif page == "Approvals":
+        _render_approvals(client)
 
 
 if __name__ == "__main__":

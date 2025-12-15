@@ -149,5 +149,51 @@ Subsequent hardening steps can now assume clean module imports.
 - CLI invariants:
   - Commands: `list-products`, `list-flows`, `run`, `status`, `approvals`, `resume` (plus legacy `get-run`).
   - Runs/resume reuse the same envelopes printed as JSON; approvals list is trimmed + scrubbed.
-- Validation:
+  - Validation:
   - `PYTHONPATH=. pytest tests/integration/test_api_runs.py tests/integration/test_cli_runs.py`
+
+## Step 13 — Platform UI (Streamlit Control Center)
+
+- [x] DONE — Added a single Streamlit UI that talks only to the Gateway API to list products, trigger flows, browse runs, and approve HITL steps.
+- Changes:
+  - `gateway/ui/platform_app.py`
+  - `configs/app.yaml`
+  - Tests: `tests/integration/test_ui_smoke.py`
+- UI invariants:
+  - API base URL flows from settings (`app.api_base_url`) with a sane fallback.
+  - Products/flows fetched via `/api/products` + `/api/products/{product}/flows`; every action goes through `/api/run` & `/api/resume_run`.
+  - Runs stored in `session_state` and rendered with sorted history/detail panels; pending approvals surfaced from recent runs.
+  - Streaming UI remains a thin client (no direct core imports beyond settings) and features graceful error/empty states.
+- Validation:
+  - `PYTHONPATH=. pytest tests/integration/test_ui_smoke.py`
+
+## Step 14 — Golden path product (Sandbox E2E)
+
+- [x] DONE — Hardened the sandbox product flow so echo → HITL → summary runs exercise the full platform stack end-to-end.
+- Changes:
+  - `products/sandbox/manifest.yaml`, `products/sandbox/flows/hello_world.yaml`
+  - `products/sandbox/tools/echo_tool.py`, `products/sandbox/agents/simple_agent.py`, `products/sandbox/tests/test_sandbox_flow.py`
+  - Documentation updates documenting the golden-path experience
+- Invariants:
+  - Sandbox manifest exposes `hello_world` with UI/API hooks; the flow wires the echo tool, human approval step, and deterministic summary agent.
+  - Echo tool returns the provided message and a UTC timestamp; simple agent summarizes that message plus the approval status for auditing.
+  - Golden-path test asserts that the run pauses for approval, resumes, and that persisted steps include the echoed message and approval-aware summary.
+- Validation:
+  - `pytest products/sandbox/tests/test_sandbox_flow.py`
+
+## Step 15 — Test suite hardening
+
+- [x] DONE — Built the comprehensive test catalogue covering contracts, agents, tools, governance, orchestrator, memory, and sandbox integration flows; no flaky or missing suites remain.
+- Changes:
+  - `tests/core/{test_contracts.py,test_agents_core.py,test_governance_core.py,test_orchestrator_state.py,test_orchestrator.py,test_tools_core.py,test_memory_core.py}`
+  - `tests/integration/test_sample_flows.py`
+  - `products/sandbox/tests/test_sandbox_flow.py`
+  - Documentation: checklist entry + (no engineering standard updates required).
+- Invariants:
+  - Contracts enforce envelopes and serialization (FlowDef, RunRecord, ToolResult, AgentResult, TraceEvent).
+  - Registries reject duplicate registrations; executors return structured errors and respect governance hooks.
+  - Orchestrator state machine manages RUNNING → PENDING_HUMAN → RUNNING → (COMPLETED|FAILED), traces every step, and resumes deterministically via approvals.
+  - SQLite-backed memory handles runs, steps, events, approvals idempotently.
+  - Sandbox golden path still runs end-to-end via sqlite, pausing for HITL and resuming to completion with persisted step outputs.
+- Validation:
+  - `PYTHONPATH=. pytest`

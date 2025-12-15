@@ -217,9 +217,31 @@ UI talks only to API:
 - POST /api/run/{product}/{flow}
 - POST /api/resume_run/{run_id}
 - GET  /api/run/{run_id}
+
+### Streamlit Control Center
+- `/gateway/ui/platform_app.py` delivers the single page control center.
+- The UI hits the API endpoints above for every product, run, and approval action.
+- Session state backs run history/approvals; errors and empty lists show friendly guidance so the page stays thin and predictable.
 ---
 
-## 5. Adding a New Product (No Core Changes)
+## 5. Golden-path Sandbox product
+
+- Focus: `products/sandbox` is the canonical demo product that exercises the full platform (core orchestrator, product tooling, governance, memory, API, and UI).
+- Manifest:
+  - `manifest.yaml` declares `name: sandbox`, publishes the sandbox APIs/UI, and lists `hello_world` as the default flow.
+  - `registry.py` registers `echo_tool` and `simple_agent` into the shared registries safely on import.
+- Flow (`hello_world.yaml`):
+  1. Tool step calls `echo_tool` with `payload.message`.
+  2. Human approval step pauses the run (`PENDING_HUMAN`) and creates a persisted approval record.
+  3. `simple_agent` summarizes the echoed message plus the approval status to produce the final result.
+- Run the golden path:
+  - API: `POST /api/run/sandbox/hello_world` → run_id returned, status `PENDING_HUMAN`.
+  - Resume: `POST /api/resume_run/{run_id}` with `{"approved": true, "notes": "ok"}` → run continues and eventually `COMPLETED`.
+  - UI: Platform control center lists sandbox, lets you trigger the flow, shows the pending approval, and renders the final summary.
+- Tests:
+  - `products/sandbox/tests/test_sandbox_flow.py` drives the sandbox run via sqlite, ensures the run pauses, resumes, and persists the echoed message + approval-aware summary data.
+
+## 6. Adding a New Product (No Core Changes)
 
 ### Steps to add a product
 1. Create new folder:
@@ -242,7 +264,7 @@ Result:
 
 ---
 
-## 6. Why This Architecture Scales
+## 7. Why This Architecture Scales
 
 - Centralized governance and safety
 - Consistent execution model
@@ -252,7 +274,7 @@ Result:
 
 ---
 
-## 7. Non-Negotiable Rules
+## 8. Non-Negotiable Rules
 
 - Products never bypass core
 - Core never imports products

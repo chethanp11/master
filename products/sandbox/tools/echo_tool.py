@@ -3,6 +3,7 @@
 # ==============================
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from pydantic import BaseModel, Field
@@ -28,10 +29,19 @@ class EchoTool(BaseTool):
     def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         try:
             p = EchoParams.model_validate(params or {})
+            timestamp = datetime.now(timezone.utc).isoformat()
             meta = ToolMeta(tool_name=self.name, backend="local")
-            return ToolResult(ok=True, data={"echo": p.message}, error=None, meta=meta)
-        except Exception as e:
-            err = ToolError(code="TOOL_ERROR", message=str(e))
+            return ToolResult(
+                ok=True,
+                data={
+                    "echo": p.message,
+                    "timestamp": timestamp,
+                },
+                error=None,
+                meta=meta,
+            )
+        except Exception as exc:
+            err = ToolError(code="TOOL_ERROR", message=str(exc))
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=False, data=None, error=err, meta=meta)
 
