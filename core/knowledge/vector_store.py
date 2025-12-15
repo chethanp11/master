@@ -22,7 +22,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.knowledge.base import Chunk, IngestItem, IngestResult, Query, VectorStore, VectorStoreStats
+from core.knowledge.base import Chunk, IngestChunk, IngestResult, Query, VectorStore, VectorStoreStats
 
 
 def _now_ts() -> int:
@@ -58,19 +58,21 @@ class SqliteVectorStore(VectorStore):
     SQLite-backed chunk store.
 
     Table schema (v1):
-      chunks(
-        chunk_id TEXT PRIMARY KEY,
+      knowledge_chunks(
+        collection TEXT NOT NULL,
+        doc_id TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
         text TEXT NOT NULL,
+        source TEXT NOT NULL,
         metadata_json TEXT NOT NULL,
         embedding_json TEXT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (collection, doc_id, chunk_id)
       )
     """
 
-    db_path: str
-
     def __init__(self, db_path: str) -> None:
-        super().__init__()
         self.db_path = db_path
         self._ensure_dir()
         self._ensure_schema()
@@ -79,7 +81,8 @@ class SqliteVectorStore(VectorStore):
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         return conn
@@ -88,91 +91,225 @@ class SqliteVectorStore(VectorStore):
         with self._connect() as conn:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS chunks (
-                    chunk_id TEXT PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS knowledge_chunks (
+                    collection TEXT NOT NULL,
+                    doc_id TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL,
                     text TEXT NOT NULL,
+                    source TEXT NOT NULL,
                     metadata_json TEXT NOT NULL,
                     embedding_json TEXT NULL,
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    PRIMARY KEY (collection, doc_id, chunk_id)
                 )
                 """
             )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_created ON chunks(created_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chunks_collection ON knowledge_chunks(collection)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chunks_doc ON knowledge_chunks(collection, doc_id)"
+            )
             conn.commit()
 
-    def add_chunks(self, items: List[IngestItem]) -> IngestResult:
+    def upsert(self, items: List[IngestChunk]) -> IngestResult:
+        if not items:
+            return IngestResult(ok=True, inserted=0, updated=0)
+
         errors: List[str] = []
-        count = 0
+        inserted = 0
+        updated = 0
+        now = _now_ts()
+
         with self._connect() as conn:
             for it in items:
                 try:
-                    chunk_id = _new_chunk_id()
                     meta = dict(it.metadata or {})
-                    meta.setdefault("ingested_at", _now_ts())
+                    meta.setdefault("doc_id", it.doc_id)
+                    meta.setdefault("chunk_id", it.chunk_id)
+                    meta.setdefault("source", it.source)
+                    meta.setdefault("collection", it.collection)
+                    payload = (
+                        it.collection,
+                        it.doc_id,
+                        it.chunk_id,
+                        it.text,
+                        it.source,
+                        json.dumps(meta, ensure_ascii=False),
+                        None,
+                        now,
+                        now,
+                    )
+                    exists = conn.execute(
+                        """
+                        SELECT 1 FROM knowledge_chunks
+                        WHERE collection=? AND doc_id=? AND chunk_id=?
+                        """,
+                        (it.collection, it.doc_id, it.chunk_id),
+                    ).fetchone()
                     conn.execute(
                         """
-                        INSERT INTO chunks(chunk_id, text, metadata_json, embedding_json, created_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO knowledge_chunks(
+                            collection, doc_id, chunk_id, text, source,
+                            metadata_json, embedding_json, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(collection, doc_id, chunk_id)
+                        DO UPDATE SET
+                            text=excluded.text,
+                            source=excluded.source,
+                            metadata_json=excluded.metadata_json,
+                            updated_at=excluded.updated_at
                         """,
-                        (
-                            chunk_id,
-                            it.text,
-                            json.dumps(meta, ensure_ascii=False),
-                            None,
-                            _now_ts(),
-                        ),
+                        payload,
                     )
-                    count += 1
-                except Exception as e:
+                    if exists:
+                        updated += 1
+                    else:
+                        inserted += 1
+                except Exception as e:  # pragma: no cover - error path
                     errors.append(str(e))
             conn.commit()
-        return IngestResult(ok=(len(errors) == 0), count=count, errors=errors)
+        # ensure counts sum even if items empty
+        remainder = len(items) - (inserted + updated)
+        if remainder > 0 and errors:
+            # errors already captured; keep counts as-is
+            pass
+        elif remainder > 0:
+            inserted += remainder
+
+        ok = len(errors) == 0
+        return IngestResult(ok=ok, inserted=inserted, updated=updated, errors=errors)
 
     def query(self, q: Query) -> List[Chunk]:
-        # v1: lexical scoring. Filters apply to metadata keys (exact match).
         top_k = max(1, int(q.top_k or 5))
         q_tokens = _tokenize(q.text)
 
-        rows: List[Tuple[str, str, str]] = []
         with self._connect() as conn:
-            cur = conn.execute("SELECT chunk_id, text, metadata_json FROM chunks")
-            rows = list(cur.fetchall())
+            rows = conn.execute(
+                """
+                SELECT doc_id, chunk_id, text, source, metadata_json
+                FROM knowledge_chunks
+                WHERE collection=?
+                """,
+                (q.collection,),
+            ).fetchall()
 
         scored: List[Chunk] = []
-        for chunk_id, text, meta_json in rows:
+        for row in rows:
             try:
-                meta = json.loads(meta_json) if meta_json else {}
+                meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
             except Exception:
                 meta = {}
 
-            if q.filters:
-                if not self._passes_filters(meta, q.filters):
-                    continue
+            if q.filters and not self._passes_filters(row, meta, q.filters):
+                continue
 
-            score = _jaccard(q_tokens, _tokenize(text))
+            score = _jaccard(q_tokens, _tokenize(row["text"]))
             if score <= 0.0:
                 continue
 
-            scored.append(Chunk(chunk_id=chunk_id, text=text, score=score, metadata=meta))
+            scored.append(
+                Chunk(
+                    chunk_id=row["chunk_id"],
+                    text=row["text"],
+                    source=row["source"],
+                    metadata=meta,
+                    score=score,
+                )
+            )
 
         scored.sort(key=lambda c: c.score, reverse=True)
         return scored[:top_k]
 
-    def _passes_filters(self, meta: Dict[str, Any], filters: Dict[str, Any]) -> bool:
-        for k, v in filters.items():
-            if k not in meta:
-                return False
-            if meta.get(k) != v:
-                return False
-        return True
-
-    def stats(self) -> VectorStoreStats:
+    def delete(
+        self,
+        *,
+        collection: str,
+        doc_ids: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        removed = 0
         with self._connect() as conn:
-            cur = conn.execute("SELECT COUNT(1) FROM chunks")
-            total = int(cur.fetchone()[0])
-        return VectorStoreStats(total_chunks=total, store_path=self.db_path)
+            if doc_ids:
+                placeholders = ",".join("?" for _ in doc_ids)
+                cur = conn.execute(
+                    f"DELETE FROM knowledge_chunks WHERE collection=? AND doc_id IN ({placeholders})",
+                    (collection, *doc_ids),
+                )
+                removed += cur.rowcount
+            elif filters:
+                rows = conn.execute(
+                    """
+                    SELECT doc_id, chunk_id, metadata_json
+                    FROM knowledge_chunks
+                    WHERE collection=?
+                    """,
+                    (collection,),
+                ).fetchall()
+                targets: List[Tuple[str, str]] = []
+                for row in rows:
+                    try:
+                        meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+                    except Exception:
+                        meta = {}
+                    if self._passes_filters(row, meta, filters):
+                        targets.append((row["doc_id"], row["chunk_id"]))
+                for doc_id, chunk_id in targets:
+                    cur = conn.execute(
+                        """
+                        DELETE FROM knowledge_chunks
+                        WHERE collection=? AND doc_id=? AND chunk_id=?
+                        """,
+                        (collection, doc_id, chunk_id),
+                    )
+                    removed += cur.rowcount
+            else:
+                cur = conn.execute(
+                    "DELETE FROM knowledge_chunks WHERE collection=?",
+                    (collection,),
+                )
+                removed += cur.rowcount
+            conn.commit()
+        return removed
+
+    def stats(self, collection: Optional[str] = None) -> VectorStoreStats:
+        collections: Dict[str, int] = {}
+        total = 0
+        with self._connect() as conn:
+            if collection:
+                cur = conn.execute(
+                    "SELECT COUNT(1) FROM knowledge_chunks WHERE collection=?",
+                    (collection,),
+                )
+                total = int(cur.fetchone()[0])
+                collections[collection] = total
+            else:
+                cur = conn.execute(
+                    "SELECT collection, COUNT(1) FROM knowledge_chunks GROUP BY collection"
+                )
+                rows = cur.fetchall()
+                for coll, cnt in rows:
+                    collections[coll] = int(cnt)
+                    total += int(cnt)
+        return VectorStoreStats(total_chunks=total, store_path=self.db_path, collections=collections)
 
     def clear(self) -> None:
         with self._connect() as conn:
-            conn.execute("DELETE FROM chunks")
+            conn.execute("DELETE FROM knowledge_chunks")
             conn.commit()
+
+    def _passes_filters(self, row: sqlite3.Row, meta: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        for key, expected in filters.items():
+            if key == "doc_id":
+                if row["doc_id"] != expected:
+                    return False
+                continue
+            if key == "source":
+                if row["source"] != expected:
+                    return False
+                continue
+            if meta.get(key) != expected:
+                return False
+        return True

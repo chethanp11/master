@@ -19,6 +19,7 @@ import logging
 from typing import Optional
 
 from core.contracts.run_schema import TraceEvent
+from core.config.schema import Settings
 from core.governance.security import SecurityRedactor
 from core.memory.base import MemoryBackend
 
@@ -59,3 +60,12 @@ class Tracer:
                     "kind": safe.kind,
                 },
             )
+
+    @classmethod
+    def from_settings(cls, *, settings: Settings, memory: MemoryBackend) -> "Tracer":
+        """
+        Convenience constructor for gateway/CLI wiring.
+        """
+        redactor = SecurityRedactor.from_settings(settings)
+        mirror = bool(getattr(settings.logging, "console", True))
+        return cls(memory=memory, redactor=redactor, mirror_to_log=mirror)

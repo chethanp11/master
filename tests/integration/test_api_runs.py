@@ -1,0 +1,77 @@
+# ==============================
+# Integration: Gateway API Runs
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+from gateway.api.http_app import create_app
+import gateway.api.deps as deps
+
+
+def _reset_deps() -> None:
+    deps.get_engine.cache_clear()
+    deps.get_settings.cache_clear()
+    deps.get_memory_router.cache_clear()
+    deps.get_tracer.cache_clear()
+    deps.get_product_catalog.cache_clear()
+
+
+@pytest.fixture()
+def api_client(tmp_path, monkeypatch):
+    repo_root = Path(__file__).resolve().parents[2]
+    sqlite_path = tmp_path / "api.sqlite"
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    _reset_deps()
+    client = TestClient(create_app())
+    yield client
+    client.close()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    _reset_deps()
+
+
+@pytest.mark.integration
+def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
+    products = api_client.get("/api/products").json()
+    assert products["ok"] is True
+    sandbox = next((p for p in products["data"]["products"] if p["name"] == "sandbox"), None)
+    assert sandbox is not None
+    assert "hello_world" in sandbox["flows"]
+
+    flows = api_client.get("/api/products/sandbox/flows").json()
+    assert flows["ok"] is True
+    assert "hello_world" in flows["data"]["flows"]
+
+    started = api_client.post(
+        "/api/run/sandbox/hello_world",
+        json={"payload": {"message": "API"}},
+    ).json()
+    assert started["ok"] is True
+    run_id = started["data"]["run_id"]
+    assert started["data"]["status"] == "PENDING_HUMAN"
+
+    pending = api_client.get(f"/api/run/{run_id}").json()
+    assert pending["ok"] is True
+    assert pending["data"]["run"]["status"] == "PENDING_HUMAN"
+
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": True, "notes": "ok"}},
+    ).json()
+    assert resumed["ok"] is True
+    assert resumed["data"]["status"] == "COMPLETED"
+
+    final = api_client.get(f"/api/run/{run_id}").json()
+    assert final["ok"] is True
+    assert final["data"]["run"]["status"] == "COMPLETED"

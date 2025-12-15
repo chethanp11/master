@@ -107,9 +107,8 @@ def main() -> None:
     settings = load_settings()
     api_base = _api_base_url(settings)
 
-    products_dir = settings.products.products_dir
-    registry = discover_products(products_dir)
-    products = registry.list()
+    catalog = discover_products(settings)
+    products = [meta for meta in catalog.products.values() if meta.enabled]
 
     # Sidebar
     st.sidebar.header("Navigation")
@@ -123,13 +122,23 @@ def main() -> None:
             st.warning("No products discovered. Check products/*/manifest.yaml")
             return
 
-        for p in products:
-            with st.expander(f"{p.manifest.display_name or p.name}  —  /{p.name}", expanded=False):
-                st.write(p.manifest.description or "")
-                st.code(_pretty(p.manifest.model_dump()), language="json")
+        for meta in products:
+            with st.expander(f"{meta.display_name}  —  /{meta.name}", expanded=False):
+                st.write(meta.description or "")
+                st.code(
+                    _pretty(
+                        {
+                            "default_flow": meta.default_flow,
+                            "flows": catalog.flows.get(meta.name, []),
+                            "expose_api": meta.expose_api,
+                            "ui_enabled": meta.ui_enabled,
+                        }
+                    ),
+                    language="json",
+                )
 
         st.subheader("Flows")
-        st.write("Flows are discovered per-product by scanning `products/<product>/flows/*.(yaml|yml|json)` locally.")
+        st.write("Flows are discovered per-product by scanning `products/<product>/flows/*.yaml` locally.")
         cols = st.columns(2)
         with cols[0]:
             prod_name = st.selectbox("Select product", [p.name for p in products])
@@ -137,8 +146,7 @@ def main() -> None:
             st.write("")
         st.markdown("")
 
-        # Local flow discovery (UI can show flows without needing list endpoint)
-        flow_names = _discover_flows_local(products_dir, prod_name)
+        flow_names = catalog.flows.get(prod_name, [])
         st.write(f"Found {len(flow_names)} flows under products/{prod_name}/flows/")
         st.code("\n".join(flow_names) if flow_names else "(none)", language="text")
 
@@ -152,7 +160,7 @@ def main() -> None:
 
         with col1:
             prod_name = st.selectbox("Product", [p.name for p in products])
-            flow_names = _discover_flows_local(products_dir, prod_name)
+            flow_names = catalog.flows.get(prod_name, [])
             flow = st.selectbox("Flow", flow_names if flow_names else ["(none)"])
             st.caption(f"UI URL: /{prod_name}")
 
@@ -227,21 +235,6 @@ def main() -> None:
         st.markdown("### Pending approvals (when endpoint exists)")
         res = api_list_pending_approvals_v1(api_base)
         st.code(_pretty(res), language="json")
-
-
-def _discover_flows_local(products_dir: str, product: str) -> List[str]:
-    import glob
-    import os
-
-    flow_dir = os.path.join(products_dir, product, "flows")
-    names: List[str] = []
-    for ext in ("*.yaml", "*.yml", "*.json"):
-        for p in glob.glob(os.path.join(flow_dir, ext)):
-            base = os.path.basename(p)
-            # flow name is file stem
-            stem = os.path.splitext(base)[0]
-            names.append(stem)
-    return sorted(set(names))
 
 
 if __name__ == "__main__":

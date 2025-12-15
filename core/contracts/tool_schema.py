@@ -22,7 +22,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 # ==============================
 # Typing
@@ -99,6 +99,14 @@ class ToolEnvelope(BaseModel, Generic[T]):
     data: Optional[T] = Field(default=None, description="Tool output payload.")
     error: Optional[ToolError] = Field(default=None, description="Tool error if ok=False.")
     meta: ToolMeta = Field(..., description="Tool execution metadata.")
+
+    @model_validator(mode="after")
+    def _enforce_error_contract(self) -> "ToolEnvelope[T]":
+        if self.ok and self.error is not None:
+            raise ValueError("Tool error must be None when ok=True")
+        if not self.ok and self.error is None:
+            raise ValueError("Tool error is required when ok=False")
+        return self
 
     def to_dict(self) -> Dict[str, Any]:
         """Stable serialization wrapper."""

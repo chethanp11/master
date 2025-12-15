@@ -30,8 +30,8 @@ def _build_step_ctx(*, product: str = "sandbox", events: List[Tuple[str, dict]] 
     trace: Callable[[str, dict], None] | None = None
     if events is not None:
         trace = lambda event_type, payload: events.append((event_type, payload))
-    run_ctx = RunContext(run_record=run_record, flow=flow, trace=trace)
-    return StepContext(run=run_ctx, step=flow.steps[0])
+    run_ctx = RunContext(run_id=run_record.run_id, product=run_record.product, flow=flow.id, trace=trace)
+    return run_ctx.new_step(step_def=flow.steps[0])
 
 
 def _executor(settings: Settings, registry: ToolRegistry) -> ToolExecutor:
@@ -39,6 +39,7 @@ def _executor(settings: Settings, registry: ToolRegistry) -> ToolExecutor:
 
 
 def test_tool_registry_registers_and_resolves() -> None:
+    ToolRegistry.clear()
     registry = ToolRegistry()
     tool = RecordingTool()
     registry.register(name="echo_tool", factory=lambda: tool)
@@ -47,6 +48,7 @@ def test_tool_registry_registers_and_resolves() -> None:
 
 
 def test_tool_executor_runs_tool_and_redacts_traces() -> None:
+    ToolRegistry.clear()
     settings = Settings()
     registry = ToolRegistry()
     tool = RecordingTool()
@@ -68,6 +70,7 @@ def test_tool_executor_runs_tool_and_redacts_traces() -> None:
 
 
 def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
+    ToolRegistry.clear()
     settings = Settings()
     settings.policies.blocked_tools = ["echo_tool"]
     registry = ToolRegistry()

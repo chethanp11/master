@@ -83,3 +83,71 @@ Subsequent hardening steps can now assume clean module imports.
   - Model routing consults governance allow/deny lists; per-product overrides respected.
 - Validation:
   - `pytest tests/core/test_governance_core.py tests/core/test_tools_core.py`
+
+## Step 9 — Orchestrator pause/resume + HITL correctness
+
+- [x] DONE — Hardened the full HITL path so paused runs persist cleanly, resumes are idempotent, and Flow/HITL schemas reflect reality.
+- Changes:
+  - `core/contracts/{agent_schema.py,flow_schema.py}` — restored `AgentResult`, added retry aliases/UI fields.
+  - `core/config/loader.py`, `core/utils/product_loader.py`, `scripts/migrate_memory.py` — loader normalization + backwards-compatible settings API.
+  - `core/orchestrator/{engine.py,flow_loader.py,step_executor.py}` — normalized flows, injected StepDef into contexts, ensured approval + resume sequencing, JSON-safe result storage.
+  - `core/logging/tracing.py` — removed nonexistent `message` field, tracked redaction flag.
+  - `products/sandbox/agents/simple_agent.py` — aligned error codes with `AgentErrorCode`.
+- Invariants enforced:
+  - Pausing creates and persists approval records before switching run/step to `PENDING_HUMAN`; run state survives restart.
+  - Resume validates pending approval, resolves exactly once, restarts from the paused step index, and rejects second resumes gracefully.
+  - Agent/tool outputs persisted via memory are JSON-safe; artifacts/approvals feed downstream steps (summary agent now succeeds).
+  - Flow loader accepts legacy manifests (`name`, `retry_on`) but emits schema-compliant FlowDef instances (ids normalized, UI metadata captured).
+  - Approvals and trace events remain auditable with scrubbed payloads.
+- Validation:
+  - `PYTHONPATH=. pytest tests/core/test_orchestrator_state.py tests/core/test_orchestrator.py tests/integration/test_sample_flows.py`
+
+## Step 10 — Knowledge layer v1 (vector + structured)
+
+- [x] DONE — Implemented stable chunk contracts, SQLite-backed vector store, ingestion CLI, retriever, and structured helpers.
+- Changes:
+  - `core/knowledge/{base.py,vector_store.py,retriever.py,structured.py}`
+  - `scripts/ingest_knowledge.py`
+  - `tests/core/test_knowledge_core.py`, `tests/integration/test_knowledge_ingest.py`
+  - Documentation: `docs/knowledge_layer.md`
+- Invariants:
+  - Ingestion is deterministic: chunk ids = `normalized_doc_path::index`, metadata captures provenance and tags.
+  - Upserts are idempotent via `(collection, doc_id, chunk_id)` primary key; repeated ingests rewrite instead of duplicating.
+  - Retrieval honors collection boundaries, top_k limits, and metadata filters; results expose `Chunk` schema (id/text/source/metadata/score).
+  - Structured helpers load CSVs locally with no external services.
+- Validation:
+  - `PYTHONPATH=. pytest tests/core/test_knowledge_core.py tests/integration/test_knowledge_ingest.py`
+
+## Step 11 — Product loader + pack conventions
+
+- [x] DONE — Implemented deterministic product discovery, manifest/config validation, safe registry imports, and scaffolding updates.
+- Changes:
+  - `core/utils/product_loader.py`, `core/config/schema.py`, `configs/products.yaml`
+  - `products/sandbox/{manifest.yaml,registry.py}`, `scripts/create_product.py`
+  - `gateway/*`, `products/sandbox/tests`, and new tests (`tests/core/test_product_loader.py`, `tests/integration/test_product_discovery.py`)
+  - Documentation updates: `docs/product_howto.md`
+- Invariants:
+  - Each product pack contains `manifest.yaml`, `config/product.yaml`, and `registry.py`; missing files are reported as catalog errors.
+  - Enabled filtering obeys `configs/products.yaml` unless `auto_enable=true`.
+  - Registry import is idempotent and side-effect free: `register(registries: ProductRegistries)` receives Agent/Tool registries + Settings.
+  - Flow listing is deterministic (sorted by filename) and exposed via the ProductCatalog.
+- Validation:
+  - `PYTHONPATH=. pytest tests/core/test_product_loader.py tests/integration/test_product_discovery.py`
+
+## Step 12 — Gateway API + CLI hardening
+
+- [x] DONE — Gateway now exposes product-aware endpoints + envelopes and CLI mirrors the same run lifecycle (list/run/status/approvals/resume).
+- Changes:
+  - `gateway/api/routes_run.py`
+  - `gateway/cli/main.py`
+  - Tests: `tests/integration/{test_api_runs.py,test_cli_runs.py}`
+  - Docs: `docs/overview.md`, this checklist
+- API invariants:
+  - `/api/products` + `/api/products/{product}/flows` return deterministic, catalog-backed metadata.
+  - `/api/run/{product}/{flow}`, `/api/run/{run_id}`, `/api/resume_run/{run_id}` always emit `{ok,data,error,meta}` envelopes.
+  - Product/flow validation happens before engine invocation; catalog errors surface with 404/503.
+- CLI invariants:
+  - Commands: `list-products`, `list-flows`, `run`, `status`, `approvals`, `resume` (plus legacy `get-run`).
+  - Runs/resume reuse the same envelopes printed as JSON; approvals list is trimmed + scrubbed.
+- Validation:
+  - `PYTHONPATH=. pytest tests/integration/test_api_runs.py tests/integration/test_cli_runs.py`

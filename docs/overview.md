@@ -212,9 +212,11 @@ Behavior:
 - UI does not contain product logic
 
 UI talks only to API:
-POST /api/run/{product}/{flow}
-POST /api/resume_run/{run_id}
-GET  /api/run/{run_id}
+- GET  /api/products
+- GET  /api/products/{product}/flows
+- POST /api/run/{product}/{flow}
+- POST /api/resume_run/{run_id}
+- GET  /api/run/{run_id}
 ---
 
 ## 5. Adding a New Product (No Core Changes)

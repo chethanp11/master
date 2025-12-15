@@ -54,14 +54,14 @@ tools:
   db_write_tool:
     risk: high
     require_human_approval: true
-
+```
 Enforced:
 	•	Before tool execution
 	•	By core.governance.hooks.before_tool_call
 
-⸻
+---
 
-3.2 Flow Policies
+### 3.2 Flow Policies
 
 Control flow-level behavior.
 
@@ -78,7 +78,7 @@ Enforced:
 
 ⸻
 
-3.3 Autonomy Policies
+### 3.3 Autonomy Policies
 
 Limit autonomy per product or flow.
 
@@ -92,7 +92,7 @@ full_auto requires explicit policy enablement.
 
 ⸻
 
-3.4 Product Policies
+### 3.4 Product Policies
 
 Apply constraints per product.
 
@@ -106,7 +106,7 @@ products:
 
 ⸻
 
-3.5 Model Policies
+### 3.5 Model Policies
 
 Control model usage.
 
@@ -118,9 +118,9 @@ models:
 
 ⸻
 
-4. Human-in-the-Loop (HITL)
+## 4. Human-in-the-Loop (HITL)
 
-4.1 When HITL is Required
+### 4.1 When HITL is Required
 
 HITL is triggered when:
 	•	A step type is human_approval
@@ -129,7 +129,7 @@ HITL is triggered when:
 
 ⸻
 
-4.2 HITL Behavior
+### 4.2 HITL Behavior
 
 When HITL is triggered:
 	•	Execution pauses
@@ -139,7 +139,7 @@ When HITL is triggered:
 
 ⸻
 
-4.3 Resume Flow
+### 4.3 Resume Flow
 
 Resumption occurs via:
 
@@ -151,11 +151,11 @@ Only permitted when:
 
 ⸻
 
-5. Governance Hooks
+## 5. Governance Hooks
 
 Hooks are extension points executed by the runtime.
 
-5.1 Available Hooks
+### 5.1 Available Hooks
 
 Hook Name	Trigger
 before_flow_start	Flow initialization
@@ -167,7 +167,7 @@ before_flow_complete	Finalization
 
 ⸻
 
-5.2 Hook Responsibilities
+### 5.2 Hook Responsibilities
 
 Hooks may:
 	•	Allow execution
@@ -182,9 +182,9 @@ Hooks may NOT:
 
 ⸻
 
-6. Security and Redaction
+## 6. Security and Redaction
 
-6.1 PII Scrubbing
+### 6.1 PII Scrubbing
 
 All logs and traces are scrubbed for:
 	•	API keys
@@ -203,7 +203,7 @@ Scrubbing occurs:
 
 ⸻
 
-6.2 Redaction Rules
+### 6.2 Redaction Rules
 
 Redacted values appear as:
 
@@ -213,7 +213,7 @@ No raw secrets may be written to disk.
 
 ⸻
 
-7. Auditability
+## 7. Auditability
 
 Every run must record:
 	•	Who triggered it
@@ -230,7 +230,7 @@ storage/memory/
 
 ⸻
 
-8. Policy Violations
+## 8. Policy Violations
 
 When a policy is violated:
 	•	Execution stops
@@ -240,7 +240,7 @@ When a policy is violated:
 
 ⸻
 
-9. Governance Error Types
+## 9. Governance Error Types
 
 Error Type	Description
 PolicyViolation	Disallowed action
@@ -252,7 +252,7 @@ ApprovalRequired	HITL required
 
 ⸻
 
-10. Product Developer Rules
+## 10. Product Developer Rules
 
 Product teams:
 	•	Must define flows within allowed autonomy
@@ -262,7 +262,7 @@ Product teams:
 
 ⸻
 
-11. Non-Negotiable Rules
+## 11. Non-Negotiable Rules
 	•	Governance cannot be bypassed
 	•	Policies are evaluated at runtime
 	•	Hooks are mandatory

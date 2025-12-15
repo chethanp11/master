@@ -2,18 +2,16 @@
 # CLI Entrypoint
 # ==============================
 """
-CLI for master/ to:
-- list products and flows
-- run flows with JSON payload
-- get run details
-- resume runs waiting for approval
+CLI for master/ platform.
 
-Examples:
-  python -m gateway.cli.main list-products
-  python -m gateway.cli.main list-flows --product sandbox
-  python -m gateway.cli.main run --product sandbox --flow hello_world --payload '{"text":"hi"}'
-  python -m gateway.cli.main get-run --run-id run_...
-  python -m gateway.cli.main resume --run-id run_... --approval '{"approved":true}'
+Supported commands:
+  master list-products
+  master list-flows --product sandbox
+  master run --product sandbox --flow hello_world --payload '{"msg":"hi"}'
+  master run --product sandbox --flow hello_world --payload-file payload.json
+  master status --run-id run_123
+  master approvals
+  master resume --run-id run_123 --approve --payload '{"approved": true}'
 """
 
 from __future__ import annotations
@@ -21,59 +19,138 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
+from core.agents.registry import AgentRegistry
 from core.config.loader import load_settings
-from core.utils.product_loader import discover_products, safe_register_all
+from core.memory.router import MemoryRouter
 from core.orchestrator.engine import OrchestratorEngine
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import (
+    ProductCatalog,
+    discover_products,
+    register_enabled_products,
+)
 
 
-def _json_load(s: str) -> Dict[str, Any]:
+def _json_load(text: str) -> Dict[str, Any]:
     try:
-        v = json.loads(s)
-        if not isinstance(v, dict):
-            raise ValueError("JSON payload must be an object")
-        return v
-    except Exception as e:
-        raise SystemExit(f"Invalid JSON: {e}")
+        value = json.loads(text)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"Invalid JSON payload: {exc}") from exc
+    if not isinstance(value, dict):
+        raise SystemExit("JSON payload must be an object.")
+    return value
+
+
+def _load_payload_arg(payload: Optional[str], payload_file: Optional[str]) -> Dict[str, Any]:
+    if payload and payload_file:
+        raise SystemExit("Provide only one of --payload or --payload-file.")
+    if payload_file:
+        text = Path(payload_file).read_text(encoding="utf-8")
+        return _json_load(text)
+    if payload:
+        return _json_load(payload)
+    return {}
 
 
 def _print_json(obj: Any) -> None:
     print(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
 
 
-def cmd_list_products(engine: OrchestratorEngine) -> int:
-    products = engine.list_products()
+def _catalog_product(catalog: ProductCatalog, product: str) -> Tuple[Any, List[str]]:
+    meta = catalog.products.get(product)
+    if meta is None:
+        raise SystemExit(f"Unknown product '{product}'. Run `list-products` to inspect enabled packs.")
+    if not meta.enabled:
+        raise SystemExit(f"Product '{product}' is not enabled. Update configs/products.yaml to enable it.")
+    errors = [err for err in catalog.errors if err.product == product]
+    if errors:
+        raise SystemExit(f"Product '{product}' is unavailable: {errors[0].message} ({errors[0].path})")
+    return meta, catalog.flows.get(product, [])
+
+
+def cmd_list_products(catalog: ProductCatalog) -> int:
+    products = {
+        name: {
+            "display_name": meta.display_name,
+            "description": meta.description,
+            "default_flow": meta.default_flow,
+            "enabled": meta.enabled,
+            "flows": catalog.flows.get(name, []),
+            "errors": [
+                {"path": err.path, "message": err.message}
+                for err in catalog.errors
+                if err.product == name
+            ],
+        }
+        for name, meta in sorted(catalog.products.items())
+    }
     _print_json({"products": products})
     return 0
 
 
-def cmd_list_flows(engine: OrchestratorEngine, product: str) -> int:
-    flows = engine.list_flows(product)
+def cmd_list_flows(catalog: ProductCatalog, product: str) -> int:
+    _, flows = _catalog_product(catalog, product)
     _print_json({"product": product, "flows": flows})
     return 0
 
 
-def cmd_run(engine: OrchestratorEngine, product: str, flow: str, payload: Dict[str, Any]) -> int:
-    res = engine.run_flow(product=product, flow=flow, payload=payload)
+def cmd_run(
+    engine: OrchestratorEngine,
+    catalog: ProductCatalog,
+    *,
+    product: str,
+    flow: str,
+    payload: Dict[str, Any],
+    requested_by: Optional[str],
+) -> int:
+    _, flows = _catalog_product(catalog, product)
+    if flow not in flows:
+        raise SystemExit(f"Unknown flow '{flow}' for product '{product}'. Available: {', '.join(flows)}")
+    res = engine.run_flow(product=product, flow=flow, payload=payload, requested_by=requested_by)
     _print_json(res.model_dump())
     return 0 if res.ok else 1
 
 
-def cmd_get_run(engine: OrchestratorEngine, run_id: str) -> int:
+def cmd_status(engine: OrchestratorEngine, *, run_id: str) -> int:
     res = engine.get_run(run_id=run_id)
     _print_json(res.model_dump())
     return 0 if res.ok else 1
 
 
-def cmd_resume(engine: OrchestratorEngine, run_id: str, approval: Dict[str, Any]) -> int:
-    res = engine.resume_run(run_id=run_id, approval_payload=approval)
+def cmd_resume(
+    engine: OrchestratorEngine,
+    *,
+    run_id: str,
+    decision: str,
+    payload: Dict[str, Any],
+    resolved_by: Optional[str],
+    comment: Optional[str],
+) -> int:
+    res = engine.resume_run(
+        run_id=run_id,
+        decision=decision,
+        approval_payload=payload,
+        resolved_by=resolved_by,
+        comment=comment,
+    )
     _print_json(res.model_dump())
     return 0 if res.ok else 1
 
 
+def cmd_approvals(memory: MemoryRouter) -> int:
+    approvals = [
+        approval.model_dump()
+        for approval in memory.list_pending_approvals(limit=100, offset=0)
+    ]
+    _print_json({"approvals": approvals})
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
-    ap = argparse.ArgumentParser(prog="master-cli")
+    ap = argparse.ArgumentParser(prog="master")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("list-products")
@@ -84,34 +161,68 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap_run = sub.add_parser("run")
     ap_run.add_argument("--product", required=True)
     ap_run.add_argument("--flow", required=True)
-    ap_run.add_argument("--payload", required=True, help='JSON object string')
+    ap_run.add_argument("--payload", help="JSON object string", default=None)
+    ap_run.add_argument("--payload-file", help="Path to JSON file with payload", default=None)
+    ap_run.add_argument("--requested-by", help="Optional requester identifier", default=None)
+
+    ap_status = sub.add_parser("status")
+    ap_status.add_argument("--run-id", required=True)
 
     ap_get = sub.add_parser("get-run")
     ap_get.add_argument("--run-id", required=True)
 
+    ap_approvals = sub.add_parser("approvals")
+
     ap_resume = sub.add_parser("resume")
     ap_resume.add_argument("--run-id", required=True)
-    ap_resume.add_argument("--approval", required=True, help='JSON object string')
+    decision_group = ap_resume.add_mutually_exclusive_group()
+    decision_group.add_argument("--approve", action="store_true", help="Approve the pending run")
+    decision_group.add_argument("--reject", action="store_true", help="Reject the pending run")
+    ap_resume.add_argument("--payload", help="JSON object string", default=None)
+    ap_resume.add_argument("--payload-file", help="Path to JSON file with approval payload", default=None)
+    ap_resume.add_argument("--comment", help="Optional approval comment", default=None)
+    ap_resume.add_argument("--resolved-by", help="Optional reviewer identifier", default=None)
 
     args = ap.parse_args(argv)
 
     settings = load_settings()
-    # Discover + register products (explicit import only via manifests)
-    reg = discover_products(settings.products.products_dir)
-    safe_register_all(reg, enabled_products=settings.products.enabled_products)
-
+    catalog = discover_products(settings)
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    register_enabled_products(catalog, settings=settings)
     engine = OrchestratorEngine.from_settings(settings)
+    memory = engine.memory
 
     if args.cmd == "list-products":
-        return cmd_list_products(engine)
+        return cmd_list_products(catalog)
     if args.cmd == "list-flows":
-        return cmd_list_flows(engine, args.product)
+        return cmd_list_flows(catalog, args.product)
     if args.cmd == "run":
-        return cmd_run(engine, args.product, args.flow, _json_load(args.payload))
-    if args.cmd == "get-run":
-        return cmd_get_run(engine, args.run_id)
+        payload = _load_payload_arg(args.payload, args.payload_file)
+        return cmd_run(
+            engine,
+            catalog,
+            product=args.product,
+            flow=args.flow,
+            payload=payload,
+            requested_by=args.requested_by,
+        )
+    if args.cmd in {"status", "get-run"}:
+        return cmd_status(engine, run_id=args.run_id)
+    if args.cmd == "approvals":
+        return cmd_approvals(memory)
     if args.cmd == "resume":
-        return cmd_resume(engine, args.run_id, _json_load(args.approval))
+        decision = "REJECTED" if args.reject else "APPROVED"
+        payload = _load_payload_arg(args.payload, args.payload_file)
+        return cmd_resume(
+            engine,
+            run_id=args.run_id,
+            decision=decision,
+            payload=payload,
+            resolved_by=args.resolved_by,
+            comment=args.comment,
+        )
+
     raise SystemExit("Unknown command")
 
 

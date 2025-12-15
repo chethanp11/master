@@ -1,7 +1,7 @@
 # ==============================
 # Product Manifest (Sandbox)
 # ==============================
-name: sandbox
+name: "sandbox"
 display_name: "Sandbox"
 description: "Golden-path demo product for master. Safe tools and simple flows."
 version: "0.1.0"
@@ -13,6 +13,7 @@ exposed_api:
   allowed_flows:
     - "hello_world"
 
+ui_enabled: true
 ui:
   enabled: true
   nav_label: "Sandbox"
@@ -23,10 +24,8 @@ ui:
       title: "Run History"
     - id: "approvals"
       title: "Approvals Queue"
+  icon: "🧪"
+  category: "demo"
 
-entrypoints:
-  register_module: "products.sandbox.register"
-
-assets:
-  icon: ""
-  tags: ["demo", "golden-path"]
+flows:
+  - "hello_world"

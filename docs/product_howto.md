@@ -46,6 +46,7 @@ products/<product>/
 ├── manifest.yaml
 ├── config/
 │   └── product.yaml
+├── registry.py
 └── tests/
 
 ---
@@ -67,19 +68,47 @@ Files:
 - products/sandbox/manifest.yaml
 - products/sandbox/config/product.yaml
 
-Example:
-
 Example `manifest.yaml`:
 
+```
 name: sandbox
-default_flow: hello_world
-expose_api: true
+display_name: "Sandbox"
+description: "Demo product"
+version: "0.1.0"
+
+default_flow: "hello_world"
+
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "hello_world"
+
 ui_enabled: true
+ui:
+  enabled: true
+  nav_label: "Sandbox"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
+
+flows:
+  - "hello_world"
+```
 
 Example `config/product.yaml`:
 
-model_overrides:
-  default_provider: openai
+```
+name: sandbox
+
+defaults:
+  autonomy_level: "semi_auto"
+
+limits:
+  max_steps: 50
+
+flags:
+  enable_tools: true
+```
 
 
 ⸻
@@ -124,11 +153,21 @@ Rules:
 
 ⸻
 
-### Step 5: Register the Agent
+### Step 5: Register the Agent & Tools
 
-Agents register themselves when imported.
+Every product must provide `products/<name>/registry.py` with a safe entrypoint:
 
-Ensure product agent modules are imported by the product loader.
+```python
+from core.utils.product_loader import ProductRegistries
+from products.sandbox.agents.simple_agent import build as build_agent
+from products.sandbox.tools.echo_tool import build as build_tool
+
+def register(registries: ProductRegistries) -> None:
+    registries.agent_registry.register(build_agent().name, build_agent)
+    registries.tool_registry.register(build_tool().name, build_tool)
+```
+
+The product loader imports this module and calls `register(...)` with sandboxed registries + settings.
 
 ⸻
 

@@ -26,7 +26,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
-from core.contracts.tool_schema import ToolError, ToolResult
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.governance.hooks import GovernanceHooks, HookDecision
 from core.governance.security import SecurityRedactor
 from core.orchestrator.context import StepContext
@@ -63,8 +63,9 @@ class ToolExecutor:
         try:
             tool = self.registry.resolve(tool_name)
         except Exception as e:
-            err = ToolError(code="TOOL_NOT_FOUND", message=str(e), details={"tool": tool_name})
-            return ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name})
+            meta = self._meta(tool_name)
+            err = ToolError(code=ToolErrorCode.NOT_FOUND, message=str(e), details={"tool": tool_name})
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
 
         safe_params = self.redactor.sanitize(params)
 
@@ -85,23 +86,28 @@ class ToolExecutor:
                 enabled = bool(self.backend_config.get("enable_mcp", False))
                 if not enabled:
                     err = ToolError(
-                        code="MCP_DISABLED",
+                        code=ToolErrorCode.PERMISSION_DENIED,
                         message="MCP backend is disabled. Set configs to enable_mcp=true to use it.",
                         details={"tool": tool_name},
                     )
-                    result = ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name, "backend": "mcp"})
+                    meta = self._meta(tool_name).model_copy(update={"backend": "mcp"})
+                    result = ToolResult(ok=False, data=None, error=err, meta=meta)
                 else:
                     result = self._mcp.run(tool=tool, params=params, ctx=ctx)
             else:
                 err = ToolError(
-                    code="UNKNOWN_BACKEND",
+                    code=ToolErrorCode.UNKNOWN,
                     message=f"Unknown tool backend_mode: {self.backend_mode}",
                     details={"backend_mode": self.backend_mode},
                 )
-                result = ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name})
+                result = ToolResult(ok=False, data=None, error=err, meta=self._meta(tool_name))
         except Exception as e:
-            err = ToolError(code="TOOL_EXCEPTION", message="Tool execution failed.", details={"tool": tool_name, "exc": repr(e)})
-            result = ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name, "backend": self.backend_mode})
+            err = ToolError(
+                code=ToolErrorCode.BACKEND_ERROR,
+                message="Tool execution failed.",
+                details={"tool": tool_name, "exc": repr(e)},
+            )
+            result = ToolResult(ok=False, data=None, error=err, meta=self._meta(tool_name))
 
         elapsed_ms = int((time.time() - started) * 1000)
 
@@ -120,20 +126,20 @@ class ToolExecutor:
         )
 
         # Always return envelope
-        meta = dict(result.meta or {})
-        meta.update({"latency_ms": elapsed_ms, "backend": self.backend_mode, "tool": tool_name})
-        return result.model_copy(update={"meta": meta})
+        meta = result.meta or self._meta(tool_name)
+        updated_meta = meta.model_copy(update={"latency_ms": elapsed_ms, "backend": self.backend_mode})
+        return result.model_copy(update={"meta": updated_meta})
 
     def _deny(self, ctx: StepContext, decision: HookDecision, tool_name: str) -> ToolResult:
         err = ToolError(
-            code="POLICY_DENIED",
+            code=ToolErrorCode.PERMISSION_DENIED,
             message=decision.reason or "Blocked by governance",
             details=decision.details,
         )
         payload = decision.to_payload()
         payload["tool"] = tool_name
         self._emit(ctx, kind="governance.decision", payload=payload)
-        return ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name, "backend": self.backend_mode})
+        return ToolResult(ok=False, data=None, error=err, meta=self._meta(tool_name))
 
     def _emit(self, ctx: StepContext, *, kind: str, payload: Dict[str, Any]) -> None:
         ctx.emit(kind, self.redactor.sanitize(payload))
@@ -145,3 +151,6 @@ class ToolExecutor:
         """
         data = result.model_dump()
         return self.redactor.redact_dict(data)
+
+    def _meta(self, tool_name: str) -> ToolMeta:
+        return ToolMeta(tool_name=tool_name, backend=self.backend_mode)

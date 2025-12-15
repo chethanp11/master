@@ -22,7 +22,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, Optional, TypeVar
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 # ==============================
 # Typing
@@ -101,6 +101,14 @@ class AgentEnvelope(BaseModel, Generic[T]):
     data: Optional[T] = Field(default=None, description="Agent output payload.")
     error: Optional[AgentError] = Field(default=None, description="Agent error if ok=False.")
     meta: AgentMeta = Field(..., description="Agent execution metadata.")
+
+    @model_validator(mode="after")
+    def _enforce_error_contract(self) -> "AgentEnvelope[T]":
+        if self.ok and self.error is not None:
+            raise ValueError("Agent error must be None when ok=True")
+        if not self.ok and self.error is None:
+            raise ValueError("Agent error is required when ok=False")
+        return self
 
     def to_dict(self) -> Dict[str, Any]:
         """Stable serialization wrapper."""

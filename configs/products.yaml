@@ -5,5 +5,6 @@ products_dir: products
 discovery_paths:
   - products
 
-# If empty: enable all discovered products
+# If empty: enable products listed in `enabled` unless auto_enable=true
 enabled: []
+auto_enable: true

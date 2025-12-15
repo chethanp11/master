@@ -41,25 +41,25 @@ MANIFEST_TEMPLATE = """# Product manifest (tracked in git)
 name: "{name}"
 display_name: "{display_name}"
 description: "TODO: describe this product"
+version: "0.1.0"
+
 default_flow: "hello_world"
 
-# Exposure flags (used by gateway/UI to hide/show products)
-expose_api: true
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "hello_world"
+
 ui_enabled: true
-
-# Optional UI hints (platform UI can read these later)
 ui:
-  icon: "🧩"
-  category: "prototype"
-  notes: "TODO"
+  enabled: true
+  nav_label: "{display_name}"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
 
-# Optional: which flows should appear in UI by default
 flows:
   - "hello_world"
-
-# Registration entrypoint (imported by product loader)
-entrypoints:
-  register_module: "products.{name}.registry"
 """
 
 PRODUCT_CONFIG_TEMPLATE = """# Product config (tracked in git)
@@ -67,13 +67,12 @@ PRODUCT_CONFIG_TEMPLATE = """# Product config (tracked in git)
 name: "{name}"
 
 defaults:
-  autonomy_level: "semi_auto"   # suggest_only | semi_auto | full_auto
-  model: "default"             # logical model name resolved by core/models/router.py
+  autonomy_level: "semi_auto"
+  model: "default"
 
 limits:
   max_steps: 50
   max_tool_calls: 50
-  max_tokens: 8000
 
 flags:
   enable_tools: true
@@ -107,20 +106,22 @@ How to use:
 3) Register them in register()
 
 Example (after you create a tool/agent):
-  from core.agents.registry import AgentRegistry
-  from core.tools.registry import ToolRegistry
+  from core.utils.product_loader import ProductRegistries
   from products.{name}.agents.my_agent import build as build_agent
   from products.{name}.tools.my_tool import build as build_tool
 
-  def register() -> None:
-      AgentRegistry.register(build_agent().name, build_agent())
-      ToolRegistry.register(build_tool().name, build_tool())
+  def register(registries: ProductRegistries) -> None:
+      registries.agent_registry.register(build_agent().name, build_agent)
+      registries.tool_registry.register(build_tool().name, build_tool)
 """
 
 from __future__ import annotations
 
 
-def register() -> None:
+from core.utils.product_loader import ProductRegistries
+
+
+def register(registries: ProductRegistries) -> None:
     # TODO: register your agents/tools here.
     # Keep this safe: no DB writes, no HTTP, no vendor calls.
     return

@@ -20,7 +20,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import AliasChoices, BaseModel, Field, ConfigDict
+from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
 # ==============================
 # Enums
@@ -45,6 +45,17 @@ class BackendType(str, Enum):
     LOCAL = "local"
     REMOTE = "remote"
     MCP = "mcp"
+
+
+# Backwards-compatible lowercase attribute access (tests/users may reference StepType.tool)
+StepType.agent = StepType.AGENT  # type: ignore[attr-defined]
+StepType.tool = StepType.TOOL  # type: ignore[attr-defined]
+StepType.human_approval = StepType.HUMAN_APPROVAL  # type: ignore[attr-defined]
+StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
+
+AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
+AutonomyLevel.semi_auto = AutonomyLevel.SEMI_AUTO  # type: ignore[attr-defined]
+AutonomyLevel.full_auto = AutonomyLevel.FULL_AUTO  # type: ignore[attr-defined]
 
 
 # ==============================
@@ -94,6 +105,14 @@ class StepDef(BaseModel):
     depends_on: List[str] = Field(default_factory=list, description="Optional dependency step ids.")
     next_steps: List[str] = Field(default_factory=list, description="Optional explicit next steps for graph flows.")
 
+    @model_validator(mode="after")
+    def _validate_target_fields(self) -> "StepDef":
+        if self.type == StepType.TOOL and not self.tool:
+            raise ValueError("tool steps require the 'tool' field")
+        if self.type == StepType.AGENT and not self.agent:
+            raise ValueError("agent steps require the 'agent' field")
+        return self
+
 
 class FlowDef(BaseModel):
     """
@@ -101,9 +120,16 @@ class FlowDef(BaseModel):
 
     The orchestrator treats this as the authoritative spec.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    id: str = Field(..., min_length=1, max_length=80, description="Flow id unique within product.")
+    id: str = Field(
+        ...,
+        min_length=1,
+        max_length=80,
+        description="Flow id unique within product.",
+        validation_alias=AliasChoices("id", "name"),
+        serialization_alias="id",
+    )
     description: Optional[str] = Field(default=None, description="Short description.")
     autonomy_level: AutonomyLevel = Field(default=AutonomyLevel.SEMI_AUTO, description="Autonomy behavior.")
     version: str = Field(default="v1", description="Flow version label.")
@@ -114,3 +140,7 @@ class FlowDef(BaseModel):
     def to_dict(self) -> Dict[str, Any]:
         """Stable serialization wrapper."""
         return self.model_dump(mode="python")
+
+    @property
+    def name(self) -> str:
+        return self.id

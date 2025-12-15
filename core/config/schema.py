@@ -136,7 +136,11 @@ class ProductsConfig(BaseModel):
     # Where products live (relative to repo_root)
     products_dir: str = Field(default="products")
     discovery_paths: List[str] = Field(default_factory=lambda: ["products"])
-    enabled: List[str] = Field(default_factory=list, description="If empty, all discovered products are enabled")
+    enabled: List[str] = Field(default_factory=list, description="Explicit allowlist of products to enable")
+    auto_enable: bool = Field(
+        default=True,
+        description="If true and enabled list is empty, enable all discovered products automatically.",
+    )
 
 
 # ==============================

@@ -6,7 +6,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from core.config.loader import load_settings
-from core.utils.product_loader import discover_products, safe_register_all
+from core.utils.product_loader import discover_products, register_enabled_products, ProductCatalog
 from core.orchestrator.engine import OrchestratorEngine
 from core.memory.router import MemoryRouter
 from core.logging.tracing import Tracer
@@ -14,11 +14,15 @@ from core.logging.tracing import Tracer
 
 @lru_cache(maxsize=1)
 def get_settings():
-    settings = load_settings()
-    # Product discovery + registration (once)
-    reg = discover_products(settings.products.products_dir)
-    safe_register_all(reg, enabled_products=settings.products.enabled_products)
-    return settings
+    return load_settings()
+
+
+@lru_cache(maxsize=1)
+def get_product_catalog() -> ProductCatalog:
+    settings = get_settings()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+    return catalog
 
 
 @lru_cache(maxsize=1)
@@ -37,6 +41,7 @@ def get_tracer() -> Tracer:
 @lru_cache(maxsize=1)
 def get_engine() -> OrchestratorEngine:
     settings = get_settings()
+    get_product_catalog()  # ensure products are registered once
     mem = get_memory_router()
     tracer = get_tracer()
     return OrchestratorEngine.from_settings(settings=settings, memory=mem, tracer=tracer)

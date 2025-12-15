@@ -65,7 +65,7 @@ def test_step_def_requires_tool_or_agent() -> None:
 def test_run_models_validate_minimal() -> None:
     run = RunRecord(run_id="r1", product="sandbox", flow="hello_world", status="RUNNING")
     step = StepRecord(run_id="r1", step_id="s1", status="RUNNING")
-    event = TraceEvent(run_id="r1", step_id="s1", event_type="test", payload={"a": 1})
+    event = TraceEvent(run_id="r1", step_id="s1", product="sandbox", flow="hello_world", event_type="test", payload={"a": 1})
     art = ArtifactRef(key="k", kind="json", uri="memory://k")
     assert run.run_id == "r1"
     assert step.step_id == "s1"

@@ -24,9 +24,16 @@ class Retriever:
         self,
         *,
         query: str,
+        collection: str = "default",
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         use_embeddings: bool = False,
     ) -> List[Chunk]:
-        q = Query(text=query, top_k=top_k, filters=filters or {}, use_embeddings=use_embeddings)
+        q = Query(
+            collection=collection,
+            text=query,
+            top_k=top_k,
+            filters=filters or {},
+            use_embeddings=use_embeddings,
+        )
         return self.store.query(q)

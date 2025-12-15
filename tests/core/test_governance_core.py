@@ -20,8 +20,8 @@ def _step_ctx(product: str = "sandbox") -> StepContext:
         id="hello",
         steps=[StepDef(id="s1", type=StepType.TOOL, tool="echo_tool", backend=None)],
     )
-    run_ctx = RunContext(run_record=run_record, flow=flow)
-    return StepContext(run=run_ctx, step=flow.steps[0])
+    run_ctx = RunContext(run_id=run_record.run_id, product=run_record.product, flow=flow.id)
+    return run_ctx.new_step(step_def=flow.steps[0])
 
 
 def test_redactor_scrubs_tokens_and_pii() -> None:

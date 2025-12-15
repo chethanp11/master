@@ -40,7 +40,7 @@ DEFAULT_KEY_HINTS: List[str] = [
 ]
 
 DEFAULT_PATTERNS: List[str] = [
-    r"sk-[A-Za-z0-9]{16,}",  # common key pattern
+    r"sk-[A-Za-z0-9_-]{3,}",  # common key pattern (loose match)
     r"(?i)api[_-]?key\s*[:=]\s*\S+",
     r"(?i)authorization\s*:\s*bearer\s+\S+",
 ]

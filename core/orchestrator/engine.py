@@ -52,21 +52,27 @@ class OrchestratorEngine:
         self.hitl = HitlService(memory)
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "OrchestratorEngine":
+    def from_settings(
+        cls,
+        settings: Settings,
+        *,
+        memory: Optional[MemoryRouter] = None,
+        tracer: Optional[Tracer] = None,
+    ) -> "OrchestratorEngine":
         repo_root = settings.repo_root_path()
         products_root = repo_root / settings.products.products_dir
         flow_loader = FlowLoader(products_root=products_root)
-        memory = MemoryRouter.from_settings(settings)
+        memory_router = memory or MemoryRouter.from_settings(settings)
         redactor = SecurityRedactor.from_settings(settings)
-        tracer = Tracer(memory=memory, redactor=redactor)
+        tracer_instance = tracer or Tracer(memory=memory_router, redactor=redactor)
         governance = GovernanceHooks(settings=settings, redactor=redactor)
         tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
         step_executor = StepExecutor(tool_executor=tool_executor, agent_registry=AgentRegistry)
         return cls(
             flow_loader=flow_loader,
             step_executor=step_executor,
-            memory=memory,
-            tracer=tracer,
+            memory=memory_router,
+            tracer=tracer_instance,
             governance=governance,
         )
 
