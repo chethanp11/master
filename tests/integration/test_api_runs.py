@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+from typing import Any, Dict, Optional
 
 import pytest
 from fastapi.testclient import TestClient
@@ -41,6 +43,14 @@ def api_client(tmp_path, monkeypatch):
     _reset_deps()
 
 
+def _start_sandbox_run(api_client: TestClient, payload: Optional[Dict[str, Any]] = None) -> str:
+    req_payload = payload or {"message": "API"}
+    started = api_client.post("/api/run/sandbox/hello_world", json={"payload": req_payload}).json()
+    assert started["ok"] is True
+    assert started["data"]["status"] == "PENDING_HUMAN"
+    return started["data"]["run_id"]
+
+
 @pytest.mark.integration
 def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
     products = api_client.get("/api/products").json()
@@ -53,13 +63,7 @@ def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
     assert flows["ok"] is True
     assert "hello_world" in flows["data"]["flows"]
 
-    started = api_client.post(
-        "/api/run/sandbox/hello_world",
-        json={"payload": {"message": "API"}},
-    ).json()
-    assert started["ok"] is True
-    run_id = started["data"]["run_id"]
-    assert started["data"]["status"] == "PENDING_HUMAN"
+    run_id = _start_sandbox_run(api_client)
 
     pending = api_client.get(f"/api/run/{run_id}").json()
     assert pending["ok"] is True
@@ -75,3 +79,44 @@ def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
     final = api_client.get(f"/api/run/{run_id}").json()
     assert final["ok"] is True
     assert final["data"]["run"]["status"] == "COMPLETED"
+
+
+@pytest.mark.integration
+def test_gateway_api_resume_rejection_marks_failed(api_client: TestClient) -> None:
+    run_id = _start_sandbox_run(api_client)
+
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": False, "notes": "reject"}},
+    ).json()
+    assert resumed["ok"] is True
+    assert resumed["data"]["status"] == "FAILED"
+
+    final = api_client.get(f"/api/run/{run_id}").json()
+    assert final["ok"] is True
+    assert final["data"]["run"]["status"] == "FAILED"
+
+
+@pytest.mark.integration
+def test_gateway_api_missing_approval_field_is_rejected(api_client: TestClient) -> None:
+    run_id = _start_sandbox_run(api_client)
+    resp = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"notes": "missing approved flag"}},
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["detail"]["error"]["code"] == "missing_approval_field"
+
+
+@pytest.mark.integration
+def test_gateway_api_trace_cleanliness(api_client: TestClient) -> None:
+    run_id = _start_sandbox_run(api_client, payload={"message": "safe", "api_key": "sk-secret"})
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": True}},
+    ).json()
+    assert resumed["ok"] is True
+    final = api_client.get(f"/api/run/{run_id}").json()
+    serialized_steps = json.dumps(final["data"].get("steps", []))
+    assert "api_key" not in serialized_steps

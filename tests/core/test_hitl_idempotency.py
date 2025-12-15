@@ -42,7 +42,7 @@ def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
 
     ok = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
     assert ok.ok
-    result = orchestrator.resume_run(run_id=run_id, approval_payload={}, decision="APPROVED")
+    result = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
     assert not result.ok
     assert result.error and result.error.code == "invalid_state"
 
@@ -57,13 +57,13 @@ def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
     start_b = orchestrator.run_flow(product="sandbox", flow="hello_world", payload={})
     assert start_b.ok
     run_b = start_b.data["run_id"]
-    reject_ok = orchestrator.resume_run(run_id=run_b, approval_payload={}, decision="REJECTED")
+    reject_ok = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": False}, decision="REJECTED")
     assert reject_ok.ok
 
-    second_reject = orchestrator.resume_run(run_id=run_b, approval_payload={}, decision="REJECTED")
+    second_reject = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": False}, decision="REJECTED")
     assert not second_reject.ok
     assert second_reject.error and second_reject.error.code == "invalid_state"
 
-    approve_after_reject = orchestrator.resume_run(run_id=run_b, approval_payload={}, decision="APPROVED")
+    approve_after_reject = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": True}, decision="APPROVED")
     assert not approve_after_reject.ok
     assert approve_after_reject.error and approve_after_reject.error.code == "invalid_state"

@@ -161,6 +161,10 @@ class OrchestratorEngine:
             return RunOperationResult.failure(code="invalid_state", message="No pending approvals.")
 
         approval = pending[0]
+        payload = approval_payload or {}
+        if "approved" not in payload:
+            return RunOperationResult.failure(code="missing_approval_field", message="Approval payload must include 'approved' flag.")
+
         self.hitl.resolve_approval(
             approval_id=approval.approval_id,
             decision=decision,
@@ -168,15 +172,37 @@ class OrchestratorEngine:
             comment=comment,
         )
 
+        step_status = StepStatus.COMPLETED
+        if not payload.get("approved") or decision.upper() != "APPROVED":
+            step_status = StepStatus.FAILED
+
         self.memory.update_step(
             run_id,
             approval.step_id,
             {
-                "status": StepStatus.COMPLETED.value,
+                "status": step_status.value,
                 "finished_at": int(time.time()),
-                "output": {"approval": {"decision": decision, "comment": comment, "payload": approval_payload or {}}},
+                "output": {
+                    "approval": {
+                        "decision": decision,
+                        "comment": comment,
+                        "payload": payload,
+                    }
+                },
             },
         )
+
+        if step_status == StepStatus.FAILED:
+            self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"rejection": decision})
+            self._emit_event(
+                kind="run_rejected",
+                run_id=run_id,
+                step_id=approval.step_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                payload={"decision": decision, "approved": payload.get("approved")},
+            )
+            return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
 
         flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
         next_index = self._find_step_index(flow_def, approval.step_id) + 1

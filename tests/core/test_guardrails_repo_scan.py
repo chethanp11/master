@@ -63,6 +63,7 @@ def test_tool_executor_is_centralized() -> None:
         REPO_ROOT / "core" / "orchestrator" / "engine.py",
         REPO_ROOT / "core" / "orchestrator" / "step_executor.py",
         REPO_ROOT / "tests" / "core" / "test_tools_core.py",
+        REPO_ROOT / "core" / "tools" / "executor.py",
     }
     pattern = r"ToolExecutor"
     offenders = _find_offenses(pattern, files, allow=list(allowed))

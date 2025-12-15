@@ -88,3 +88,99 @@ def test_cli_run_resume_flow(tmp_path, monkeypatch, capsys) -> None:
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()
+
+
+@pytest.mark.integration
+def test_cli_resume_rejection_marks_failed(tmp_path, monkeypatch, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "cli.sqlite"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        _, _ = _run_cli(["list-products"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "sandbox"], capsys)
+
+        _, started = _run_cli(
+            [
+                "run",
+                "--product",
+                "sandbox",
+                "--flow",
+                "hello_world",
+                "--payload",
+                '{"message":"CLI"}',
+            ],
+            capsys,
+        )
+        run_id = started["data"]["run_id"]
+
+        _, rejection = _run_cli(
+            [
+                "resume",
+                "--run-id",
+                run_id,
+                "--reject",
+                "--payload",
+                '{"approved": false}',
+            ],
+            capsys,
+        )
+        assert rejection["ok"] is True
+        assert rejection["data"]["status"] == "FAILED"
+
+        _, final = _run_cli(["status", "--run-id", run_id], capsys)
+        assert final["data"]["run"]["status"] == "FAILED"
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+@pytest.mark.integration
+def test_cli_resume_missing_payload_fails(tmp_path, monkeypatch, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "cli.sqlite"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        _, _ = _run_cli(["list-products"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "sandbox"], capsys)
+
+        _, started = _run_cli(
+            [
+                "run",
+                "--product",
+                "sandbox",
+                "--flow",
+                "hello_world",
+                "--payload",
+                '{"message":"CLI"}',
+            ],
+            capsys,
+        )
+        run_id = started["data"]["run_id"]
+
+        code, failure = _run_cli(
+            [
+                "resume",
+                "--run-id",
+                run_id,
+                "--approve",
+            ],
+            capsys,
+        )
+        assert code != 0
+        assert failure["ok"] is False
+        assert failure["error"]["code"] == "missing_approval_field"
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()

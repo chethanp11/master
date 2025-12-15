@@ -15,26 +15,16 @@ from core.tools.registry import ToolRegistry
 
 
 @pytest.mark.integration
-def test_sample_flow_sandbox_hello_world(tmp_path: Path) -> None:
+def test_sample_flow_sandbox_hello_world(tmp_path: Path, sandbox_test_env: Path) -> None:
+    """
+    Runs:
+      echo -> HITL -> summary
+
+    The sandbox_test_env fixture handles sqlite/secrets overrides so other integration suites can reuse the same storage location.
+    """
     repo_root = Path(__file__).resolve().parents[2]
     configs_dir = repo_root / "configs"
-    secrets_dir = tmp_path / "secrets"
-    secrets_dir.mkdir(parents=True, exist_ok=True)
-    secrets_path = secrets_dir / "secrets.yaml"
-    sqlite_path = tmp_path / "it.sqlite"
-
-    secrets_path.write_text(
-        "\n".join(
-            [
-                "secrets:",
-                f"  memory_db_path: '{sqlite_path.as_posix()}'",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    settings = load_settings(configs_dir=str(configs_dir), secrets_path=str(secrets_path))
+    settings = load_settings(configs_dir=str(configs_dir))
     AgentRegistry.clear()
     ToolRegistry.clear()
     try:

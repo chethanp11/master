@@ -10,7 +10,10 @@ from core.knowledge.vector_store import SqliteVectorStore
 from scripts import ingest_knowledge
 
 
-def test_ingest_script_round_trip(tmp_path: Path) -> None:
+def test_ingest_script_round_trip(tmp_path: Path, sandbox_test_env: Path) -> None:
+    """
+    The sandbox_test_env fixture drives deterministic sqlite overrides so ingestion and flow tests share storage paths.
+    """
     data_dir = tmp_path / "docs"
     data_dir.mkdir()
     (data_dir / "note.txt").write_text("Alpha beta", encoding="utf-8")

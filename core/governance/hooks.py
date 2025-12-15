@@ -79,7 +79,7 @@ class GovernanceHooks:
         )
 
     # ------------------------------
-    # Tool hooks (used by ToolExecutor)
+    # Tool hooks (used by the executor layer)
     # ------------------------------
 
     def before_tool_call(self, *, tool_name: str, params: Dict[str, Any], ctx: StepContext) -> HookDecision:

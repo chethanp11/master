@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import time
-from typing import Callable, Dict, Optional
+import re
+from typing import Any, Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
@@ -47,6 +48,8 @@ class StepExecutor:
         )
 
         if step_def.type == StepType.TOOL:
+            rendered_params = self._render_params(step_def.params or {}, run_ctx.payload)
+            step_def = step_def.model_copy(update={"params": rendered_params})
             return self._execute_tool(step_ctx=step_ctx, step_def=step_def).model_dump(mode="json")
 
         if step_def.type == StepType.AGENT:
@@ -105,6 +108,22 @@ class StepExecutor:
             if delay > 0:
                 self.sleep_fn(delay)
             attempt += 1
+
+    def _render_params(self, params: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+        def render(value: Any) -> Any:
+            if isinstance(value, str):
+                def replace(match: re.Match[str]) -> str:
+                    key = match.group(1)
+                    return str(payload.get(key, ""))
+
+                return re.sub(r"\{\{\s*payload\.([\w_]+)\s*\}\}", replace, value)
+            if isinstance(value, dict):
+                return {k: render(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [render(item) for item in value]
+            return value
+
+        return {k: render(v) for k, v in params.items()}
 
 
 def build_step_context(run_ctx: RunContext, *, step_id: str, step_def: StepDef) -> StepContext:

@@ -12,7 +12,7 @@ Important:
 
 Later:
 - Wire this provider to the real OpenAI SDK.
-- Read API keys from core/config/loader.py injected config (never from os.environ here).
+- Read API keys from core/config/loader.py injected config (never from this module).
 - Add retry, timeouts, and structured error mapping to AgentError/ToolError envelopes.
 """
 
