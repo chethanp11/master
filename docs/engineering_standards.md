@@ -283,7 +283,7 @@ core/governance/security.py
 
 ### 7.1 Product Folder Structure
 Each product **must** follow:
-
+```
 products//
 ├── flows/
 ├── agents/
@@ -291,7 +291,7 @@ products//
 ├── prompts/
 ├── config/
 └── tests/
-
+```
 ---
 
 ### 7.2 Product Responsibilities
