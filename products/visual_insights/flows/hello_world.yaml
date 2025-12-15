@@ -1,0 +1,21 @@
+# Visual Insights workflow
+id: hello_world
+autonomy_level: suggest_only
+
+steps:
+  - id: fetch_data
+    type: tool
+    tool: data_reader
+    backend: local
+    params:
+      dataset: "{{payload.dataset}}"
+  - id: approval
+    type: human_approval
+    title: "Approve insights"
+    message: "Review the generated insights before sharing."
+  - id: summarize
+    type: agent
+    agent: dashboard_agent
+    backend: local
+    params:
+      template: "Dashboard insight: {summary}"
