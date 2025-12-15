@@ -1,8 +1,32 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Literal
+
+from pydantic import BaseModel, ConfigDict
+
+from .card import InsightCard
+from .modes import InsightMode
+from .refs import FileRef
 
 
-@dataclass
-class DataIO:
-    source: str
-    rows: int
-    columns: int
+class UploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    files: List[FileRef]
+    mode: InsightMode
+    prompt: Optional[str] = None
+
+
+class RunResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    session_id: str
+    cards: List[InsightCard]
+
+
+class ExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    format: Literal["pdf"]

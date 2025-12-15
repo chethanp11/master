@@ -1,2 +1,8 @@
-name: visual_insights
-default_flow: v1_flow
+id: "visual_insights"
+name: "Visual Insights"
+description: "Visual Insights v1 ingests CSV/PDF data, plans insights, and renders traceable cards."
+config_path: "products/visual_insights/configs/visual_insights.yaml"
+default_flow: "v1"
+flows:
+  v1:
+    entrypoint: "products.visual_insights.flows.v1_flow:run_visual_insights_v1"

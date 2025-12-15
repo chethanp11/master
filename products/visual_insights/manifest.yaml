@@ -1,20 +1,29 @@
-# Product manifest (short)
-name: "visual_insights"
+# Visual Insights manifest – v1
+product_id: "visual_insights"
 display_name: "Visual Insights"
-description: "Agentic dashboard for CSV/PDF datasets."
+description: "Agentic dashboard for CSV and PDF datasets with citational governance."
 version: "0.1.0"
-
-default_flow: "v1_flow"
-
-exposed_api:
-  enabled: true
-  allowed_flows:
-    - "v1_flow"
-
-ui_enabled: true
-ui:
-  enabled: true
-  nav_label: "Visual Insights"
-
-flows:
-  - "v1_flow"
+entrypoints:
+  flow: "products.visual_insights.flows.v1_flow:run_visual_insights_v1"
+routes:
+  base_path: "/visual_insights"
+capabilities:
+  inputs:
+    - "csv"
+    - "pdf"
+  modes:
+    - "summarize_dataset"
+    - "answer_question"
+    - "anomalies_and_drivers"
+  charts:
+    - "line"
+    - "bar"
+    - "stacked_bar"
+    - "scatter"
+    - "table"
+  export:
+    - "pdf"
+governance:
+  trace: true
+  citations_required: true
+  pii_scrub: true
