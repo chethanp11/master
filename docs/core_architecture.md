@@ -238,6 +238,24 @@ core/logging/
 
 ---
 
+## 12. Contracts & Envelopes
+
+**Purpose:**  
+Ensure every cross-boundary interaction (agents, tools, orchestrator, API) is typed and auditable.
+
+Location:
+`core/contracts/agent_schema.py`, `core/contracts/tool_schema.py`, `core/contracts/flow_schema.py`, `core/contracts/run_schema.py`
+
+Responsibilities:
+- Define `AgentResult`, `ToolResult`, `RunRecord`, `StepRecord`, and `TraceEvent` envelopes.
+- Provide enums (`RunStatus`, `StepStatus`, `AutonomyLevel`, `AgentErrorCode`, `ToolErrorCode`) so runtime data never uses ad-hoc strings.
+- Supply `FlowDef`/`StepDef`/`RetryPolicy` consumed by flow loader/engine for retries, autonomy, and HITL semantics.
+- Guarantee serialization via `.model_dump()` so gateway/API/UI/tracer receive consistent sanitized payloads.
+
+Any module that crosses the agent-to-tool/orchestrator boundary returns these contracts instead of raw dicts.
+
+---
+
 ## 12. Prompts
 
 **Purpose:**  
