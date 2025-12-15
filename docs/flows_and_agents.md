@@ -1,39 +1,59 @@
+
 # Flows and Agents — master/
 
-This document explains **how flows and agents are defined, wired, and executed** in the `master/` platform.
+This document explains **how flows and agents are defined, wired, and executed**
+in the `master/` platform.
 
 It is intended for engineers **building products**, not modifying the core runtime.
+
+This document is governed by:
+- docs/engineering_standards.md
 
 ---
 
 ## 1. Core Concepts
 
 ### Flow
-A **flow** is a declarative definition of *what steps to execute* and *in what order*.
+A **flow** is a declarative definition of:
+- *what goal is being pursued*
+- *what steps are required*
+- *in what order they execute*
+- *under what constraints*
 
-- Defined in YAML or JSON
-- Loaded and validated by the orchestrator
-- Drives execution without embedding logic in code
-
-### Agent
-An **agent** is a unit of reasoning.
-
-- Stateless
-- Deterministic for a given context
-- Returns structured output (`AgentResult`)
-- Does **not** perform IO directly
+Flows:
+- Are defined in YAML or JSON
+- Are loaded and validated by the orchestrator
+- Contain **no executable logic**
+- Describe intent, not implementation
 
 ---
 
-## 2. Flow Structure
+### Agent
+An **agent** is a unit of goal-driven reasoning.
 
-Flows live in:
+Agents are:
+- Stateless
+- Deterministic for a given context
+- Goal-driven (not prompt-driven)
+- Side-effect free
+
+Agents:
+- Receive goals and constraints from the orchestrator
+- Reason and decide
+- Return structured outputs (`AgentResult`)
+- Do **not** perform IO or execution directly
+
+---
+
+## 2. Flow Location
+
+Flows live under:
 
 products//flows/
 
 Example:
 
-hello_world.yaml
+products/sandbox/flows/hello_world.yaml
 
 ---
 
@@ -48,7 +68,8 @@ autonomy_level: semi_auto   # suggest_only | semi_auto | full_auto
 steps:
   - id: plan
     type: agent
-    agent: simple_planner
+    agent: sandbox.planner
+    goal: "Generate an execution plan"
     retry:
       max_attempts: 2
       backoff_seconds: 1
@@ -59,191 +80,231 @@ steps:
 
   - id: execute
     type: agent
-    agent: simple_executor
+    agent: sandbox.executor
+    goal: "Execute the approved plan"
+```
 
+Notes:
+	•	goal is the primary control input to agents
+	•	No prompts are embedded in flows
+	•	Retry behavior is declarative and flow-driven
 
-⸻
+---
 
-4. Step Types
+## 4. Step Types
 
-4.1 Agent Step
+### 4.1 Agent Step
 
 - id: step_name
   type: agent
-  agent: agent_name
+  agent: product.agent_name
+  goal: "Describe desired outcome"
 
-	•	Executes an agent registered in the product
-	•	Receives RunContext
-	•	Returns AgentResult
+Behavior:
+	•	Resolves agent from registry
+	•	Provides StepContext (goal, constraints, artifacts)
+	•	Executes agent reasoning
+	•	Expects an AgentResult
 
-⸻
+Agents:
+	•	Do not decide the next step
+	•	Do not call tools directly
+	•	Do not mutate persistent state
 
-4.2 Tool Step (Optional)
+---
+
+### 4.2 Tool Step
 
 - id: call_tool
   type: tool
-  tool: tool_name
+  tool: product.tool_name
 
-	•	Executes via tool executor
-	•	Subject to governance checks
+Behavior:
+	•	Executed only by the tool executor
+	•	Subject to governance and policy checks
+	•	Produces a ToolResult
 
-⸻
+Notes:
+	•	Agents may request tools indirectly via structured outputs
+	•	The orchestrator decides whether and when tools run
 
-4.3 Human Approval Step (HITL)
+---
+
+### 4.3 Human Approval Step (HITL)
 
 - id: approve
   type: human_approval
   message: "Approve this output?"
 
+Behavior:
 	•	Pauses execution
-	•	Persists state
+	•	Persists run and step state
 	•	Sets run status to PENDING_HUMAN
-	•	Requires explicit resume call
+	•	Requires explicit resume action
 
-⸻
+---
 
-5. Autonomy Levels
+## 5. Autonomy Levels
 
 Level	Description
-suggest_only	Generates output but does not execute tools
-semi_auto	Executes tools but requires approvals
+suggest_only	Agents reason and suggest; no execution
+semi_auto	Tools may execute but require approval
 full_auto	Fully autonomous execution
 
-Autonomy is enforced by governance hooks.
+Rules:
+	•	Autonomy level is enforced by governance hooks
+	•	Agents do not override autonomy
 
-⸻
+---
 
-6. Retry and Error Handling
+## 6. Retry and Error Handling
 
-Retries are flow-driven, not agent-driven.
+Retries are flow-driven, never agent-driven.
 
 retry:
   max_attempts: 3
   backoff_seconds: 2
 
+Rules:
 	•	Retries occur only on recoverable errors
-	•	Error evaluation handled by error policy engine
+	•	Error classification is handled by error policy evaluation
+	•	Agents return structured errors; they do not retry themselves
 
-⸻
+---
 
-7. Agent Definition
+## 7. Agent Location
 
-Agents live in:
+Agents live under:
 
 products/<product>/agents/
 
 Example:
 
-simple_agent.py
+products/sandbox/agents/simple_agent.py
 
 
-⸻
+---
 
-8. Agent Contract
+## 8. Agent Contract
 
 All agents must:
 	•	Inherit from BaseAgent
-	•	Implement run(context)
+	•	Implement run(step_context)
 	•	Return AgentResult
-	•	Never raise for expected failures
+	•	Never raise exceptions for expected failures
 
-Example (conceptual):
+Conceptual example:
 
 class SimpleAgent(BaseAgent):
-    def run(self, context):
+    name = "sandbox.simple"
+
+    def run(self, step_context):
         return AgentResult(
             success=True,
-            output="Hello world",
+            output={"message": "Hello world"},
             metadata={}
         )
 
 
-⸻
+---
 
-9. Agent Responsibilities
+## 9. Agent Responsibilities
 
-Agents may:
-	•	Read context
-	•	Reason
-	•	Request tool execution (via context signals)
-	•	Format outputs
+Agents MAY:
+	•	Read goal, constraints, and artifacts
+	•	Reason and decide
+	•	Emit trace events
+	•	Request tool usage via structured output
 
-Agents may NOT:
+Agents MUST NOT:
 	•	Execute tools directly
+	•	Call other agents
 	•	Read/write files
 	•	Persist state
-	•	Call models directly
+	•	Invoke models directly
+	•	Read environment variables
 
-⸻
+---
 
-10. Agent Registry
+## 10. Agent Registry
 
 Agents are registered at startup:
-	•	Product agents register themselves
-	•	Registry maps agent_name → class
+	•	Product agents self-register via controlled import
+	•	Registry maps agent_name → agent class
 
-The orchestrator resolves agents by name at runtime.
+Resolution:
+	•	Orchestrator resolves agents by name at runtime
+	•	Names should be namespaced (product.agent)
 
-⸻
+---
 
-11. Flow Execution Lifecycle
+## 11. Flow Execution Lifecycle
 	1.	Flow loaded and validated
 	2.	RunContext initialized
 	3.	Step loop begins
 	4.	Step executed
-	5.	Traces emitted
-	6.	State persisted
-	7.	HITL pause or continue
-	8.	Completion or failure
+	5.	Trace events emitted
+	6.	State persisted via memory backend
+	7.	HITL pause or continuation
+	8.	Completion or failure recorded
 
-⸻
+---
 
-12. Flow Composition Patterns
+## 12. Flow Composition Patterns
 
-12.1 Linear Flow
+### 12.1 Linear Flow
 
 Plan → Execute → Finish
 
 
-⸻
+---
 
-12.2 Looping Flow
+### 12.2 Iterative Flow
 
-Plan → Execute → Critic → Plan (on failure)
+Plan → Execute → Validate → Re-plan
 
-(Requires conditional support)
+(Requires conditional support in orchestrator)
 
-⸻
+---
 
-12.3 Approval Gate
+### 12.3 Approval Gate
 
 Generate → Approve → Execute
 
 
-⸻
+---
 
-13. Product Isolation
-	•	Flows cannot reference agents from other products
+## 13. Product Isolation
+
+Rules:
+	•	Flows must not reference agents from other products
 	•	Tools are product-scoped unless explicitly shared
-	•	Prompts are product-specific by default
+	•	Core agents/tools may be reused
+	•	Prompts are optional and non-authoritative
 
-⸻
+---
 
-14. Testing Flows and Agents
+## 14. Testing Flows and Agents
+
+Required:
 	•	Unit test agents independently
 	•	Integration test flows via orchestrator
-	•	HITL paths must be tested explicitly
+	•	Explicitly test HITL paths
+	•	Assert structured outputs and state transitions
 
-⸻
+---
 
-15. Best Practices
-	•	Keep flows declarative
-	•	Keep agents small
+## 15. Best Practices
+	•	Keep flows declarative and readable
+	•	Express intent via goals, not code
+	•	Keep agents small and single-purpose
 	•	Prefer more steps over complex agents
-	•	Use approval gates early
-	•	Log intent, not raw data
+	•	Use approval gates early for high-risk actions
+	•	Log decisions and intent, not raw data
 
-⸻
+---
 
-This design ensures flows remain readable, auditable, and change-safe.
+This design ensures flows remain auditable, deterministic, and change-safe
+while preserving strong product isolation and long-term evolvability.
 
+---

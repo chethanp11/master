@@ -13,11 +13,11 @@ paths, intent, and key technical characteristics.
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), Typer CLI (`gateway/cli`), and developer UI stubs (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfiles, docker-compose, and k8s manifests (no Terraform in v1). |
-| `/logs` | Local log sink | Default on-disk location for structured run logs. | Writable at runtime; loggers in `core.logging` and gateway components point here by default. |
+| `/logs` | Local log sink | Default on-disk location for structured run logs. | Writable at runtime; `core/logging/logger.py` (plus tracing/metrics) routes events here. |
 | `/products` | Product packs | Individual product definitions (flows, agents, prompts, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
 | `/scripts` | Ops scripts | Helper scripts for maintenance (e.g., data migrations, health checks). | Python/Bash utilities executed manually or via CI. |
 | `/storage` | Persistent state | Storage folders for artifacts and memory DB files. | Includes `storage/{memory,raw,processed,vectors}` for local/dev use. |
-| `/tests` | Automated tests | Pytest suites targeting `core` subsystems and selected products. | Structured to mirror package layout (`tests/core`, `tests/products`, etc.). |
+| `/tests` | Automated tests | Comprehensive Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `tests/products`; exercises registries, orchestrator, governance, memory, and UI layers via sqlite-based fixtures. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | Poetry/PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions for agents, orchestration, and gateway. |
 
 ## Core Package (`/core`)
@@ -42,23 +42,22 @@ paths, intent, and key technical characteristics.
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/orchestrator/context.py` | `StepContext` | Provides run metadata, shared artifacts, and tracing hooks to agents/tools. | Immutable-ish dataclass propagated through orchestrator; manages artifact read/write shims. |
-| `core/orchestrator/engine.py` | Flow engine | Coordinates planning/execution loops across flows. | Talks to `flow_loader`, `runners`, and the step executor. |
-| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from product manifests. | Validates manifests and resolves agent/tool bindings. |
-| `core/orchestrator/runners.py` | Flow runners | Implements entrypoints for different run modes (sync/HITL). | Uses `engine` and `step_executor` to drive StepDefs. |
-| `core/orchestrator/step_executor.py` | Step executor | Executes a single step via agent+tool orchestrations. | Enforces policies (`error_policy.py`), HITL gates, and context updates. |
-| `core/orchestrator/context.py` | `StepContext` | Provides run metadata, shared artifacts, and tracing hooks to agents/tools. | Immutable-ish dataclass propagated through orchestrator; manages artifact read/write shims. |
-| `core/orchestrator/state.py` | Run state manager | Maintains per-run status, step pointers, and persistence hooks. | Persists snapshots for UI/API and ties into the memory router. |
-| `core/orchestrator/error_policy.py` / `hitl.py` | Guardrails | Error handling and human-in-the-loop checkpoints. | Centralizes retries/escalations before aborting a flow. |
+| `core/orchestrator/context.py` | `RunContext/StepContext` | Provides run metadata, shared artifacts, and tracing hooks to agents/tools. | Pydantic models propagated through orchestrator; tracks status, artifacts, and trace hook wiring. |
+| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef, persists runs via `memory.router`, interacts with `hitl`, emits trace events. |
+| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from product manifests. | Validates manifests, resolves agent/tool bindings, normalizes retry metadata. |
+| `core/orchestrator/runners.py` | Flow runners | Entry points for synchronous or HITL flows. | Instantiates `OrchestratorEngine` and exposes simple helper wrappers. |
+| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Routes through `ToolExecutor`, `AgentRegistry`, enforces `error_policy`, emits attempt traces. |
+| `core/orchestrator/state.py` | Run state manager | Tracks per-run/step snapshots and approval metadata. | Hooks into `memory.router` for persistence and supports resume queries. |
+| `core/orchestrator/error_policy.py` / `core/orchestrator/hitl.py` | Guardrails | Retry policies, HITL approvals, and error handling. | Ensures retries/backoff only via flow definitions and persists approvals safely. |
 
 ### Memory
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/memory/base.py` | Memory interfaces | Contracts for memory stores (short-term, episodic, knowledge). | Defines base classes for adapters (e.g., vector store, object store). |
-| `core/memory/in_memory.py` | In-memory store | Lightweight cache for ephemeral artifacts/context. | Python dict-based store used mainly for tests/dev. |
-| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence. | Writes to `storage/memory/*.db` (or configured path) via sqlite3. |
-| `core/memory/router.py` | Memory router | Chooses appropriate backend (in-memory vs SQLite) based on config. | Provides unified interface consumed by orchestrator and agents. |
+| `core/memory/base.py` | Memory interfaces | Contracts for adapters (runs, steps, events, approvals). | Shared base classes consumed by routers/backends. |
+| `core/memory/in_memory.py` | In-memory store | Lightweight cache for ephemeral artifacts/context (tests/dev). | Python dict-based backend with predictable semantics. |
+| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence (runs/steps/events/approvals). | Writes to `storage/memory/*.db` or configured path; auto-migrates schema. |
+| `core/memory/router.py` | Memory router | Chooses appropriate backend (in-memory vs SQLite) and exposes CRUD helpers. | Used by orchestrator, API, CLI, tests, and HITL service. |
 
 ### Contracts & Models
 
@@ -72,14 +71,15 @@ paths, intent, and key technical characteristics.
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/governance/policies.py` | Policy engine | Defines guardrails (e.g., forbidden tool combos, approval rules). | Referenced by orchestrator before executing sensitive steps. |
-| `core/knowledge/{base.py,vector_store.py,retriever.py,structured.py}` | Knowledge interfaces | Adapters for retrieving structured/unstructured knowledge. | Vector store abstractions + retrievers for prompts. |
+| `core/governance/policies.py` | Policy engine | Defines guardrails (tool allowlists, autonomy, approvals). | Consulted by governance hooks before tool execution/resume decisions. |
+| `core/governance/security.py` / `core/governance/hooks.py` | Security + hooks | Redact PII/secrets and deliver allow/deny decisions. | Hooks drive tool executor/governance events with structured payloads. |
+| `core/knowledge/{base.py,vector_store.py,retriever.py,structured.py}` | Knowledge interfaces | Local vector/structured helpers for retrieval. | Provides chunk contracts, sqlite-backed vector store under `storage/vectors`, and ingestion helpers. |
 
 ### Logging & Utils
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/logging/{logger.py,tracing.py,metrics.py}` | Logging + telemetry | Configures logging, traces, and metrics using `/configs/logging.yaml`. | Centralized wrappers around Python logging and OTEL exporters. |
+| `core/logging/{logger.py,tracing.py,metrics.py}` | Logging + telemetry | Configures logging, traces, and metrics using `/configs/logging.yaml`. | Centralized wrappers around Python logging and OTEL exporters; tracing persists events via `memory.router`. |
 | `core/utils/*` | Utilities | Helpers for file IO, JSON/YAML parsing, time handling, retries. | Pure functions with Pytest coverage. |
 
 ## Gateway (`/gateway`)
@@ -131,13 +131,13 @@ Example entry:
 | `/storage/{memory,raw,processed,vectors}` | Local storage backend | Keeps artifacts, SQLite memory DBs, processed assets for dev/local runs. | File-based; mirrors remote stores for portability. |
 | `/logs` | Runtime logs | Stores structured JSON logs and rotation strategy per config. | Ensures developer visibility without external services. |
 
-## Tests (`/tests`)
+## Tests (`/tests` and product tests)
 
 | File/Path | Purpose | Technical Notes |
 | --- | --- | --- |
-| `tests/core/test_memory_core.py` | Validates memory adapters | Ensures short-term/episodic stores persist state correctly across runs. |
-| `tests/core/test_agents_registry.py` | Validates registry behaviors | Verifies registration, collision handling, and resolution semantics. |
-| `tests/products/*` | Product regression tests | Smoke tests for each product flow (mocking tools/agents where needed). |
+| `tests/core` | Unit/regression suites for core subsystems (contracts, agents, tools, governance, orchestrator, memory). | Examples: `test_contracts.py`, `test_agents_core.py`, `test_tools_core.py`, `test_governance_core.py`, `test_orchestrator.py`, `test_memory_core.py`. Relies on sqlite fixtures and deterministic fake backends. |
+| `tests/integration` | End-to-end integration flows covering CLI, API, UI, knowledge, and resilience suites. | Examples: `test_sample_flows.py`, `test_api_runs.py`, `test_cli_runs.py`, `test_ui_smoke.py`, `test_knowledge_ingest.py`, `test_resilience_retries_timeouts.py`, `test_concurrency_isolation.py`. |
+| `products/*/tests` | Product-specific regression suites (golden paths + flows). | Each product may add tests that leverage the shared orchestrator; sandbox ships `products/sandbox/tests/test_sandbox_flow.py` as the canonical HITL workflow. |
 
 ## Component Relationships
 

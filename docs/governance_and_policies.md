@@ -1,42 +1,51 @@
-# Governance and Policies — master/
+## Governance and Policies — master/
 
 This document defines the **governance model** for the `master/` agentic platform.
 
 Governance exists to ensure:
 - Safety
 - Auditability
-- Consistency
+- Determinism
 - Enterprise compliance
-- Controlled autonomy
+- Controlled autonomy at scale
 
-All enforcement is **centralized in core**.  
-Products cannot bypass governance.
+All governance is **centralized in core**.  
+No product, agent, or tool may bypass governance under any circumstance.
+
+This document is governed by:
+- `docs/engineering_standards.md`
 
 ---
 
 ## 1. Governance Scope
 
-Governance applies to:
+Governance applies uniformly across:
 - Flows
 - Steps
 - Agents
 - Tools
 - Models
 - Autonomy levels
-- Human-in-the-loop behavior
-- Logging and persistence
+- Human-in-the-loop (HITL)
+- Tracing, logging, and persistence
 
-No product code may implement its own governance logic.
+Rules:
+- ❌ Products must not implement custom governance logic
+- ❌ Agents must not self-enforce policy
+- ✅ All enforcement happens via core governance hooks
 
 ---
 
 ## 2. Policy Configuration
 
-Policies are defined in:
+All policies are **data-driven** and defined in:
 
 configs/policies.yaml
 
-Policies are **data-driven**, not code-driven.
+Rules:
+- Policies are configuration, not code
+- Changes to policies do not require redeploying core logic
+- Policies are evaluated **at runtime**, not compile time
 
 ---
 
@@ -44,43 +53,54 @@ Policies are **data-driven**, not code-driven.
 
 ### 3.1 Tool Policies
 
-Control which tools can be executed.
+Tool policies control **which tools may execute and under what conditions**.
 
 Example:
 ```yaml
 tools:
   echo_tool:
     risk: low
+
   db_write_tool:
     risk: high
     require_human_approval: true
 ```
-Enforced:
-	•	Before tool execution
-	•	By core.governance.hooks.before_tool_call
+Enforcement:
+	•	Evaluated before tool execution
+	•	Enforced by core/governance/hooks.before_tool_call
+
+Rules:
+	•	Risk level influences approval and autonomy requirements
+	•	Tool policies override flow intent
 
 ---
 
 ### 3.2 Flow Policies
 
-Control flow-level behavior.
+Flow policies constrain overall flow behavior.
 
 Example:
 
 flows:
   hello_world:
     max_steps: 10
-    allow_autonomy: semi_auto
+    allowed_autonomy: semi_auto
 
-Enforced:
-	•	At flow start
-	•	During step evaluation
+Enforcement:
+	•	At flow initialization
+	•	During step execution
 
-⸻
+Rules:
+	•	Flows exceeding limits are rejected
+	•	Flows cannot elevate autonomy beyond policy
+
+---
 
 ### 3.3 Autonomy Policies
 
-Limit autonomy per product or flow.
+Autonomy policies limit how autonomous execution is allowed to be.
+
+Example:
 
 autonomy:
   default: suggest_only
@@ -88,72 +108,91 @@ autonomy:
     - suggest_only
     - semi_auto
 
-full_auto requires explicit policy enablement.
+Rules:
+	•	full_auto requires explicit policy enablement
+	•	Agents cannot override autonomy
+	•	Orchestrator enforces autonomy via governance hooks
 
-⸻
+---
 
 ### 3.4 Product Policies
 
-Apply constraints per product.
+Product-level policies scope capabilities per product.
+
+Example:
 
 products:
   agentaura:
     allowed_tools:
       - echo_tool
     blocked_models:
-      - gpt-4o
+      - gpt_4o
 
+Rules:
+	•	Products cannot access tools or models not explicitly allowed
+	•	Product policies override global defaults
 
-⸻
+---
 
 ### 3.5 Model Policies
 
-Control model usage.
+Model policies control model usage and limits.
+
+Example:
 
 models:
-  gpt-4o:
+  default:
     max_tokens: 8000
     allow_external: false
 
+Rules:
+	•	Models are referenced by logical name, never vendor IDs
+	•	Providers enforce model policies at runtime
+	•	Blocked models fail fast with structured errors
 
-⸻
+---
 
 ## 4. Human-in-the-Loop (HITL)
 
-### 4.1 When HITL is Required
+### 4.1 When HITL Is Required
 
 HITL is triggered when:
 	•	A step type is human_approval
 	•	A tool policy requires approval
-	•	A governance hook raises RequireHumanApproval
+	•	A governance hook explicitly raises ApprovalRequired
 
-⸻
+HITL is not optional when required.
+
+---
 
 ### 4.2 HITL Behavior
 
 When HITL is triggered:
-	•	Execution pauses
-	•	Run state → PENDING_HUMAN
-	•	Context is persisted
-	•	Approval request is created
+	•	Execution pauses immediately
+	•	Run status transitions to PENDING_HUMAN
+	•	Run and step context are persisted
+	•	An approval request is created and tracked
 
-⸻
+No further execution occurs until resolution.
+
+---
 
 ### 4.3 Resume Flow
 
-Resumption occurs via:
+Flow resumption occurs via:
 
 POST /api/resume_run/{run_id}
 
-Only permitted when:
-	•	Run is in PENDING_HUMAN
-	•	Approval decision exists
+Rules:
+	•	Run must be in PENDING_HUMAN
+	•	Approval decision must exist
+	•	Resume action is fully audited
 
-⸻
+---
 
 ## 5. Governance Hooks
 
-Hooks are extension points executed by the runtime.
+Governance hooks are mandatory enforcement points executed by the runtime.
 
 ### 5.1 Available Hooks
 
@@ -162,10 +201,10 @@ before_flow_start	Flow initialization
 before_step	Step execution
 before_tool_call	Tool invocation
 after_step	Step completion
-before_flow_complete	Finalization
+before_flow_complete	Flow finalization
 
 
-⸻
+---
 
 ### 5.2 Hook Responsibilities
 
@@ -176,21 +215,22 @@ Hooks may:
 	•	Modify context metadata
 	•	Emit trace events
 
-Hooks may NOT:
+Hooks must NOT:
 	•	Execute tools
 	•	Modify flow structure
+	•	Call external systems
 
-⸻
+---
 
 ## 6. Security and Redaction
 
-### 6.1 PII Scrubbing
+### 6.1 PII and Secret Scrubbing
 
-All logs and traces are scrubbed for:
+All logs, traces, and persisted artifacts are scrubbed for:
 	•	API keys
 	•	Tokens
 	•	Secrets
-	•	PII patterns (emails, IDs)
+	•	PII patterns (emails, IDs, phone numbers)
 
 Implemented in:
 
@@ -198,10 +238,10 @@ core/governance/security.py
 
 Scrubbing occurs:
 	•	Before persistence
-	•	Before log emission
+	•	Before logging
 	•	Before UI rendering
 
-⸻
+---
 
 ### 6.2 Redaction Rules
 
@@ -209,66 +249,73 @@ Redacted values appear as:
 
 [REDACTED]
 
-No raw secrets may be written to disk.
+Rules:
+	•	Raw secrets must never be written to disk
+	•	Scrubbing is mandatory and non-configurable
 
-⸻
+---
 
 ## 7. Auditability
 
 Every run must record:
-	•	Who triggered it
-	•	Which flow
-	•	Which steps
-	•	Which tools
+	•	Who initiated the run
+	•	Product and flow identifiers
+	•	Step execution timeline
+	•	Tool invocations
 	•	Approval decisions
-	•	Final outcome
+	•	Final outcome and errors
 
-Stored in:
+Stored via:
 
-storage/memory/
+core/memory/*
 
+Audit records are immutable once written.
 
-⸻
+---
 
 ## 8. Policy Violations
 
 When a policy is violated:
-	•	Execution stops
-	•	Run status → FAILED
-	•	Error is recorded as a structured governance error
-	•	No partial state is committed
+	•	Execution stops immediately
+	•	Run status transitions to FAILED
+	•	A structured governance error is recorded
+	•	No partial or unsafe execution continues
 
-⸻
+There is no “best effort” execution after violation.
+
+---
 
 ## 9. Governance Error Types
 
 Error Type	Description
 PolicyViolation	Disallowed action
-AutonomyViolation	Exceeded autonomy
+AutonomyViolation	Autonomy exceeded
 ToolBlocked	Tool not permitted
 ModelBlocked	Model not permitted
 ApprovalRequired	HITL required
 
+Errors are returned as structured data, not exceptions.
 
-⸻
+---
 
 ## 10. Product Developer Rules
 
 Product teams:
-	•	Must define flows within allowed autonomy
-	•	Must request new tool approvals centrally
-	•	Must not hardcode policy logic
-	•	Must test policy paths
+	•	Must design flows within allowed autonomy
+	•	Must request new tool or model access centrally
+	•	Must not encode governance logic in agents or flows
+	•	Must test approval and denial paths explicitly
 
-⸻
+---
 
 ## 11. Non-Negotiable Rules
 	•	Governance cannot be bypassed
 	•	Policies are evaluated at runtime
 	•	Hooks are mandatory
 	•	Violations are final
+	•	Safety overrides convenience
 
-⸻
+---
 
-This governance model ensures safe autonomy without sacrificing speed or flexibility.
+This governance model ensures controlled autonomy, full auditability, and enterprise-grade safety while preserving extensibility and velocity.
 

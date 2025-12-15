@@ -48,12 +48,12 @@ core/
 ├── agents/              # Agent contracts and registry
 ├── tools/               # Tool contracts, registry, execution
 ├── memory/              # Persistence and run state
-├── knowledge/           # RAG + structured data access
+├── knowledge/           # Vector + structured retrieval helpers
 ├── models/              # Model routing and providers
 ├── governance/          # Policies, guardrails, security
 ├── logging/             # Tracing, logging, metrics
-├── prompts/             # Shared prompt templates
-└── utils/               # Cross-cutting helpers
+├── prompts/             # Shared prompt templates and helpers
+└── utils/               # Cross-cutting helpers (config, product loader, etc.)
 
 Each module is described below.
 
@@ -74,12 +74,11 @@ core/orchestrator/
 └── hitl.py
 
 ### Responsibilities
-- Load flow definitions (YAML/JSON)
-- Execute steps in order or loops
-- Handle retries and backoff
-- Pause execution for human approval
-- Resume execution from persisted state
-- Emit trace events for every transition
+- Load flow definitions (YAML/manifest) via `FlowLoader`
+- Execute steps in order, honoring retry policies & backoff
+- Pause execution for HITL approvals and persist approvals
+- Resume execution deterministically using stored run/step snapshots
+- Emit trace events for every transition (run, step, tool, approval)
 
 ### What It Does NOT Do
 - Call models directly
@@ -100,10 +99,10 @@ core/agents/
 └── utils.py
 
 ### Responsibilities
-- Consume `RunContext`
-- Perform reasoning or planning
-- Request tool execution
-- Return structured `AgentResult`
+- Consume `RunContext`/`StepContext` supplied via orchestrator
+- Perform reasoning or planning purely in-memory
+- Request tool execution via the orchestrator (never directly)
+- Return structured `AgentResult` (envelope + meta)
 
 ### Constraints
 - Stateless
@@ -128,15 +127,15 @@ core/tools/
 └── mcp_backend.py
 
 ### Responsibilities
-- Validate inputs
-- Execute actions via backends
-- Return structured `ToolResult`
-- Surface errors as data
+- Validate inputs via Pydantic contracts
+- Execute actions via registered backends (local, future adapters)
+- Return structured `ToolResult` and never raise for expected failures
+- Surface governance errors & retries via `ToolExecutor`
 
 ### Constraints
 - No direct calls from agents
-- No persistence
-- No retries (handled by orchestrator)
+- No persistence (memory router owns DB)
+- No retry loops (retry policy & orchestrator enforce)
 
 ---
 
@@ -152,12 +151,9 @@ core/memory/
 └── router.py
 
 ### Stores
-- Runs
-- Steps
-- Status transitions
-- Trace events
-- Artifacts
-- Human approvals
+- Runs, steps, approvals, trace events, artifacts, governance metadata
+### Key Guarantee
+> Any run can be resumed after a crash or restart because every approval and step state is persisted via SQLite (or in-memory for tests).
 
 ### Key Guarantee
 > Any run can be resumed after a crash or restart.
@@ -176,9 +172,9 @@ core/knowledge/
 └── structured.py
 
 ### Supports
-- Unstructured retrieval (documents)
-- Structured access (CSV, Pandas, SQL later)
-- Formatting for agent consumption
+- Unstructured vector retrieval from the local sqlite vector store in `storage/vectors`
+- Structured helpers for CSV ingestion/querying (pandas fallback)
+- Ingest pipeline via `scripts/ingest_knowledge.py` that chunk documents with deterministic ids
 
 ---
 
@@ -194,9 +190,9 @@ core/models/
 └── other_provider.py
 
 ### Responsibilities
-- Select model per use-case
-- Abstract vendor differences
-- Enforce limits and policies
+- Select models via a routing table (`core/models/router.py`)
+- Abstract vendor SDKs behind providers
+- Enforce model-level governance policies (per `configs/policies.yaml`)
 
 ### Constraint
 > No other module may call vendors directly.
@@ -214,10 +210,9 @@ core/governance/
 └── hooks.py
 
 ### Enforces
-- Allowed tools
-- Autonomy levels
-- Data redaction
-- Flow restrictions
+- Allowed tools, autonomy levels, and model choices
+- Data redaction before logging/tracing
+- Flow/step restrictions and approval gating before execution/resume
 
 Governance hooks run:
 - Before step execution
@@ -237,9 +232,9 @@ core/logging/
 └── metrics.py
 
 ### Guarantees
-- Every decision is traceable
-- Every error is auditable
-- Every pause/resume is recorded
+- Every step, tool, pause, resume, and error is traced (`tracing.py`)
+- Trace events persist via the memory router for API/UI visibility
+- Metrics/alerts can hook into `metrics.py` for observability
 
 ---
 
@@ -271,15 +266,14 @@ products//
 └── tests/
 
 ### Product Capabilities
-- Define flows
-- Create agents/tools
-- Tune prompts
-- Configure defaults
+- Define flows (`flows/*.yaml`) that reference registered agents/tools
+- Provide agents/tools that obey platform laws
+- Ship product-specific prompts/configs/registries without touching core
 
 ### Product Limitations
 - Cannot modify execution engine
 - Cannot bypass governance
-- Cannot persist state directly
+- Cannot persist state outside `core/memory`
 
 ---
 
@@ -294,15 +288,13 @@ gateway/
 └── cli/
 
 ### API
-- Run flows
-- Resume paused runs
-- Fetch run status
+- Run flows (`/api/run/{product}/{flow}`)
+- Resume HITL approvals (`/api/resume_run/{run_id}`)
+- Fetch run status/approvals and product catalog
 
 ### UI
-- Platform homepage
-- Product pages (`/{product}`)
-- Approval queue
-- Run history
+- Streamlit control center (`gateway/ui/platform_app.py`) that lists products and flows, runs flows, and shows approvals/run history
+- Communicates exclusively with the gateway API and keeps state in Streamlit `session_state`
 
 ---
 
