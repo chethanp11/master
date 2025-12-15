@@ -1,17 +1,26 @@
+# core/agents/base.py
 # ==============================
 # Base Agent Contract
 # ==============================
 """
 Base agent contract for master/.
 
-Rules:
-- Agents do NOT call tools directly. They may request tool usage via orchestrator steps
-  or via higher-level agent logic that delegates to core/tools/executor.py (later phase).
-- Agents do NOT persist. They can emit trace events through StepContext hooks.
-- Agents do NOT read env vars. Configuration is injected by caller.
+Non-negotiable rules (master v1+):
+- Agents are GOAL-DRIVEN (not prompt-driven). Apart from minimal foundational system
+  instructions at the platform level, agents must not rely on prompts for behavior.
+- Agents do NOT call tools directly. They may REQUEST tool usage through orchestrator
+  mechanisms (e.g., returning structured tool requests in AgentResult), which are executed
+  only via core/tools/executor.py.
+- Agents do NOT persist state. They can read/write only to the orchestrator-managed
+  artifacts/state provided via StepContext (ephemeral) and emit trace events via hooks.
+- Agents do NOT read environment variables. Configuration is injected by the caller.
 
 Interface:
 - run(step_context) -> AgentResult (standard envelope in core/contracts/agent_schema.py)
+
+Notes:
+- Concrete agents MUST provide a stable `name` used in flows.
+- Concrete agents MUST return structured outputs (Pydantic models via AgentResult.data).
 """
 
 from __future__ import annotations
@@ -28,23 +37,31 @@ class BaseAgent(ABC):
     Base class for all agents (core + products).
 
     Naming:
-- Each concrete agent must provide a stable 'name' used in flows.
+        Each concrete agent must provide a stable 'name' used in flows and registries.
+        Prefer namespaced names like '{product}.{agent_name}' to avoid collisions.
     """
 
     name: str
 
     def __init__(self, *, config: Optional[Dict[str, Any]] = None) -> None:
-        self.config = config or {}
+        # config is injected (e.g., from product.yaml / settings) and must not be sourced
+        # from env vars directly inside agents.
+        self.config: Dict[str, Any] = config or {}
 
     @abstractmethod
     def run(self, step_context: StepContext) -> AgentResult:
         """
-        Execute the agent for a single step.
+        Execute the agent for a single orchestrated step.
 
-        step_context provides:
-- run metadata
-- step definition
-- artifacts (shared state)
-- trace hook (emit events)
+        step_context typically provides:
+        - run metadata (run_id, product, flow)
+        - step definition (what is expected in this step)
+        - artifacts/state (shared ephemeral state for the run)
+        - trace hook(s) (emit structured trace events)
+
+        Contract:
+        - Must return an AgentResult envelope (ok/data/error/meta).
+        - Must NOT raise raw exceptions outward; handle and wrap in AgentResult.error.
+        - Must NOT call tools directly; request tool usage via structured outputs.
         """
         raise NotImplementedError
