@@ -2,384 +2,344 @@
 # Orchestrator Engine
 # ==============================
 """
-Orchestrator engine for master/ (v1).
+Main orchestration runtime.
 
-Responsibilities:
-- Load flow definitions (via FlowLoader)
-- Create/track RunRecord and StepRecord states
-- Execute steps sequentially (graph execution later)
-- Pause for human approval (HITL) and resume from stored state
-- Emit trace events through RunContext/StepContext hooks
+v1 responsibilities:
+- Load a flow definition
+- Create a run record
+- Execute steps sequentially
+- Pause on HITL (human_approval) by creating an approval record and setting run status PENDING_HUMAN
+- Resume from stored state after approval
 
-Non-responsibilities:
-- No direct DB writes (only via injected memory backend)
-- No direct tool calls (only via injected tool runner / tool executor elsewhere)
-- No direct model calls (only via injected agent runner)
-
-Persistence contract (duck-typed v1):
-If memory_backend is provided, engine will call these methods when present:
-- upsert_run(run: RunRecord) -> None
-- upsert_step(step: StepRecord) -> None
-- append_event(run_id: str, event_type: str, payload: dict) -> None (optional)
-- get_run(run_id: str) -> RunRecord
-- get_flow_snapshot(run_id: str) -> dict (optional, can be embedded in run.meta)
+Rules:
+- No persistence outside MemoryRouter
+- No tool calls outside core/tools/executor.py (step execution delegates to StepExecutor)
 """
 
-# ==============================
-# Imports
-# ==============================
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+import time
+import uuid
+from typing import Any, Dict, Optional, Tuple
 
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
-from core.contracts.run_schema import RunRecord, StepRecord
-from core.orchestrator.context import RunContext, StepContext
+from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
+from core.governance.hooks import GovernanceHooks, HookDecision
+from core.logging.tracing import Tracer
+from core.memory.router import MemoryRouter
 from core.orchestrator.flow_loader import FlowLoader
-from core.orchestrator.hitl import ResumePayload, create_approval_request, attach_approval_to_run, mark_run_pending_human, mark_step_waiting_human, apply_resume_payload
-from core.orchestrator.state import RunStatus, StepStatus, RUN_TERMINAL
-from core.orchestrator.step_executor import AgentRunner, ToolRunner, SubflowRunner, execute_step
+from core.orchestrator.hitl import HitlService
+from core.orchestrator.state import RunStatus, StepStatus
+from core.orchestrator.step_executor import StepExecutor
 
-# ==============================
-# Engine
-# ==============================
+
+def new_run_id() -> str:
+    return f"run_{uuid.uuid4().hex}"
+
+
+def new_step_id(flow_step: StepDef, idx: int) -> str:
+    base = flow_step.id or f"step_{idx}"
+    return f"{base}"
+
+
 class OrchestratorEngine:
-    """
-    v1 orchestrator engine.
-
-    Injected dependencies:
-- memory_backend: optional persistence adapter (implemented in core/memory/* later)
-- agent_runner: callable that runs an agent by name
-- tool_runner: callable that runs a tool by name
-- subflow_runner: optional callable to run subflows
-    """
-
-    # ==============================
-    # Construction
-    # ==============================
     def __init__(
         self,
         *,
-        memory_backend: Optional[Any] = None,
-        agent_runner: Optional[AgentRunner] = None,
-        tool_runner: Optional[ToolRunner] = None,
-        subflow_runner: Optional[SubflowRunner] = None,
+        flow_loader: FlowLoader,
+        step_executor: StepExecutor,
+        memory: MemoryRouter,
+        tracer: Tracer,
+        governance: Optional[GovernanceHooks] = None,
     ) -> None:
-        self._mem = memory_backend
-        self._agent_runner = agent_runner
-        self._tool_runner = tool_runner
-        self._subflow_runner = subflow_runner
+        self.flow_loader = flow_loader
+        self.step_executor = step_executor
+        self.memory = memory
+        self.tracer = tracer
+        self.governance = governance or GovernanceHooks.noop()
+        self.hitl = HitlService(memory)
 
-    # ==============================
+    # ------------------------------
     # Public API
-    # ==============================
+    # ------------------------------
+
     def run_flow(
         self,
         *,
         product: str,
-        flow: Union[FlowDef, str, Path],
-        initial_input: Optional[Dict[str, Any]] = None,
-        trace_hook: Optional[Any] = None,
-    ) -> RunRecord:
-        """
-        Start a new run.
+        flow: str,
+        payload: Dict[str, Any],
+        requested_by: Optional[str] = None,
+    ) -> str:
+        run_id = new_run_id()
+        flow_def = self._load_flow(product=product, flow=flow)
 
-        flow can be:
-- FlowDef object
-- path to YAML/JSON file
-        """
-        flow_def = self._resolve_flow(flow)
         run = RunRecord(
+            run_id=run_id,
             product=product,
-            flow_id=flow_def.id,
-            status=RunStatus.RUNNING,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            current_step_id=None,
-            steps=[],
-            summary=None,
-            final_output_ref=None,
-            meta={},
+            flow=flow,
+            status=RunStatus.RUNNING.value,
+            autonomy_level=flow_def.autonomy_level,
+            started_at=int(time.time()),
+            finished_at=None,
+            input=payload,
+            output=None,
+            summary={"current_step_index": 0},
         )
-        if initial_input is not None:
-            run.meta["input"] = initial_input
+        self.memory.create_run(run)
+        self._emit_event(
+            kind="run_started",
+            run_id=run_id,
+            step_id=None,
+            product=product,
+            flow=flow,
+            payload={"autonomy_level": flow_def.autonomy_level},
+        )
 
-        ctx = RunContext(run_record=run, flow=flow_def, status=run.status, metadata={}, artifacts={}, trace=trace_hook)  # type: ignore[arg-type]
-        ctx.emit("run_started", {"product": product, "flow_id": flow_def.id})
-
-        self._persist_run(run)
-
-        # sequential execution v1
-        for step_def in flow_def.steps:
-            if run.status in RUN_TERMINAL:
-                break
-
-            run.current_step_id = step_def.id
-            run.updated_at = datetime.utcnow()
-            self._persist_run(run)
-
-            step_rec = self._get_or_create_step_record(run, step_def)
-
-            # already completed steps can be skipped (useful on resume)
-            if step_rec.status == StepStatus.COMPLETED:
-                continue
-
-            step_ctx = StepContext(run=ctx, step=step_def, status=step_rec.status, attempt=step_rec.attempt)
-            step_ctx.emit("step_started", {"step_type": step_def.type.value})
-
-            if step_def.type == StepType.HUMAN_APPROVAL:
-                self._handle_hitl_pause(run, step_rec, step_def, ctx)
-                self._persist_run(run)
-                self._persist_step(step_rec)
-                return run
-
-            # execute agent/tool/subflow
-            executed_step, output_payload = execute_step(
-                step_ctx=step_ctx,
-                agent_runner=self._agent_runner,
-                tool_runner=self._tool_runner,
-                subflow_runner=self._subflow_runner,
-            )
-            self._merge_step_record(run, executed_step)
-
-            # store minimal output in run meta for v1 (artifact persistence comes later)
-            if output_payload is not None:
-                outputs = run.meta.get("outputs")
-                if outputs is None or not isinstance(outputs, dict):
-                    run.meta["outputs"] = {}
-                    outputs = run.meta["outputs"]
-                outputs[step_def.id] = output_payload
-
-            # update run based on step result
-            if executed_step.status == StepStatus.FAILED:
-                run.status = RunStatus.FAILED
-                run.summary = f"Failed at step {step_def.id}"
-            elif executed_step.status == StepStatus.COMPLETED:
-                run.status = RunStatus.RUNNING
-
-            run.updated_at = datetime.utcnow()
-            self._persist_step(executed_step)
-            self._persist_run(run)
-
-            if run.status == RunStatus.FAILED:
-                break
-
-        # finalize
-        if run.status == RunStatus.RUNNING:
-            run.status = RunStatus.COMPLETED
-            run.summary = "Completed"
-            run.updated_at = datetime.utcnow()
-            ctx.emit("run_completed", {"status": run.status.value})
-            self._persist_run(run)
-
-        return run
+        self._execute_from_index(
+            flow_def=flow_def,
+            run_id=run_id,
+            start_index=0,
+            requested_by=requested_by,
+        )
+        return run_id
 
     def resume_run(
         self,
         *,
         run_id: str,
-        payload: Dict[str, Any],
-        trace_hook: Optional[Any] = None,
-    ) -> RunRecord:
-        """
-        Resume a run paused for human approval.
+        decision: str,
+        resolved_by: Optional[str] = None,
+        comment: Optional[str] = None,
+        approval_payload: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        bundle = self.memory.get_run(run_id)
+        if bundle is None:
+            raise ValueError(f"Unknown run_id: {run_id}")
 
-        Requires memory_backend.get_run(run_id) if persistence is enabled.
-        If no backend exists, resume is not possible in v1.
-        """
-        if self._mem is None or not hasattr(self._mem, "get_run"):
-            raise RuntimeError("resume_run requires a memory backend with get_run(run_id)")
+        product = bundle.run.product
+        flow = bundle.run.flow
+        flow_def = self._load_flow(product=product, flow=flow)
 
-        run: RunRecord = self._mem.get_run(run_id)
-        if run.status != RunStatus.PENDING_HUMAN:
-            return run
+        # find the pending approval (latest)
+        pending = [a for a in bundle.approvals if a.status == "PENDING"]
+        if not pending:
+            raise ValueError(f"No pending approvals for run_id={run_id}")
 
-        if run.current_step_id is None:
-            raise RuntimeError("Run is PENDING_HUMAN but current_step_id is missing")
-
-        # flow snapshot retrieval strategy:
-        # v1 expects flow_def embedded in run.meta["flow"] or provided externally by caller later.
-        flow_def = self._resolve_flow_from_run(run)
-        ctx = RunContext(run_record=run, flow=flow_def, status=run.status, metadata={}, artifacts={}, trace=trace_hook)  # type: ignore[arg-type]
-        ctx.emit("run_resume_requested", {"run_id": run_id})
-
-        # find step def and step record
-        step_def = _find_step_def(flow_def.steps, run.current_step_id)
-        step_rec = self._find_step_record(run, step_def.id)
-        if step_rec is None:
-            step_rec = self._get_or_create_step_record(run, step_def)
-
-        # apply decision
-        rp = ResumePayload.model_validate(payload)
-        apply_resume_payload(run=run, step_rec=step_rec, payload=rp)
-
-        self._persist_step(step_rec)
-        self._persist_run(run)
-
-        # continue remaining steps
-        remaining_steps = _steps_after(flow_def.steps, step_def.id)
-        for sdef in remaining_steps:
-            if run.status in RUN_TERMINAL:
-                break
-
-            run.current_step_id = sdef.id
-            run.updated_at = datetime.utcnow()
-            self._persist_run(run)
-
-            srec = self._get_or_create_step_record(run, sdef)
-            if srec.status == StepStatus.COMPLETED:
-                continue
-
-            sctx = StepContext(run=ctx, step=sdef, status=srec.status, attempt=srec.attempt)
-            sctx.emit("step_started", {"step_type": sdef.type.value})
-
-            if sdef.type == StepType.HUMAN_APPROVAL:
-                self._handle_hitl_pause(run, srec, sdef, ctx)
-                self._persist_step(srec)
-                self._persist_run(run)
-                return run
-
-            executed_step, output_payload = execute_step(
-                step_ctx=sctx,
-                agent_runner=self._agent_runner,
-                tool_runner=self._tool_runner,
-                subflow_runner=self._subflow_runner,
-            )
-            self._merge_step_record(run, executed_step)
-
-            if output_payload is not None:
-                outputs = run.meta.get("outputs")
-                if outputs is None or not isinstance(outputs, dict):
-                    run.meta["outputs"] = {}
-                    outputs = run.meta["outputs"]
-                outputs[sdef.id] = output_payload
-
-            if executed_step.status == StepStatus.FAILED:
-                run.status = RunStatus.FAILED
-                run.summary = f"Failed at step {sdef.id}"
-            else:
-                run.status = RunStatus.RUNNING
-
-            run.updated_at = datetime.utcnow()
-            self._persist_step(executed_step)
-            self._persist_run(run)
-
-            if run.status == RunStatus.FAILED:
-                break
-
-        if run.status == RunStatus.RUNNING:
-            run.status = RunStatus.COMPLETED
-            run.summary = "Completed"
-            run.updated_at = datetime.utcnow()
-            ctx.emit("run_completed", {"status": run.status.value})
-            self._persist_run(run)
-
-        return run
-
-    # ==============================
-    # HITL
-    # ==============================
-    def _handle_hitl_pause(self, run: RunRecord, step_rec: StepRecord, step_def: StepDef, ctx: RunContext) -> None:
-        approval = create_approval_request(run=run, step=step_def)
-        attach_approval_to_run(run=run, approval=approval)
-
-        mark_run_pending_human(run=run, step_id=step_def.id)
-        mark_step_waiting_human(step_rec=step_rec)
-
-        ctx.emit("hitl_pending", {"step_id": step_def.id, "approval": approval.to_dict()})
-
-    # ==============================
-    # Flow Resolution
-    # ==============================
-    def _resolve_flow(self, flow: Union[FlowDef, str, Path]) -> FlowDef:
-        if isinstance(flow, FlowDef):
-            return flow
-        p = Path(flow)
-        flow_def = FlowLoader.load_from_path(p)
-        # store a snapshot in meta for resume (v1)
-        return flow_def
-
-    def _resolve_flow_from_run(self, run: RunRecord) -> FlowDef:
-        raw = run.meta.get("flow")
-        if isinstance(raw, dict):
-            return FlowLoader.load_from_obj(raw)
-        raise RuntimeError("RunRecord.meta['flow'] missing. v1 requires flow snapshot embedded at run start.")
-
-    # ==============================
-    # Persistence Adapters (Duck-Typed)
-    # ==============================
-    def _persist_run(self, run: RunRecord) -> None:
-        # v1 embed flow snapshot if not already set (for resume)
-        if "flow" not in run.meta:
-            # caller must pass FlowDef to run_flow to avoid missing flow snapshot; if path is used, we can't access it here
-            # engine.run_flow sets flow snapshot by injecting via ctx when created; done in run_flow below
-            pass
-
-        if self._mem is None:
-            return
-        if hasattr(self._mem, "upsert_run"):
-            self._mem.upsert_run(run)
-
-    def _persist_step(self, step: StepRecord) -> None:
-        if self._mem is None:
-            return
-        if hasattr(self._mem, "upsert_step"):
-            self._mem.upsert_step(step)
-
-    # ==============================
-    # Step Records Helpers
-    # ==============================
-    def _get_or_create_step_record(self, run: RunRecord, step_def: StepDef) -> StepRecord:
-        existing = self._find_step_record(run, step_def.id)
-        if existing is not None:
-            return existing
-        rec = StepRecord(
-            run_id=run.run_id,
-            step_id=step_def.id,
-            status=StepStatus.NOT_STARTED,
-            started_at=None,
-            ended_at=None,
-            attempt=0,
-            error=None,
-            input_ref=None,
-            output_ref=None,
-            meta={},
+        approval = pending[0]
+        self.hitl.resolve_approval(
+            approval_id=approval.approval_id,
+            decision=decision,
+            resolved_by=resolved_by,
+            comment=comment,
         )
-        run.steps.append(rec)
-        return rec
 
-    def _find_step_record(self, run: RunRecord, step_id: str) -> Optional[StepRecord]:
-        for s in run.steps:
-            if s.step_id == step_id:
-                return s
-        return None
+        # mark the step as completed and store approval outcome in step output
+        self.memory.update_step(
+            run_id,
+            approval.step_id,
+            {
+                "status": StepStatus.COMPLETED.value,
+                "finished_at": int(time.time()),
+                "output": {"approval": {"decision": decision, "comment": comment, "payload": approval_payload or {}}},
+            },
+        )
 
-    def _merge_step_record(self, run: RunRecord, updated: StepRecord) -> None:
-        for i, s in enumerate(run.steps):
-            if s.step_id == updated.step_id:
-                run.steps[i] = updated
+        # resume: next step index is approval step index + 1
+        approval_step_index = self._find_step_index(flow_def, approval.step_id)
+        next_index = approval_step_index + 1
+
+        self.memory.update_run_status(run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+        self._emit_event(
+            kind="run_resumed",
+            run_id=run_id,
+            step_id=approval.step_id,
+            product=product,
+            flow=flow,
+            payload={"decision": decision},
+        )
+
+        self._execute_from_index(
+            flow_def=flow_def,
+            run_id=run_id,
+            start_index=next_index,
+            requested_by=resolved_by,
+        )
+
+    # ------------------------------
+    # Internals
+    # ------------------------------
+
+    def _load_flow(self, *, product: str, flow: str) -> FlowDef:
+        return self.flow_loader.load(product=product, flow=flow)
+
+    def _find_step_index(self, flow_def: FlowDef, step_id: str) -> int:
+        # step_id in DB is the flow step id; if missing, cannot map reliably.
+        for idx, s in enumerate(flow_def.steps):
+            if (s.id or f"step_{idx}") == step_id:
+                return idx
+        # fallback: attempt exact match for name
+        for idx, s in enumerate(flow_def.steps):
+            if s.name == step_id:
+                return idx
+        raise ValueError(f"Cannot map approval step_id='{step_id}' to flow steps. Ensure StepDef.id is set.")
+
+    def _execute_from_index(
+        self,
+        *,
+        flow_def: FlowDef,
+        run_id: str,
+        start_index: int,
+        requested_by: Optional[str],
+    ) -> None:
+        product = flow_def.product
+        flow = flow_def.name
+
+        for idx in range(start_index, len(flow_def.steps)):
+            step_def = flow_def.steps[idx]
+            step_id = new_step_id(step_def, idx)
+
+            # Persist step record if not already there
+            step_record = StepRecord(
+                run_id=run_id,
+                step_id=step_id,
+                step_index=idx,
+                name=step_def.name or step_id,
+                type=step_def.type,
+                status=StepStatus.RUNNING.value,
+                started_at=int(time.time()),
+                finished_at=None,
+                input={"params": step_def.params or {}},
+                output=None,
+                error=None,
+                meta={"backend": step_def.backend, "target": step_def.target},
+            )
+            self.memory.add_step(step_record)
+
+            # Governance before_step
+            dec = self.governance.before_step(run_id=run_id, step_id=step_id, product=product, flow=flow, payload=step_record.model_dump())
+            self._enforce(dec, run_id=run_id, product=product, flow=flow, step_id=step_id, kind="before_step_denied")
+
+            self._emit_event(
+                kind="step_started",
+                run_id=run_id,
+                step_id=step_id,
+                product=product,
+                flow=flow,
+                payload={"step_index": idx, "type": step_def.type, "name": step_record.name},
+            )
+
+            # HITL step: pause and return immediately
+            if self._is_human_approval(step_def):
+                approval = self.hitl.create_approval(
+                    run_id=run_id,
+                    step_id=step_id,
+                    product=product,
+                    flow=flow,
+                    requested_by=requested_by,
+                    payload={"step": step_record.model_dump()},
+                )
+                self.memory.update_step(
+                    run_id,
+                    step_id,
+                    {"status": StepStatus.PENDING_HUMAN.value, "finished_at": None, "output": {"approval_id": approval.approval_id}},
+                )
+                self.memory.update_run_status(run_id, RunStatus.PENDING_HUMAN.value, summary={"current_step_index": idx})
+                self._emit_event(
+                    kind="pending_human",
+                    run_id=run_id,
+                    step_id=step_id,
+                    product=product,
+                    flow=flow,
+                    payload={"approval_id": approval.approval_id},
+                )
                 return
-        run.steps.append(updated)
 
+            # Execute step
+            try:
+                result = self.step_executor.execute(run_id=run_id, step_id=step_id, product=product, flow=flow, step=step_def)
+                self.memory.update_step(
+                    run_id,
+                    step_id,
+                    {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": result},
+                )
+                self._emit_event(
+                    kind="step_completed",
+                    run_id=run_id,
+                    step_id=step_id,
+                    product=product,
+                    flow=flow,
+                    payload={"ok": True},
+                )
+            except Exception as e:
+                # Never leak raw exceptions; store as error dict
+                self.memory.update_step(
+                    run_id,
+                    step_id,
+                    {
+                        "status": StepStatus.FAILED.value,
+                        "finished_at": int(time.time()),
+                        "error": {"message": str(e), "type": type(e).__name__},
+                    },
+                )
+                self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"failed_step_id": step_id})
+                self._emit_event(
+                    kind="step_failed",
+                    run_id=run_id,
+                    step_id=step_id,
+                    product=product,
+                    flow=flow,
+                    payload={"error": {"message": str(e), "type": type(e).__name__}},
+                )
+                return
 
-# ==============================
-# Helpers
-# ==============================
-def _find_step_def(steps: List[StepDef], step_id: str) -> StepDef:
-    for s in steps:
-        if s.id == step_id:
-            return s
-    raise RuntimeError(f"Step not found in flow: {step_id}")
+            # Update run progress
+            self.memory.update_run_status(run_id, RunStatus.RUNNING.value, summary={"current_step_index": idx + 1})
 
+        # Completed run
+        self.memory.update_run_status(run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)})
+        self._emit_event(
+            kind="run_completed",
+            run_id=run_id,
+            step_id=None,
+            product=product,
+            flow=flow,
+            payload={"ok": True},
+        )
 
-def _steps_after(steps: List[StepDef], step_id: str) -> List[StepDef]:
-    found = False
-    out: List[StepDef] = []
-    for s in steps:
-        if found:
-            out.append(s)
-        if s.id == step_id:
-            found = True
-    return out
+    def _is_human_approval(self, step_def: StepDef) -> bool:
+        return step_def.type == StepType.HUMAN_APPROVAL.value or step_def.type == "human_approval"
+
+    def _emit_event(
+        self,
+        *,
+        kind: str,
+        run_id: str,
+        step_id: Optional[str],
+        product: str,
+        flow: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        evt = TraceEvent(
+            kind=kind,
+            run_id=run_id,
+            step_id=step_id,
+            product=product,
+            flow=flow,
+            ts=int(time.time()),
+            payload=payload,
+        )
+        self.tracer.emit(evt)
+
+    def _enforce(self, decision: HookDecision, *, run_id: str, product: str, flow: str, step_id: Optional[str], kind: str) -> None:
+        if decision.allowed:
+            return
+        self._emit_event(
+            kind=kind,
+            run_id=run_id,
+            step_id=step_id,
+            product=product,
+            flow=flow,
+            payload={"reason": decision.reason},
+        )
+        raise PermissionError(decision.reason or "Denied by governance")

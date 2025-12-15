@@ -1,0 +1,32 @@
+# ==============================
+# Product Manifest (Sandbox)
+# ==============================
+name: sandbox
+display_name: "Sandbox"
+description: "Golden-path demo product for master. Safe tools and simple flows."
+version: "0.1.0"
+
+default_flow: "hello_world"
+
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "hello_world"
+
+ui:
+  enabled: true
+  nav_label: "Sandbox"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
+    - id: "runs"
+      title: "Run History"
+    - id: "approvals"
+      title: "Approvals Queue"
+
+entrypoints:
+  register_module: "products.sandbox.register"
+
+assets:
+  icon: ""
+  tags: ["demo", "golden-path"]
