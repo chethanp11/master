@@ -1,45 +1,37 @@
 # ==============================
 # Orchestrator Engine
 # ==============================
-"""
-Main orchestration runtime.
-
-v1 responsibilities:
-- Load a flow definition
-- Create a run record
-- Execute steps sequentially
-- Pause on HITL (human_approval) by creating an approval record and setting run status PENDING_HUMAN
-- Resume from stored state after approval
-
-Rules:
-- No persistence outside MemoryRouter
-- No tool calls outside core/tools/executor.py (step execution delegates to StepExecutor)
-"""
-
 from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
+from core.agents.registry import AgentRegistry
+from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
-from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
+from core.contracts.run_schema import (
+    RunOperationResult,
+    RunRecord,
+    RunStatus,
+    StepRecord,
+    StepStatus,
+    TraceEvent,
+)
 from core.governance.hooks import GovernanceHooks, HookDecision
+from core.governance.security import SecurityRedactor
 from core.logging.tracing import Tracer
 from core.memory.router import MemoryRouter
+from core.orchestrator.context import RunContext
 from core.orchestrator.flow_loader import FlowLoader
 from core.orchestrator.hitl import HitlService
-from core.orchestrator.state import RunStatus, StepStatus
 from core.orchestrator.step_executor import StepExecutor
+from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
 
 
-def new_run_id() -> str:
+def _new_run_id() -> str:
     return f"run_{uuid.uuid4().hex}"
-
-
-def new_step_id(flow_step: StepDef, idx: int) -> str:
-    base = flow_step.id or f"step_{idx}"
-    return f"{base}"
 
 
 class OrchestratorEngine:
@@ -50,19 +42,35 @@ class OrchestratorEngine:
         step_executor: StepExecutor,
         memory: MemoryRouter,
         tracer: Tracer,
-        governance: Optional[GovernanceHooks] = None,
+        governance: GovernanceHooks,
     ) -> None:
         self.flow_loader = flow_loader
         self.step_executor = step_executor
         self.memory = memory
         self.tracer = tracer
-        self.governance = governance or GovernanceHooks.noop()
+        self.governance = governance
         self.hitl = HitlService(memory)
 
-    # ------------------------------
-    # Public API
-    # ------------------------------
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "OrchestratorEngine":
+        repo_root = settings.repo_root_path()
+        products_root = repo_root / settings.products.products_dir
+        flow_loader = FlowLoader(products_root=products_root)
+        memory = MemoryRouter.from_settings(settings)
+        redactor = SecurityRedactor.from_settings(settings)
+        tracer = Tracer(memory=memory, redactor=redactor)
+        governance = GovernanceHooks(settings=settings, redactor=redactor)
+        tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
+        step_executor = StepExecutor(tool_executor=tool_executor, agent_registry=AgentRegistry)
+        return cls(
+            flow_loader=flow_loader,
+            step_executor=step_executor,
+            memory=memory,
+            tracer=tracer,
+            governance=governance,
+        )
 
+    # ------------------------------------------------------------------ API
     def run_flow(
         self,
         *,
@@ -70,61 +78,75 @@ class OrchestratorEngine:
         flow: str,
         payload: Dict[str, Any],
         requested_by: Optional[str] = None,
-    ) -> str:
-        run_id = new_run_id()
-        flow_def = self._load_flow(product=product, flow=flow)
+    ) -> RunOperationResult:
+        try:
+            flow_def = self.flow_loader.load(product=product, flow=flow)
+            run_id = _new_run_id()
+            run_record = RunRecord(
+                run_id=run_id,
+                product=product,
+                flow=flow,
+                status=RunStatus.RUNNING,
+                autonomy_level=str(flow_def.autonomy_level.value),
+                input=payload,
+                summary={"current_step_index": 0},
+            )
+            self.memory.create_run(run_record)
 
-        run = RunRecord(
-            run_id=run_id,
-            product=product,
-            flow=flow,
-            status=RunStatus.RUNNING.value,
-            autonomy_level=flow_def.autonomy_level,
-            started_at=int(time.time()),
-            finished_at=None,
-            input=payload,
-            output=None,
-            summary={"current_step_index": 0},
-        )
-        self.memory.create_run(run)
-        self._emit_event(
-            kind="run_started",
-            run_id=run_id,
-            step_id=None,
-            product=product,
-            flow=flow,
-            payload={"autonomy_level": flow_def.autonomy_level},
-        )
+            run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+            run_ctx.trace = self._trace_hook(run_ctx)
 
-        self._execute_from_index(
-            flow_def=flow_def,
-            run_id=run_id,
-            start_index=0,
-            requested_by=requested_by,
+            self._emit_event(
+                kind="run_started",
+                run_id=run_id,
+                step_id=None,
+                product=product,
+                flow=flow,
+                payload={"autonomy_level": flow_def.autonomy_level.value},
+            )
+
+            status = self._execute_from_index(
+                flow_def=flow_def,
+                run_ctx=run_ctx,
+                start_index=0,
+                requested_by=requested_by,
+            )
+            return RunOperationResult.success({"run_id": run_id, "status": status})
+        except Exception as exc:
+            return RunOperationResult.failure(code="run_failed", message=str(exc))
+
+    def get_run(self, *, run_id: str) -> RunOperationResult:
+        bundle = self.memory.get_run(run_id)
+        if bundle is None:
+            return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
+        return RunOperationResult.success(
+            {
+                "run_id": run_id,
+                "run": bundle.run.model_dump(),
+                "steps": [s.model_dump() for s in bundle.steps],
+                "approvals": [a.model_dump() for a in bundle.approvals],
+            }
         )
-        return run_id
 
     def resume_run(
         self,
         *,
         run_id: str,
-        decision: str,
+        approval_payload: Optional[Dict[str, Any]] = None,
+        decision: str = "APPROVED",
         resolved_by: Optional[str] = None,
         comment: Optional[str] = None,
-        approval_payload: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    ) -> RunOperationResult:
         bundle = self.memory.get_run(run_id)
         if bundle is None:
-            raise ValueError(f"Unknown run_id: {run_id}")
+            return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
 
-        product = bundle.run.product
-        flow = bundle.run.flow
-        flow_def = self._load_flow(product=product, flow=flow)
+        if bundle.run.status != RunStatus.PENDING_HUMAN:
+            return RunOperationResult.failure(code="invalid_state", message="Run is not awaiting approval.")
 
-        # find the pending approval (latest)
         pending = [a for a in bundle.approvals if a.status == "PENDING"]
         if not pending:
-            raise ValueError(f"No pending approvals for run_id={run_id}")
+            return RunOperationResult.failure(code="invalid_state", message="No pending approvals.")
 
         approval = pending[0]
         self.hitl.resolve_approval(
@@ -134,7 +156,6 @@ class OrchestratorEngine:
             comment=comment,
         )
 
-        # mark the step as completed and store approval outcome in step output
         self.memory.update_step(
             run_id,
             approval.step_id,
@@ -145,170 +166,170 @@ class OrchestratorEngine:
             },
         )
 
-        # resume: next step index is approval step index + 1
-        approval_step_index = self._find_step_index(flow_def, approval.step_id)
-        next_index = approval_step_index + 1
-
+        flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
+        next_index = self._find_step_index(flow_def, approval.step_id) + 1
         self.memory.update_run_status(run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
         self._emit_event(
             kind="run_resumed",
             run_id=run_id,
             step_id=approval.step_id,
-            product=product,
-            flow=flow,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
             payload={"decision": decision},
         )
 
-        self._execute_from_index(
+        run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        run_ctx.trace = self._trace_hook(run_ctx)
+
+        status = self._execute_from_index(
             flow_def=flow_def,
-            run_id=run_id,
+            run_ctx=run_ctx,
             start_index=next_index,
             requested_by=resolved_by,
         )
+        return RunOperationResult.success({"run_id": run_id, "status": status})
 
-    # ------------------------------
-    # Internals
-    # ------------------------------
+    # ------------------------------------------------------------------ internals
+    def _trace_hook(self, run_ctx: RunContext):
+        def _hook(event_type: str, payload: Dict[str, Any]) -> None:
+            self._emit_event(
+                kind=event_type,
+                run_id=run_ctx.run_id,
+                step_id=payload.get("step_id"),
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload=payload,
+            )
 
-    def _load_flow(self, *, product: str, flow: str) -> FlowDef:
-        return self.flow_loader.load(product=product, flow=flow)
-
-    def _find_step_index(self, flow_def: FlowDef, step_id: str) -> int:
-        # step_id in DB is the flow step id; if missing, cannot map reliably.
-        for idx, s in enumerate(flow_def.steps):
-            if (s.id or f"step_{idx}") == step_id:
-                return idx
-        # fallback: attempt exact match for name
-        for idx, s in enumerate(flow_def.steps):
-            if s.name == step_id:
-                return idx
-        raise ValueError(f"Cannot map approval step_id='{step_id}' to flow steps. Ensure StepDef.id is set.")
+        return _hook
 
     def _execute_from_index(
         self,
         *,
         flow_def: FlowDef,
-        run_id: str,
+        run_ctx: RunContext,
         start_index: int,
         requested_by: Optional[str],
-    ) -> None:
-        product = flow_def.product
-        flow = flow_def.name
-
+    ) -> str:
         for idx in range(start_index, len(flow_def.steps)):
             step_def = flow_def.steps[idx]
-            step_id = new_step_id(step_def, idx)
+            step_id = step_def.id or f"step_{idx}"
 
-            # Persist step record if not already there
             step_record = StepRecord(
-                run_id=run_id,
+                run_id=run_ctx.run_id,
                 step_id=step_id,
                 step_index=idx,
                 name=step_def.name or step_id,
-                type=step_def.type,
-                status=StepStatus.RUNNING.value,
+                type=step_def.type.value,
+                status=StepStatus.RUNNING,
                 started_at=int(time.time()),
-                finished_at=None,
                 input={"params": step_def.params or {}},
-                output=None,
-                error=None,
-                meta={"backend": step_def.backend, "target": step_def.target},
+                meta={"backend": step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend},
             )
             self.memory.add_step(step_record)
 
-            # Governance before_step
-            dec = self.governance.before_step(run_id=run_id, step_id=step_id, product=product, flow=flow, payload=step_record.model_dump())
-            self._enforce(dec, run_id=run_id, product=product, flow=flow, step_id=step_id, kind="before_step_denied")
+            step_ctx = run_ctx.new_step(
+                step_def=step_def,
+                step_id=step_id,
+                step_type=step_def.type.value,
+                backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
+                target=step_def.agent or step_def.tool,
+            )
+
+            decision = self.governance.before_step(step_ctx=step_ctx)
+            self._enforce(decision, run_ctx.run_id, run_ctx.product, run_ctx.flow, step_id, "before_step_denied")
 
             self._emit_event(
                 kind="step_started",
-                run_id=run_id,
+                run_id=run_ctx.run_id,
                 step_id=step_id,
-                product=product,
-                flow=flow,
-                payload={"step_index": idx, "type": step_def.type, "name": step_record.name},
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"step_index": idx, "type": step_def.type.value, "name": step_record.name},
             )
 
-            # HITL step: pause and return immediately
-            if self._is_human_approval(step_def):
+            if step_def.type == StepType.HUMAN_APPROVAL:
                 approval = self.hitl.create_approval(
-                    run_id=run_id,
+                    run_id=run_ctx.run_id,
                     step_id=step_id,
-                    product=product,
-                    flow=flow,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
                     requested_by=requested_by,
                     payload={"step": step_record.model_dump()},
                 )
                 self.memory.update_step(
-                    run_id,
+                    run_ctx.run_id,
                     step_id,
-                    {"status": StepStatus.PENDING_HUMAN.value, "finished_at": None, "output": {"approval_id": approval.approval_id}},
+                    {
+                        "status": StepStatus.PENDING_HUMAN.value,
+                        "output": {"approval_id": approval.approval_id},
+                    },
                 )
-                self.memory.update_run_status(run_id, RunStatus.PENDING_HUMAN.value, summary={"current_step_index": idx})
+                self.memory.update_run_status(run_ctx.run_id, RunStatus.PENDING_HUMAN.value, summary={"current_step_index": idx})
                 self._emit_event(
                     kind="pending_human",
-                    run_id=run_id,
+                    run_id=run_ctx.run_id,
                     step_id=step_id,
-                    product=product,
-                    flow=flow,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
                     payload={"approval_id": approval.approval_id},
                 )
-                return
+                return RunStatus.PENDING_HUMAN.value
 
-            # Execute step
             try:
-                result = self.step_executor.execute(run_id=run_id, step_id=step_id, product=product, flow=flow, step=step_def)
+                result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def)
                 self.memory.update_step(
-                    run_id,
+                    run_ctx.run_id,
                     step_id,
                     {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": result},
                 )
                 self._emit_event(
                     kind="step_completed",
-                    run_id=run_id,
+                    run_id=run_ctx.run_id,
                     step_id=step_id,
-                    product=product,
-                    flow=flow,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
                     payload={"ok": True},
                 )
-            except Exception as e:
-                # Never leak raw exceptions; store as error dict
+            except Exception as exc:
                 self.memory.update_step(
-                    run_id,
+                    run_ctx.run_id,
                     step_id,
                     {
                         "status": StepStatus.FAILED.value,
                         "finished_at": int(time.time()),
-                        "error": {"message": str(e), "type": type(e).__name__},
+                        "error": {"message": str(exc), "type": type(exc).__name__},
                     },
                 )
-                self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"failed_step_id": step_id})
+                self.memory.update_run_status(run_ctx.run_id, RunStatus.FAILED.value, summary={"failed_step_id": step_id})
                 self._emit_event(
                     kind="step_failed",
-                    run_id=run_id,
+                    run_id=run_ctx.run_id,
                     step_id=step_id,
-                    product=product,
-                    flow=flow,
-                    payload={"error": {"message": str(e), "type": type(e).__name__}},
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"error": {"message": str(exc), "type": type(exc).__name__}},
                 )
-                return
+                return RunStatus.FAILED.value
 
-            # Update run progress
-            self.memory.update_run_status(run_id, RunStatus.RUNNING.value, summary={"current_step_index": idx + 1})
+            self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": idx + 1})
 
-        # Completed run
-        self.memory.update_run_status(run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)})
+        self.memory.update_run_status(run_ctx.run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)})
         self._emit_event(
             kind="run_completed",
-            run_id=run_id,
+            run_id=run_ctx.run_id,
             step_id=None,
-            product=product,
-            flow=flow,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
             payload={"ok": True},
         )
+        return RunStatus.COMPLETED.value
 
-    def _is_human_approval(self, step_def: StepDef) -> bool:
-        return step_def.type == StepType.HUMAN_APPROVAL.value or step_def.type == "human_approval"
+    def _find_step_index(self, flow_def: FlowDef, step_id: str) -> int:
+        for idx, definition in enumerate(flow_def.steps):
+            if (definition.id or f"step_{idx}") == step_id:
+                return idx
+        raise ValueError(f"Cannot map approval step '{step_id}' to flow definition.")
 
     def _emit_event(
         self,
@@ -331,7 +352,7 @@ class OrchestratorEngine:
         )
         self.tracer.emit(evt)
 
-    def _enforce(self, decision: HookDecision, *, run_id: str, product: str, flow: str, step_id: Optional[str], kind: str) -> None:
+    def _enforce(self, decision: HookDecision, run_id: str, product: str, flow: str, step_id: Optional[str], kind: str) -> None:
         if decision.allowed:
             return
         self._emit_event(
@@ -343,3 +364,7 @@ class OrchestratorEngine:
             payload={"reason": decision.reason},
         )
         raise PermissionError(decision.reason or "Denied by governance")
+
+
+# Backwards compatibility for older imports/tests
+Engine = OrchestratorEngine

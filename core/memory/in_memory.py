@@ -95,3 +95,10 @@ class InMemoryBackend(MemoryBackend):
         pending = [a for a in self._approvals.values() if a.status == "PENDING"]
         pending.sort(key=lambda a: a.requested_at, reverse=True)
         return pending[offset : offset + limit]
+
+    def ensure_schema(self) -> None:
+        # Nothing to create for in-memory backend
+        return None
+
+    def get_schema_version(self) -> int:
+        return 0

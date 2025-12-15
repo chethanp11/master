@@ -26,9 +26,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
-from core.contracts.run_schema import TraceEvent
 from core.contracts.tool_schema import ToolError, ToolResult
-from core.governance.hooks import GovernanceHooks
+from core.governance.hooks import GovernanceHooks, HookDecision
 from core.governance.security import SecurityRedactor
 from core.orchestrator.context import StepContext
 from core.tools.backends.local_backend import LocalToolBackend
@@ -67,16 +66,14 @@ class ToolExecutor:
             err = ToolError(code="TOOL_NOT_FOUND", message=str(e), details={"tool": tool_name})
             return ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name})
 
-        safe_params = self.redactor.redact_dict(params)
+        safe_params = self.redactor.sanitize(params)
 
-        # Governance: before_tool
-        try:
-            if self.hooks is not None:
-                self.hooks.before_tool_call(tool_name=tool_name, params=params, ctx=ctx)
-        except Exception as e:
-            err = ToolError(code="TOOL_BLOCKED", message=str(e), details={"tool": tool_name})
-            self._emit(ctx, kind="tool.blocked", tool=tool_name, payload={"params": safe_params, "error": err.model_dump()})
-            return ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name, "backend": self.backend_mode})
+        if self.hooks is not None:
+            decision = self.hooks.before_tool_call(tool_name=tool_name, params=params, ctx=ctx)
+            if not decision.allowed:
+                return self._deny(ctx, decision, tool_name)
+        else:
+            decision = None  # type: ignore[assignment]
 
         # Execute
         try:
@@ -113,8 +110,13 @@ class ToolExecutor:
         self._emit(
             ctx,
             kind="tool.executed",
-            tool=tool_name,
-            payload={"params": safe_params, "result": safe_result, "latency_ms": elapsed_ms, "backend": self.backend_mode},
+            payload={
+                "tool": tool_name,
+                "params": safe_params,
+                "result": safe_result,
+                "latency_ms": elapsed_ms,
+                "backend": self.backend_mode,
+            },
         )
 
         # Always return envelope
@@ -122,18 +124,19 @@ class ToolExecutor:
         meta.update({"latency_ms": elapsed_ms, "backend": self.backend_mode, "tool": tool_name})
         return result.model_copy(update={"meta": meta})
 
-    def _emit(self, ctx: StepContext, *, kind: str, tool: str, payload: Dict[str, Any]) -> None:
-        if ctx.trace is None:
-            return
-        evt = TraceEvent(
-            kind=kind,
-            run_id=ctx.run_id,
-            step_id=ctx.step_id,
-            product=ctx.product,
-            flow=ctx.flow,
-            payload=self.redactor.redact_dict(payload),
+    def _deny(self, ctx: StepContext, decision: HookDecision, tool_name: str) -> ToolResult:
+        err = ToolError(
+            code="POLICY_DENIED",
+            message=decision.reason or "Blocked by governance",
+            details=decision.details,
         )
-        ctx.trace(evt)
+        payload = decision.to_payload()
+        payload["tool"] = tool_name
+        self._emit(ctx, kind="governance.decision", payload=payload)
+        return ToolResult(ok=False, data=None, error=err, meta={"tool": tool_name, "backend": self.backend_mode})
+
+    def _emit(self, ctx: StepContext, *, kind: str, payload: Dict[str, Any]) -> None:
+        ctx.emit(kind, self.redactor.sanitize(payload))
 
     def _safe_tool_result(self, result: ToolResult) -> Dict[str, Any]:
         """

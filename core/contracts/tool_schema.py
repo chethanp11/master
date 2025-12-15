@@ -105,6 +105,18 @@ class ToolEnvelope(BaseModel, Generic[T]):
         return self.model_dump(mode="python")
 
 
+class ToolResult(ToolEnvelope[Dict[str, Any]]):
+    """Concrete envelope used throughout the platform (dict payload)."""
+
+    @classmethod
+    def ok(cls, data: Optional[Dict[str, Any]] = None, meta: Optional[ToolMeta] = None) -> "ToolResult":
+        return cls(ok=True, data=data or {}, error=None, meta=meta or ToolMeta(tool_name="unknown", backend="local"))
+
+    @classmethod
+    def fail(cls, *, error: ToolError, meta: ToolMeta) -> "ToolResult":
+        return cls(ok=False, data=None, error=error, meta=meta)
+
+
 class ToolSpec(BaseModel):
     """
     Tool specification used for registration and discovery.

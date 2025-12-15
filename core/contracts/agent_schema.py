@@ -107,6 +107,10 @@ class AgentEnvelope(BaseModel, Generic[T]):
         return self.model_dump(mode="python")
 
 
+# Backwards-compatible default envelope used across the platform.
+AgentResult = AgentEnvelope[Dict[str, Any]]
+
+
 class AgentSpec(BaseModel):
     """
     Agent specification used for registration and discovery.

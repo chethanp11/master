@@ -39,6 +39,10 @@ def _merge_policy_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[s
     return out
 
 
+def _norm(value: str) -> str:
+    return value.strip().lower()
+
+
 class PolicyEngine:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -67,38 +71,50 @@ class PolicyEngine:
     # ------------------------------
 
     def evaluate_tool_call(self, *, tool_name: str, step_ctx: StepContext) -> PolicyDecision:
-        pol = self._policy_for_product(step_ctx.product)
+        product = self._product_from_ctx(step_ctx)
+        pol = self._policy_for_product(product)
+        norm_tool = _norm(tool_name)
         if not pol.get("enforce", True):
-            return PolicyDecision(True, "policies_disabled", {"tool": tool_name})
+            return PolicyDecision(True, "policies_disabled", {"tool": tool_name, "product": product})
 
-        allowed = pol.get("allowed_tools") or []
-        blocked = pol.get("blocked_tools") or []
+        allowed = [_norm(t) for t in (pol.get("allowed_tools") or [])]
+        blocked = {_norm(t) for t in (pol.get("blocked_tools") or [])}
 
-        if tool_name in blocked:
-            return PolicyDecision(False, "tool_blocked", {"tool": tool_name})
+        if norm_tool in blocked:
+            return PolicyDecision(False, "tool_blocked", {"tool": tool_name, "product": product})
 
-        # If allowed list is non-empty, tool must be in allowed
-        if allowed and tool_name not in allowed:
-            return PolicyDecision(False, "tool_not_in_allowlist", {"tool": tool_name})
+        if allowed and norm_tool not in allowed:
+            return PolicyDecision(False, "tool_not_in_allowlist", {"tool": tool_name, "product": product})
 
-        return PolicyDecision(True, "ok", {"tool": tool_name})
+        return PolicyDecision(True, "ok", {"tool": tool_name, "product": product})
 
     # ------------------------------
     # Models
     # ------------------------------
 
     def evaluate_model_use(self, *, model_name: str, step_ctx: StepContext) -> PolicyDecision:
-        pol = self._policy_for_product(step_ctx.product)
+        product = self._product_from_ctx(step_ctx)
+        return self.evaluate_model_selection(product=product, model_name=model_name)
+
+    def evaluate_model_selection(self, *, product: str, model_name: str) -> PolicyDecision:
+        pol = self._policy_for_product(product)
+        norm_model = _norm(model_name)
         if not pol.get("enforce", True):
-            return PolicyDecision(True, "policies_disabled", {"model": model_name})
+            return PolicyDecision(True, "policies_disabled", {"model": model_name, "product": product})
 
-        allowed = pol.get("allowed_models") or []
-        blocked = pol.get("blocked_models") or []
+        allowed = [_norm(m) for m in (pol.get("allowed_models") or [])]
+        blocked = {_norm(m) for m in (pol.get("blocked_models") or [])}
 
-        if model_name in blocked:
-            return PolicyDecision(False, "model_blocked", {"model": model_name})
+        if norm_model in blocked:
+            return PolicyDecision(False, "model_blocked", {"model": model_name, "product": product})
 
-        if allowed and model_name not in allowed:
-            return PolicyDecision(False, "model_not_in_allowlist", {"model": model_name})
+        if allowed and norm_model not in allowed:
+            return PolicyDecision(False, "model_not_in_allowlist", {"model": model_name, "product": product})
 
-        return PolicyDecision(True, "ok", {"model": model_name})
+        return PolicyDecision(True, "ok", {"model": model_name, "product": product})
+
+    @staticmethod
+    def _product_from_ctx(step_ctx: StepContext) -> str:
+        run = getattr(step_ctx, "run", None)
+        run_record = getattr(run, "run_record", None)
+        return getattr(run_record, "product", getattr(step_ctx, "product", "unknown_product"))

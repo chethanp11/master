@@ -27,8 +27,7 @@ def test_sample_flow_sandbox_hello_world(tmp_path: Path) -> None:
         "\n".join(
             [
                 "secrets:",
-                "  db:",
-                f"    sqlite_path: '{sqlite_path.as_posix()}'",
+                f"  memory_db_path: '{sqlite_path.as_posix()}'",
                 "",
             ]
         ),

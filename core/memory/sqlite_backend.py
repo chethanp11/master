@@ -27,9 +27,19 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
 
+MAX_PAYLOAD_CHARS = 4096
+
 
 def _dumps(x: Any) -> str:
     return json.dumps(x, ensure_ascii=False)
+
+
+def _dumps_payload(x: Any) -> str:
+    """Clamp payload size to keep DB bounded."""
+    raw = _dumps(x)
+    if len(raw) > MAX_PAYLOAD_CHARS:
+        return raw[:MAX_PAYLOAD_CHARS]
+    return raw
 
 
 def _loads(s: Optional[str], default: Any) -> Any:
@@ -41,13 +51,18 @@ def _loads(s: Optional[str], default: Any) -> Any:
         return default
 
 
+def _enum_value(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
 class SQLiteBackend(MemoryBackend):
-    def __init__(self, *, db_path: str) -> None:
+    def __init__(self, *, db_path: str, initialize: bool = True) -> None:
         self.db_path = db_path
-        self._init_db()
+        if initialize:
+            self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.db_path)
+        con = sqlite3.connect(self.db_path, check_same_thread=False)
         con.row_factory = sqlite3.Row
         return con
 
@@ -89,6 +104,7 @@ class SQLiteBackend(MemoryBackend):
                 )
                 """
             )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)")
             con.execute(
                 """
                 CREATE TABLE IF NOT EXISTS steps (
@@ -108,6 +124,7 @@ class SQLiteBackend(MemoryBackend):
                 )
                 """
             )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_steps_run_idx ON steps(run_id, step_index)")
             con.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -122,6 +139,7 @@ class SQLiteBackend(MemoryBackend):
                 )
                 """
             )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_events_run_ts ON events(run_id, ts)")
             con.execute(
                 """
                 CREATE TABLE IF NOT EXISTS approvals (
@@ -141,12 +159,25 @@ class SQLiteBackend(MemoryBackend):
                 )
                 """
             )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, requested_at)")
             con.commit()
 
     def _migrate(self, con: sqlite3.Connection, *, from_version: int, to_version: int) -> None:
         # v1 only; placeholder for future migrations
         con.execute("UPDATE schema_version SET version=? WHERE id=1", (to_version,))
         con.commit()
+
+    def ensure_schema(self) -> None:
+        self._init_db()
+
+    def get_schema_version(self) -> int:
+        with self._connect() as con:
+            try:
+                cur = con.execute("SELECT version FROM schema_version WHERE id=1")
+            except sqlite3.OperationalError:
+                return 0
+            row = cur.fetchone()
+            return int(row["version"]) if row else 0
 
     # ------------------------------
     # Runs
@@ -165,7 +196,7 @@ class SQLiteBackend(MemoryBackend):
                     run.run_id,
                     run.product,
                     run.flow,
-                    run.status,
+                    _enum_value(run.status),
                     run.autonomy_level,
                     int(run.started_at),
                     int(run.finished_at) if run.finished_at is not None else None,
@@ -209,8 +240,8 @@ class SQLiteBackend(MemoryBackend):
                     step.step_id,
                     int(step.step_index),
                     step.name,
-                    step.type,
-                    step.status,
+                    _enum_value(step.type),
+                    _enum_value(step.status),
                     int(step.started_at) if step.started_at is not None else None,
                     int(step.finished_at) if step.finished_at is not None else None,
                     _dumps(step.input) if step.input is not None else None,
@@ -272,7 +303,7 @@ class SQLiteBackend(MemoryBackend):
                     event.flow,
                     event.kind,
                     int(event.ts),
-                    _dumps(event.payload) if event.payload is not None else None,
+                    _dumps_payload(event.payload) if event.payload is not None else None,
                 ),
             )
             con.commit()
@@ -303,7 +334,7 @@ class SQLiteBackend(MemoryBackend):
                     int(approval.resolved_at) if approval.resolved_at is not None else None,
                     approval.decision,
                     approval.comment,
-                    _dumps(approval.payload) if approval.payload is not None else None,
+                    _dumps_payload(approval.payload) if approval.payload is not None else None,
                 ),
             )
             con.commit()
@@ -443,6 +474,7 @@ class SQLiteBackend(MemoryBackend):
                 )
             return out
 
+
     def list_pending_approvals(self, *, limit: int = 50, offset: int = 0) -> List[ApprovalRecord]:
         with self._connect() as con:
             rows = con.execute(
@@ -474,3 +506,7 @@ class SQLiteBackend(MemoryBackend):
                     )
                 )
             return out
+
+
+# Backwards-compatible alias expected by older modules/tests
+SQLiteMemoryBackend = SQLiteBackend

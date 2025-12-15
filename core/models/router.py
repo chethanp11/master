@@ -24,6 +24,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from core.config.schema import Settings
+from core.governance.policies import PolicyEngine
 from core.models.providers.openai_provider import OpenAIProvider, OpenAIRequest, OpenAIResponse
 
 
@@ -51,9 +53,16 @@ class ModelRouter:
 }
     """
 
-    def __init__(self, *, config: Optional[Dict[str, Any]] = None, providers: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        config: Optional[Dict[str, Any]] = None,
+        providers: Optional[Dict[str, Any]] = None,
+        policy_engine: Optional[PolicyEngine] = None,
+    ) -> None:
         self.config = config or {}
         self.providers = providers or {"openai": OpenAIProvider(config=self.config.get("openai", {}))}
+        self.policy_engine = policy_engine
 
     def select(
         self,
@@ -84,7 +93,14 @@ class ModelRouter:
         if override_model:
             model = override_model
 
-        return ModelSelection(provider=provider, model=model)
+        selection = ModelSelection(provider=provider, model=model)
+
+        if self.policy_engine is not None:
+            decision = self.policy_engine.evaluate_model_selection(product=product, model_name=selection.model)
+            if not decision.allow:
+                raise PermissionError(decision.reason or "Model blocked by policy")
+
+        return selection
 
     def completion_openai(
         self,
@@ -104,3 +120,9 @@ class ModelRouter:
         if p is None:
             raise KeyError(f"Unknown model provider: {name}")
         return p
+
+    @classmethod
+    def from_settings(cls, settings: Settings, *, providers: Optional[Dict[str, Any]] = None) -> "ModelRouter":
+        config = settings.models.routing.model_dump()
+        policy_engine = PolicyEngine(settings)
+        return cls(config=config, providers=providers, policy_engine=policy_engine)

@@ -110,3 +110,16 @@ class MemoryBackend(ABC):
     @abstractmethod
     def list_pending_approvals(self, *, limit: int = 50, offset: int = 0) -> List[ApprovalRecord]:
         raise NotImplementedError
+
+    # Optional hooks for durable backends so tooling/migrations can introspect.
+    def ensure_schema(self) -> None:
+        """
+        Ensure backing schema exists. In-memory backends can no-op.
+        """
+        return None
+
+    def get_schema_version(self) -> int:
+        """
+        Return integer schema version if supported. Defaults to 0.
+        """
+        return 0

@@ -1,82 +1,72 @@
-# ==============================
-# Tests: Governance (Policies + Redaction)
-# ==============================
 from __future__ import annotations
 
-from typing import Any, Dict
-
-import pytest
+from typing import Dict, List
 
 from core.config.schema import Settings
+from core.contracts.flow_schema import AutonomyLevel, FlowDef, StepDef, StepType
+from core.contracts.run_schema import RunRecord, RunStatus
 from core.governance.policies import PolicyEngine
-from core.governance.security import Redactor
+from core.governance.security import SecurityRedactor
 from core.orchestrator.context import RunContext, StepContext
-from core.orchestrator.state import RunStatus, StepStatus
-from core.contracts.flow_schema import AutonomyLevel
 
 
-def _minimal_settings() -> Settings:
-    # Settings has defaults in schema; instantiate minimal.
+def _settings() -> Settings:
     return Settings()
 
 
-def _ctx(product: str = "sandbox", flow: str = "hello_world") -> StepContext:
-    run = RunContext(
-        run_id="r1",
-        product=product,
-        flow=flow,
-        status=RunStatus.RUNNING,
-        payload={"x": 1},
-        artifacts={},
-        meta={},
+def _step_ctx(product: str = "sandbox") -> StepContext:
+    run_record = RunRecord(run_id="run_test", product=product, flow_id="hello", status=RunStatus.RUNNING)
+    flow = FlowDef(
+        id="hello",
+        steps=[StepDef(id="s1", type=StepType.TOOL, tool="echo_tool", backend=None)],
     )
-    step = run.new_step(step_id="s1", step_type="tool", backend="local", target="echo_tool")
-    return step
+    run_ctx = RunContext(run_record=run_record, flow=flow)
+    return StepContext(run=run_ctx, step=flow.steps[0])
 
 
-def test_redactor_scrubs_secrets_like_api_keys() -> None:
-    settings = _minimal_settings()
-    redactor = Redactor.from_settings(settings)
-
+def test_redactor_scrubs_tokens_and_pii() -> None:
+    redactor = SecurityRedactor()
     payload = {
-        "token": "sk-123456789012345678901234567890",
-        "nested": {"Authorization": "Bearer sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        "api_key": "sk-12345678901234567890ABCDE",
+        "nested": {"Authorization": "Bearer sk-AAAAAAAAAAAAAAAAAAAAAAAAAA"},
+        "contact": "user@example.com",
     }
-    scrubbed = redactor.scrub(payload)
-    s = str(scrubbed)
-    assert "sk-" not in s
-    assert "***REDACTED***" in s
+    sanitized = redactor.sanitize(payload)
+    assert sanitized["api_key"] == SecurityRedactor().mask
+    assert "sk-" not in str(sanitized["nested"]["Authorization"])
+    assert "user@example.com" not in sanitized["contact"]
 
 
-def test_redactor_scrubs_emails_by_default_pattern_if_enabled() -> None:
-    settings = _minimal_settings()
-    redactor = Redactor.from_settings(settings)
-
-    payload = {"email": "user@example.com"}
-    scrubbed = redactor.scrub(payload)
-    assert "user@example.com" not in str(scrubbed)
-    assert "***REDACTED***" in str(scrubbed)
+def test_policy_engine_allows_tool_by_default() -> None:
+    settings = _settings()
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is True
 
 
-def test_policy_engine_allows_basic_tool_call_by_default() -> None:
-    settings = _minimal_settings()
-    pe = PolicyEngine(settings)
-    ctx = _ctx()
+def test_policy_engine_blocks_tool_via_blocklist() -> None:
+    settings = _settings()
+    settings.policies.blocked_tools = ["echo_tool"]
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is False
+    assert decision.reason == "tool_blocked"
 
-    decision = pe.allow_tool(tool_name="echo_tool", step_ctx=ctx, autonomy=AutonomyLevel.suggest_only)
-    assert decision.allowed is True
+
+def test_policy_engine_applies_per_product_override() -> None:
+    settings = _settings()
+    settings.policies.blocked_tools = ["echo_tool"]
+    settings.policies.by_product = {"sandbox": {"blocked_tools": []}}
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is True
 
 
-def test_policy_engine_can_deny_tool_via_overrides() -> None:
-    settings = _minimal_settings()
-
-    # Inject a deny list directly (schema should support policies overrides).
-    # If schema differs, adjust policies.yaml in real setup; for unit test we set in-memory.
-    settings.policies.deny_tools = ["echo_tool"]  # type: ignore[attr-defined]
-
-    pe = PolicyEngine(settings)
-    ctx = _ctx()
-
-    decision = pe.allow_tool(tool_name="echo_tool", step_ctx=ctx, autonomy=AutonomyLevel.suggest_only)
-    assert decision.allowed is False
-    assert "denied" in (decision.reason or "").lower()
+def test_policy_engine_enforces_model_allowlist() -> None:
+    settings = _settings()
+    settings.policies.allowed_models = ["gpt-4o-mini"]
+    engine = PolicyEngine(settings)
+    allowed = engine.evaluate_model_selection(product="sandbox", model_name="gpt-4o-mini")
+    denied = engine.evaluate_model_selection(product="sandbox", model_name="other-model")
+    assert allowed.allow is True
+    assert denied.allow is False

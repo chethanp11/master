@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
 from core.agents.base import BaseAgent
-from core.contracts.agent_schema import AgentResult, AgentError, AgentMeta
+from core.contracts.agent_schema import AgentResult, AgentError, AgentMeta, AgentErrorCode
 from core.orchestrator.context import StepContext
 
 
@@ -47,7 +47,7 @@ class SimpleAgent(BaseAgent):
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(ok=True, data={"summary": summary}, error=None, meta=meta)
         except Exception as e:
-            err = AgentError(code="AGENT_ERROR", message=str(e))
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(e))
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(ok=False, data=None, error=err, meta=meta)
 

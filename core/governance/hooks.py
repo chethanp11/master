@@ -25,11 +25,16 @@ from core.orchestrator.context import RunContext, StepContext
 
 
 @dataclass(frozen=True)
-class HookResult:
-    allow: bool
+class HookDecision:
+    allowed: bool
     reason: str
     details: Dict[str, Any]
     scrubbed: Dict[str, Any]
+
+    def to_payload(self) -> Dict[str, Any]:
+        payload = {"allowed": self.allowed, "reason": self.reason}
+        payload.update(self.scrubbed)
+        return payload
 
 
 class GovernanceHooks:
@@ -48,29 +53,28 @@ class GovernanceHooks:
     # Orchestrator hooks
     # ------------------------------
 
-    def before_step(self, *, step_ctx: StepContext) -> HookResult:
-        # v1: no step-level enforcement beyond basic context redaction
-        return HookResult(
-            allow=True,
+    def before_step(self, *, step_ctx: StepContext) -> HookDecision:
+        return self._decision(
+            allowed=True,
             reason="ok",
-            details={"step_id": step_ctx.step_id, "step_type": step_ctx.step.type.value},
-            scrubbed={"step": self.redactor.redact_dict(step_ctx.step.model_dump())},
+            details={"step_id": self._step_id(step_ctx), "step_type": step_ctx.step.type.value},
+            scrubbed={"step": self.redactor.sanitize(step_ctx.step.model_dump())},
         )
 
-    def before_complete(self, *, run_ctx: RunContext, output: Dict[str, Any]) -> HookResult:
-        return HookResult(
-            allow=True,
+    def before_complete(self, *, run_ctx: RunContext, output: Dict[str, Any]) -> HookDecision:
+        return self._decision(
+            allowed=True,
             reason="ok",
-            details={"run_id": run_ctx.run_id},
-            scrubbed={"output": self.redactor.redact_dict(output)},
+            details={"run_id": self._run_id(run_ctx)},
+            scrubbed={"output": self.redactor.sanitize(output)},
         )
 
-    def check_autonomy(self, *, run_ctx: RunContext, autonomy: AutonomyLevel) -> HookResult:
-        d: PolicyDecision = self.engine.evaluate_autonomy(autonomy=autonomy, run_ctx=run_ctx)
-        return HookResult(
-            allow=d.allow,
-            reason=d.reason,
-            details=d.details,
+    def check_autonomy(self, *, run_ctx: RunContext, autonomy: AutonomyLevel) -> HookDecision:
+        decision = self.engine.evaluate_autonomy(autonomy=autonomy, run_ctx=run_ctx)
+        return self._decision(
+            allowed=decision.allow,
+            reason=decision.reason,
+            details=decision.details,
             scrubbed={"autonomy": autonomy.value},
         )
 
@@ -78,15 +82,36 @@ class GovernanceHooks:
     # Tool hooks (used by ToolExecutor)
     # ------------------------------
 
-    def before_tool_call(self, *, tool_name: str, params: Dict[str, Any], ctx: StepContext) -> HookResult:
-        d: PolicyDecision = self.engine.evaluate_tool_call(tool_name=tool_name, step_ctx=ctx)
-        scrubbed = {"tool": tool_name, "params": self.redactor.redact_dict(params)}
-        if not d.allow:
-            return HookResult(False, d.reason, d.details, scrubbed)
-        return HookResult(True, "ok", d.details, scrubbed)
+    def before_tool_call(self, *, tool_name: str, params: Dict[str, Any], ctx: StepContext) -> HookDecision:
+        decision = self.engine.evaluate_tool_call(tool_name=tool_name, step_ctx=ctx)
+        scrubbed = {
+            "tool": tool_name,
+            "params": self.redactor.sanitize(params),
+            "run_id": self._run_id(ctx.run),
+            "product": self._product(ctx.run),
+        }
+        return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
 
-    # Convenience for ToolExecutor: raise on deny (keeps executor code small)
-    def before_tool_call_raise(self, *, tool_name: str, params: Dict[str, Any], ctx: StepContext) -> None:
-        res = self.before_tool_call(tool_name=tool_name, params=params, ctx=ctx)
-        if not res.allow:
-            raise PermissionError(f"{res.reason}: {res.details}")
+    def _decision(self, allowed: bool, reason: str, details: Dict[str, Any], scrubbed: Dict[str, Any]) -> HookDecision:
+        return HookDecision(allowed=allowed, reason=reason, details=details, scrubbed=scrubbed)
+
+    @staticmethod
+    def _step_id(step_ctx: StepContext) -> str:
+        return getattr(step_ctx.step, "id", "unknown_step")
+
+    @staticmethod
+    def _run_id(run_ctx: RunContext) -> str:
+        record = getattr(run_ctx, "run_record", None)
+        return getattr(record, "run_id", "unknown_run")
+
+    @staticmethod
+    def _product(run_ctx: RunContext) -> str:
+        record = getattr(run_ctx, "run_record", None)
+        return getattr(record, "product", "unknown_product")
+
+    @classmethod
+    def noop(cls) -> "GovernanceHooks":
+        """
+        Helper used by orchestrator tests – returns a hooks instance with default Settings.
+        """
+        return cls(settings=Settings())

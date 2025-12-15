@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
 
 from pydantic import ValidationError
 
@@ -43,9 +43,17 @@ class FlowLoader:
     Flow loader for YAML/JSON flow definitions.
 
     Public methods:
+    - load(product, flow) -> FlowDef (from products/<product>/flows/<flow>.yaml)
     - load_from_path(path) -> FlowDef
     - load_from_obj(obj) -> FlowDef
     """
+
+    def __init__(self, *, products_root: Union[str, Path]) -> None:
+        self.products_root = Path(products_root)
+
+    def load(self, *, product: str, flow: str) -> FlowDef:
+        path = self.products_root / product / "flows" / f"{flow}.yaml"
+        return self.load_from_path(path)
 
     # ==============================
     # Public API
@@ -74,7 +82,8 @@ class FlowLoader:
         Raises FlowLoadError with readable validation messages.
         """
         try:
-            return FlowDef.model_validate(obj)
+            normalized = FlowLoader._normalize(obj)
+            return FlowDef.model_validate(normalized)
         except ValidationError as e:
             raise FlowLoadError(f"Flow validation error: {e}") from e
 
@@ -109,3 +118,40 @@ class FlowLoader:
             return data
         except Exception as e:
             raise FlowLoadError(f"Invalid YAML in {path}: {e}") from e
+
+    # ==============================
+    # Normalization helpers
+    # ==============================
+    @staticmethod
+    def _normalize(data: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(data)
+        flow_name = normalized.pop("name", None)
+        flow_id = normalized.get("id") or flow_name
+        if not flow_id:
+            raise FlowLoadError("Flow missing required 'id'.")
+        normalized["id"] = flow_id
+
+        steps = normalized.get("steps")
+        if not isinstance(steps, list):
+            raise FlowLoadError("Flow missing 'steps' list.")
+        normalized["steps"] = FlowLoader._normalize_steps(steps)
+
+        if flow_name:
+            metadata = dict(normalized.get("metadata") or {})
+            metadata.setdefault("display_name", flow_name)
+            normalized["metadata"] = metadata
+
+        return normalized
+
+    @staticmethod
+    def _normalize_steps(steps: List[Any]) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for idx, raw in enumerate(steps):
+            if not isinstance(raw, dict):
+                raise FlowLoadError(f"Step {idx} is not a mapping/dict.")
+            step = dict(raw)
+            step_name = step.get("name")
+            step_id = step.get("id") or step_name or f"step_{idx}"
+            step["id"] = step_id
+            normalized.append(step)
+        return normalized

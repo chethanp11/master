@@ -51,6 +51,6 @@ STEP_TERMINAL: FrozenSet[StepStatus] = frozenset(
 STEP_ACTIVE: FrozenSet[StepStatus] = frozenset(
     {
         StepStatus.RUNNING,
-        StepStatus.WAITING_HUMAN,
+        StepStatus.PENDING_HUMAN,
     }
 )

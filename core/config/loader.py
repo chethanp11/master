@@ -57,6 +57,30 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     return out
 
 
+def _section(data: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """
+    Config files may either namespace their contents (app: {...}) or provide the
+    raw fields directly. Normalize to the inner dict for merging.
+    """
+    value = data.get(key)
+    if isinstance(value, dict):
+        return value
+    return data
+
+
+def _normalize_app_config(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Legacy configs used `name/environment/default_timeout_seconds`. Map/strip them.
+    """
+    out = dict(data)
+    if "environment" in out and "env" not in out:
+        out["env"] = out["environment"]
+    out.pop("environment", None)
+    out.pop("name", None)
+    out.pop("default_timeout_seconds", None)
+    return out
+
+
 # ==============================
 # .env Loader
 # ==============================
@@ -149,9 +173,11 @@ def load_settings(
     repo_root: Optional[str] = None,
     configs_dir: Optional[str] = None,
     secrets_file: Optional[str] = None,
+    secrets_path: Optional[str] = None,
     dotenv_file: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
-) -> Tuple[Settings, Dict[str, Any]]:
+    include_raw: bool = False,
+) -> Settings | Tuple[Settings, Dict[str, Any]]:
     """
     Load and validate Settings.
 
@@ -165,6 +191,9 @@ Inputs:
 - dotenv_file: defaults to <repo_root>/.env
 - env: injected env vars (defaults to os.environ)
     """
+    if secrets_file is not None and secrets_path is not None:
+        raise ValueError("Provide only one of secrets_file or secrets_path.")
+
     env_vars = dict(env) if env is not None else dict(os.environ)
 
     root = Path(repo_root or os.getcwd()).expanduser().resolve()
@@ -178,16 +207,16 @@ Inputs:
     products_cfg = _read_yaml(cfg_dir / "products.yaml")
 
     merged: Dict[str, Any] = {}
-    merged = _deep_merge(merged, {"app": app_cfg})
-    merged = _deep_merge(merged, {"models": models_cfg})
-    merged = _deep_merge(merged, {"policies": policies_cfg})
-    merged = _deep_merge(merged, {"logging": logging_cfg})
-    merged = _deep_merge(merged, {"products": products_cfg})
+    merged = _deep_merge(merged, {"app": _normalize_app_config(_section(app_cfg, "app"))})
+    merged = _deep_merge(merged, {"models": _section(models_cfg, "models")})
+    merged = _deep_merge(merged, {"policies": _section(policies_cfg, "policies")})
+    merged = _deep_merge(merged, {"logging": _section(logging_cfg, "logging")})
+    merged = _deep_merge(merged, {"products": _section(products_cfg, "products")})
 
     # secrets.yaml (optional)
-    sec_path = Path(secrets_file) if secrets_file else (root / "secrets" / "secrets.yaml")
+    sec_path = Path(secrets_file or secrets_path) if (secrets_file or secrets_path) else (root / "secrets" / "secrets.yaml")
     secrets_cfg = _read_yaml(sec_path)
-    merged = _deep_merge(merged, {"secrets": secrets_cfg})
+    merged = _deep_merge(merged, {"secrets": _section(secrets_cfg, "secrets")})
 
     # .env (optional) -> treated as env overrides (highest)
     dotenv_path = Path(dotenv_file) if dotenv_file else (root / ".env")
@@ -212,7 +241,9 @@ Inputs:
     # (still respecting precedence: if models.openai.api_key already set by env override, keep it)
     settings = _hydrate_provider_secrets(settings)
 
-    return settings, merged
+    if include_raw:
+        return settings, merged
+    return settings
 
 
 def _hydrate_provider_secrets(settings: Settings) -> Settings:

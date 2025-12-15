@@ -29,34 +29,59 @@ class AgentRegistration:
 
 
 class AgentRegistry:
-    def __init__(self) -> None:
-        self._agents: Dict[str, AgentRegistration] = {}
+    """
+    Simple global registry used by orchestrator + products.
 
+    The registry stores factories to ensure every resolution gets a fresh instance.
+    Tests/products interact via classmethods to avoid passing registry handles around.
+    """
+
+    _agents: Dict[str, AgentRegistration] = {}
+
+    @classmethod
+    def clear(cls) -> None:
+        cls._agents.clear()
+
+    @classmethod
     def register(
-        self,
-        *,
+        cls,
         name: str,
-        factory: AgentFactory,
+        factory: AgentFactory | BaseAgent,
+        *,
         meta: Optional[Dict[str, Any]] = None,
         overwrite: bool = False,
     ) -> None:
         norm = _norm(name)
-        if not overwrite and norm in self._agents:
+        if not overwrite and norm in cls._agents:
             raise ValueError(f"Agent already registered: {name}")
-        self._agents[norm] = AgentRegistration(name=norm, factory=factory, meta=meta or {})
 
-    def resolve(self, name: str) -> BaseAgent:
+        if isinstance(factory, BaseAgent):
+            inst = factory
+
+            def _factory(inst: BaseAgent = inst) -> BaseAgent:
+                return inst
+
+            actual_factory: AgentFactory = _factory
+        else:
+            actual_factory = factory
+
+        cls._agents[norm] = AgentRegistration(name=norm, factory=actual_factory, meta=meta or {})
+
+    @classmethod
+    def resolve(cls, name: str) -> BaseAgent:
         norm = _norm(name)
-        reg = self._agents.get(norm)
+        reg = cls._agents.get(norm)
         if reg is None:
             raise KeyError(f"Unknown agent: {name}")
         return reg.factory()
 
-    def has(self, name: str) -> bool:
-        return _norm(name) in self._agents
+    @classmethod
+    def has(cls, name: str) -> bool:
+        return _norm(name) in cls._agents
 
-    def list(self) -> Dict[str, Dict[str, Any]]:
-        return {k: {"name": v.name, "meta": v.meta} for k, v in self._agents.items()}
+    @classmethod
+    def list(cls) -> Dict[str, Dict[str, Any]]:
+        return {k: {"name": v.name, "meta": v.meta} for k, v in cls._agents.items()}
 
 
 def _norm(name: str) -> str:

@@ -65,7 +65,7 @@ Products **must not**:
 
 ### 3.1 Orchestrator
 Location:
-core/orchestrator/
+core/orchestrator/{engine.py,flow_loader.py,runners.py,step_executor.py,context.py,state.py,error_policy.py,hitl.py}
 Responsibilities:
 - Load and validate flows
 - Execute flows step-by-step
@@ -231,7 +231,7 @@ products//agents/
 products//tools/
 5. Add prompts and config:
 products//prompts/
-products//config/product.yaml
+products/<product>/config/product.yaml
 Result:
 - Product is auto-discovered
 - Product appears in UI
@@ -257,4 +257,3 @@ Result:
 - All execution flows through orchestrator
 - All side-effects go through tools
 - All data is logged, traced, and governed
-

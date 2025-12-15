@@ -38,7 +38,13 @@ class Tracer:
         self.mirror_to_log = mirror_to_log
 
     def emit(self, event: TraceEvent) -> None:
-        safe = event.model_copy(update={"payload": self.redactor.redact_dict(event.payload)})
+        sanitized_payload = self.redactor.sanitize(event.payload)
+        safe = event.model_copy(
+            update={
+                "payload": sanitized_payload,
+                "redacted": sanitized_payload != event.payload,
+            }
+        )
         # Persist through backend interface only
         self.memory.append_trace_event(safe)
 

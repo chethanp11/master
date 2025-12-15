@@ -38,11 +38,12 @@ products/sandbox/
 
 ## 3. Required Product Structure
 
-products//
+products/<product>/
 ├── flows/
 ├── agents/
 ├── tools/
 ├── prompts/
+├── manifest.yaml
 ├── config/
 │   └── product.yaml
 └── tests/
@@ -61,16 +62,24 @@ python scripts/create_product.py sandbox
 
 ### Step 2: Define Product Config
 
-File:
+Files:
 
-products/sandbox/config/product.yaml
+- products/sandbox/manifest.yaml
+- products/sandbox/config/product.yaml
 
 Example:
+
+Example `manifest.yaml`:
 
 name: sandbox
 default_flow: hello_world
 expose_api: true
 ui_enabled: true
+
+Example `config/product.yaml`:
+
+model_overrides:
+  default_provider: openai
 
 
 ⸻
@@ -236,4 +245,3 @@ When ready:
 ⸻
 
 This structure allows teams to build fast, safe, and consistent agentic prototypes without touching the platform core.
-

@@ -18,121 +18,131 @@ Intended usage:
 # ==============================
 from __future__ import annotations
 
-from datetime import datetime
+import time
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 # ==============================
 # Enums
 # ==============================
 class RunStatus(str, Enum):
     """Lifecycle status for a run."""
-    RUNNING = "running"
-    PENDING_HUMAN = "pending_human"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+
+    RUNNING = "RUNNING"
+    PENDING_HUMAN = "PENDING_HUMAN"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class StepStatus(str, Enum):
     """Lifecycle status for a step."""
-    NOT_STARTED = "not_started"
-    RUNNING = "running"
-    SKIPPED = "skipped"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    WAITING_HUMAN = "waiting_human"
+
+    NOT_STARTED = "NOT_STARTED"
+    RUNNING = "RUNNING"
+    PENDING_HUMAN = "PENDING_HUMAN"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
 
 
-class TraceLevel(str, Enum):
-    """Severity level for trace events."""
-    DEBUG = "debug"
-    INFO = "info"
-    WARN = "warn"
-    ERROR = "error"
-
-
-class ArtifactKind(str, Enum):
-    """Artifact classification for stored outputs."""
-    TEXT = "text"
-    JSON = "json"
-    FILE = "file"
-    BLOB = "blob"
-
-
-# ==============================
-# Models
-# ==============================
 class ArtifactRef(BaseModel):
     """Reference to an artifact persisted by memory backend."""
+
     model_config = ConfigDict(extra="forbid")
 
-    artifact_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique artifact id.")
-    kind: ArtifactKind = Field(..., description="Artifact kind.")
-    uri: str = Field(..., description="Storage URI/path (implementation-defined).")
-    sha256: Optional[str] = Field(default=None, description="Optional checksum.")
+    key: str = Field(..., description="Artifact handle used by orchestrator.")
+    kind: str = Field(..., description="Artifact kind (json, file, text, etc.).")
+    uri: str = Field(..., description="Storage URI/path.")
     meta: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata (sanitized).")
 
 
 class TraceEvent(BaseModel):
     """A single trace event emitted during a run."""
-    model_config = ConfigDict(extra="forbid")
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     event_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique event id.")
     run_id: str = Field(..., description="Associated run id.")
     step_id: Optional[str] = Field(default=None, description="Associated step id if applicable.")
-
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp (UTC).")
-    level: TraceLevel = Field(default=TraceLevel.INFO, description="Event severity.")
-    event_type: str = Field(..., description="Machine-readable event type (e.g., step_started, tool_called).")
-
-    message: Optional[str] = Field(default=None, description="Human-readable message (sanitized).")
+    product: str = Field(..., description="Product name.")
+    flow: str = Field(..., description="Flow name.")
+    kind: str = Field(
+        default="event",
+        validation_alias=AliasChoices("kind", "event_type"),
+        serialization_alias="event_type",
+        description="Machine-readable event type (e.g., step_started).",
+    )
+    ts: int = Field(default_factory=lambda: int(time.time()), description="Event timestamp (epoch seconds).")
     payload: Dict[str, Any] = Field(default_factory=dict, description="Structured payload (sanitized).")
-    redacted: bool = Field(default=False, description="Whether payload/message were redacted.")
+    redacted: bool = Field(default=False, description="Whether payload was redacted before persistence.")
 
 
 class StepRecord(BaseModel):
     """Persistent record of a single step execution."""
+
     model_config = ConfigDict(extra="forbid")
 
     run_id: str = Field(..., description="Associated run id.")
     step_id: str = Field(..., description="Step id from flow definition.")
+    step_index: int = Field(default=0, description="Zero-based index within the flow.")
+    name: str = Field(default="", description="Human readable step name.")
+    type: str = Field(default="tool", description="Step type (tool|agent|human_approval|subflow).")
     status: StepStatus = Field(default=StepStatus.NOT_STARTED, description="Current step status.")
-
-    started_at: Optional[datetime] = Field(default=None, description="Step start timestamp (UTC).")
-    ended_at: Optional[datetime] = Field(default=None, description="Step end timestamp (UTC).")
-
-    attempt: int = Field(default=0, ge=0, le=100, description="Attempt counter for retries.")
+    started_at: Optional[int] = Field(default=None, description="Step start timestamp (epoch seconds).")
+    finished_at: Optional[int] = Field(default=None, description="Step finish timestamp (epoch seconds).")
+    input: Optional[Dict[str, Any]] = Field(default=None, description="Step input payload.")
+    output: Optional[Dict[str, Any]] = Field(default=None, description="Step output payload.")
     error: Optional[Dict[str, Any]] = Field(default=None, description="Structured error (sanitized).")
-
-    input_ref: Optional[ArtifactRef] = Field(default=None, description="Optional artifact ref for inputs.")
-    output_ref: Optional[ArtifactRef] = Field(default=None, description="Optional artifact ref for outputs.")
-
-    meta: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata (sanitized).")
+    meta: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata (backend, target, etc.).")
 
 
 class RunRecord(BaseModel):
     """Persistent record of a flow run."""
-    model_config = ConfigDict(extra="forbid")
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     run_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique run id.")
     product: str = Field(..., description="Product name.")
-    flow_id: str = Field(..., description="Flow id.")
+    flow: str = Field(
+        ...,
+        description="Flow id.",
+        validation_alias=AliasChoices("flow", "flow_id"),
+        serialization_alias="flow",
+    )
     status: RunStatus = Field(default=RunStatus.RUNNING, description="Current run status.")
+    autonomy_level: Optional[str] = Field(default=None, description="Flow autonomy level.")
+    started_at: int = Field(default_factory=lambda: int(time.time()), description="Run start timestamp.")
+    finished_at: Optional[int] = Field(default=None, description="Run finish timestamp.")
+    input: Optional[Dict[str, Any]] = Field(default=None, description="Initial payload.")
+    output: Optional[Dict[str, Any]] = Field(default=None, description="Final output payload.")
+    summary: Dict[str, Any] = Field(default_factory=dict, description="Summary metadata for UI/state.")
 
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Run created timestamp (UTC).")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last updated timestamp (UTC).")
 
-    current_step_id: Optional[str] = Field(default=None, description="Current step pointer for resume.")
-    steps: List[StepRecord] = Field(default_factory=list, description="Step records (may be partial).")
+class RunOperationError(BaseModel):
+    """Structured error for run operations exposed via engine/gateway."""
 
-    summary: Optional[str] = Field(default=None, description="Short summary for UI/status endpoints.")
-    final_output_ref: Optional[ArtifactRef] = Field(default=None, description="Artifact ref to final output if any.")
-    meta: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata (sanitized).")
+    code: str = Field(default="run_error")
+    message: str
+    details: Dict[str, Any] = Field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Stable serialization wrapper."""
-        return self.model_dump(mode="python")
+
+class RunOperationResult(BaseModel):
+    """Envelope returned by orchestrator public methods (start/resume/get)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[RunOperationError] = None
+
+    @classmethod
+    def success(cls, data: Dict[str, Any]) -> "RunOperationResult":
+        return cls(ok=True, data=data, error=None)
+
+    @classmethod
+    def failure(cls, *, code: str, message: str, details: Optional[Dict[str, Any]] = None) -> "RunOperationResult":
+        return cls(ok=False, data=None, error=RunOperationError(code=code, message=message, details=details or {}))

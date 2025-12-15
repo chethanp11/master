@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import glob
 import importlib
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -109,7 +110,8 @@ def discover_products(products_dir: str) -> ProductRegistry:
             )
             reg.add(info)
         except (OSError, ValidationError) as e:
-            raise RuntimeError(f"Failed to load product manifest: {manifest_path} ({e})") from e
+            logger.warning("Skipping product manifest %s: %s", manifest_path, e)
+            continue
     return reg
 
 
@@ -141,3 +143,4 @@ def safe_register_all(registry: ProductRegistry, enabled_products: Optional[List
     for p in registry.list():
         if p.name in enabled_set:
             register_product(p)
+logger = logging.getLogger(__name__)

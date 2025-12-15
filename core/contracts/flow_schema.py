@@ -20,7 +20,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import AliasChoices, BaseModel, Field, ConfigDict
 
 # ==============================
 # Enums
@@ -56,7 +56,12 @@ class RetryPolicy(BaseModel):
 
     max_attempts: int = Field(default=1, ge=1, le=10, description="Max attempts including first try.")
     backoff_seconds: float = Field(default=0.0, ge=0.0, le=60.0, description="Fixed backoff between retries.")
-    retry_on_codes: List[str] = Field(default_factory=list, description="Optional list of error codes eligible for retry.")
+    retry_on_codes: List[str] = Field(
+        default_factory=list,
+        description="Optional list of error codes eligible for retry.",
+        validation_alias=AliasChoices("retry_on_codes", "retry_on"),
+        serialization_alias="retry_on_codes",
+    )
 
 
 class StepDef(BaseModel):
@@ -80,6 +85,8 @@ class StepDef(BaseModel):
     subflow: Optional[str] = Field(default=None, description="Subflow id/name when type=subflow.")
 
     message: Optional[str] = Field(default=None, description="Approval prompt when type=human_approval.")
+    title: Optional[str] = Field(default=None, description="Optional UI title for human approval steps.")
+    form: Dict[str, Any] = Field(default_factory=dict, description="Optional structured UI metadata.")
 
     params: Dict[str, Any] = Field(default_factory=dict, description="Step parameters/arguments.")
     retry: Optional[RetryPolicy] = Field(default=None, description="Retry policy for the step.")

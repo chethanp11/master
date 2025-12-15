@@ -29,34 +29,56 @@ class ToolRegistration:
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
-        self._tools: Dict[str, ToolRegistration] = {}
+    """
+    Global tool registry (class-level for simplicity).
+    """
 
+    _tools: Dict[str, ToolRegistration] = {}
+
+    @classmethod
+    def clear(cls) -> None:
+        cls._tools.clear()
+
+    @classmethod
     def register(
-        self,
-        *,
+        cls,
         name: str,
-        factory: ToolFactory,
+        factory: ToolFactory | BaseTool,
+        *,
         meta: Optional[Dict[str, Any]] = None,
         overwrite: bool = False,
     ) -> None:
         norm = _norm(name)
-        if not overwrite and norm in self._tools:
+        if not overwrite and norm in cls._tools:
             raise ValueError(f"Tool already registered: {name}")
-        self._tools[norm] = ToolRegistration(name=norm, factory=factory, meta=meta or {})
 
-    def resolve(self, name: str) -> BaseTool:
+        if isinstance(factory, BaseTool):
+            inst = factory
+
+            def _factory(inst: BaseTool = inst) -> BaseTool:
+                return inst
+
+            actual_factory: ToolFactory = _factory
+        else:
+            actual_factory = factory
+
+        cls._tools[norm] = ToolRegistration(name=norm, factory=actual_factory, meta=meta or {})
+
+    @classmethod
+    def resolve(cls, name: str) -> BaseTool:
         norm = _norm(name)
-        reg = self._tools.get(norm)
+        reg = cls._tools.get(norm)
         if reg is None:
             raise KeyError(f"Unknown tool: {name}")
         return reg.factory()
 
-    def has(self, name: str) -> bool:
-        return _norm(name) in self._tools
+    @classmethod
+    def has(cls, name: str) -> bool:
+        return _norm(name) in cls._tools
 
-    def list(self) -> Dict[str, Dict[str, Any]]:
-        return {k: {"name": v.name, "meta": v.meta} for k, v in self._tools.items()}
+    @classmethod
+    def list(cls) -> Dict[str, Dict[str, Any]]:
+        return {k: {"name": v.name, "meta": v.meta} for k, v in cls._tools.items()}
 
 
 def _norm(name: str) -> str:

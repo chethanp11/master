@@ -1,16 +1,26 @@
 # ==============================
 # Governance Policies
 # ==============================
+# This file defines the default governance behaviour. Settings follow the schema in
+# core.config.schema.PoliciesConfig and are merged with any per-product overrides.
+
 enforce: true
 allow_full_autonomy: false
 
-# If empty -> allow all unless blocked_tools is set.
+# If allowed_tools is empty the policy deems every registered tool allowed
+# unless it is explicitly listed in blocked_tools.
 allowed_tools: []
 blocked_tools: []
 
-# If empty -> allow all unless blocked_models is set.
+# Model routing works the same way — declare global allow/block lists.
 allowed_models: []
 blocked_models: []
 
-# Per-product policy overrides (optional)
-by_product: {}
+# Per-product overrides let you tailor behaviour for a single product.
+# Example below keeps `sandbox` limited to echo_tool and a single model.
+by_product:
+  sandbox:
+    allowed_tools:
+      - echo_tool
+    allowed_models:
+      - gpt-4o-mini
