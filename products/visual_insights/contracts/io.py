@@ -23,7 +23,7 @@ class RunResponse(BaseModel):
     run_id: str
     session_id: str
     cards: List[InsightCard]
-    trace_steps: List[str]
+    trace_steps: List[str] = []
 
 
 class ExportRequest(BaseModel):

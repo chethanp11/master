@@ -1,27 +1,49 @@
 from __future__ import annotations
 
-from typing import Dict
+##### Imports #####
+from typing import Dict, List
 
 from products.visual_insights.contracts.card import InsightCard
 from products.visual_insights.contracts.io import RunResponse, UploadRequest
 from products.visual_insights.contracts.modes import InsightMode
-from products.visual_insights.flows.steps.compute_step import ComputeInput, STEP_NAME as COMPUTE_STEP_NAME, run_step as compute_step
+from products.visual_insights.flows.steps.compute_step import (
+    ComputeInput,
+    STEP_NAME as COMPUTE_STEP_NAME,
+    run_step as compute_step,
+)
 from products.visual_insights.flows.steps.evidence_step import (
     EvidenceStepInput,
     STEP_NAME as EVIDENCE_STEP_NAME,
     run_step as evidence_step,
 )
-from products.visual_insights.flows.steps.export_step import ExportInput, STEP_NAME as EXPORT_STEP_NAME, run_step as export_step
-from products.visual_insights.flows.steps.ingest_step import IngestInput, STEP_NAME as INGEST_STEP_NAME, run_step as ingest_step
-from products.visual_insights.flows.steps.plan_step import PlanInput, STEP_NAME as PLAN_STEP_NAME, run_step as plan_step
+from products.visual_insights.flows.steps.export_step import (
+    ExportInput,
+    STEP_NAME as EXPORT_STEP_NAME,
+    run_step as export_step,
+)
+from products.visual_insights.flows.steps.ingest_step import (
+    IngestInput,
+    STEP_NAME as INGEST_STEP_NAME,
+    run_step as ingest_step,
+)
+from products.visual_insights.flows.steps.plan_step import (
+    PlanInput,
+    STEP_NAME as PLAN_STEP_NAME,
+    run_step as plan_step,
+)
 from products.visual_insights.flows.steps.profile_index_step import (
     ProfileIndexInput,
     STEP_NAME as PROFILE_STEP_NAME,
     run_step as profile_index_step,
 )
-from products.visual_insights.flows.steps.render_step import RenderInput, STEP_NAME as RENDER_STEP_NAME, run_step as render_step
+from products.visual_insights.flows.steps.render_step import (
+    RenderInput,
+    STEP_NAME as RENDER_STEP_NAME,
+    run_step as render_step,
+)
 
 
+##### Trace metadata #####
 STEP_TRACE_NAMES = [
     INGEST_STEP_NAME,
     PROFILE_STEP_NAME,
@@ -35,6 +57,7 @@ STEP_TRACE_NAMES = [
 ALLOWED_CHART_TYPES = {"line", "bar", "stacked_bar", "scatter", "table"}
 
 
+##### Guardrails #####
 def _validate_cards(cards: List[InsightCard]) -> None:
     for card in cards:
         if not card.citations:
@@ -43,6 +66,7 @@ def _validate_cards(cards: List[InsightCard]) -> None:
             raise ValueError(f"card {card.card_id} uses unsupported chart {card.chart_type}")
 
 
+##### Flow entry #####
 def run_visual_insights_v1(*, upload_request: UploadRequest, ctx: Dict[str, str]) -> RunResponse:
     run_id = ctx.get("run_id", "run_visual_insights_v1")
     session_id = ctx.get("session_id", "session_visual_insights_v1")

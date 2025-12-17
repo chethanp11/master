@@ -3,10 +3,15 @@
 # ==============================
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import pytest
 from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from core.config.schema import Settings
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
