@@ -1,6 +1,6 @@
 # Core Architecture — master/
 
-This document describes the **core architecture** of the `master/` agentic framework.  
+This document describes the **core architecture** of the `master/` agentic framework.
 It explains **what exists, why it exists, and how the pieces interact**, with enough detail for engineers to reason about changes without reading all the code.
 
 ---
@@ -16,12 +16,13 @@ The architecture follows these non-negotiable principles:
 - **Auditability > Cleverness**
 - **Pause / Resume is First-Class**
 
-Everything in `core/` is **product-agnostic**.  
+Everything in `core/` is **product-agnostic**.
 Everything in `products/` is **domain-specific**.
 
 ---
 
 ## 2. High-Level Layering
+
 ```
 ┌───────────────────────────────┐
 │           Products            │  ← Business logic only
@@ -73,30 +74,60 @@ flowchart TB
   ORC --> KNO
   ORC --> MOD
 ```
----
-
-## 3. Core Folder Structure (Detailed)
-```
-core/
-├── orchestrator/        # Flow engine and execution control
-├── agents/              # Agent contracts and registry
-├── tools/               # Tool contracts, registry, execution
-├── memory/              # Persistence and run state
-├── knowledge/           # Vector + structured retrieval helpers
-├── models/              # Model routing and providers
-├── governance/          # Policies, guardrails, security
-├── logging/             # Tracing, logging, metrics
-├── prompts/             # Shared prompt templates and helpers
-└── utils/               # Cross-cutting helpers (config, product loader, etc.)
-```
-Each module is described below.
 
 ---
 
-## 4. Orchestrator
+## 3. Configuration & Settings
 
-**Purpose:**  
-Controls flow execution, step sequencing, retries, HITL pauses, and resume.
+**Source of truth:** `core/config/loader.py` and `core/config/schema.py`.
+
+- Only the loader reads environment variables and secrets.
+- Precedence: `env` > `secrets/secrets.yaml` > `configs/*.yaml` > defaults.
+- `.env` is optional and does not override real env vars.
+- Environment overrides use `MASTER__` namespacing.
+
+```mermaid
+flowchart LR
+  ENV[os.environ] --> LOADER
+  DOTENV[.env] --> LOADER
+  CONFIGS[configs/*.yaml] --> LOADER
+  SECRETS[secrets/secrets.yaml] --> LOADER
+  LOADER --> SETTINGS[Settings (validated)]
+```
+
+---
+
+## 4. Product Discovery & Registration
+
+**Source of truth:** `core/utils/product_loader.py`.
+
+- Products are discovered under `products/`.
+- Required files:
+  - `manifest.yaml`
+  - `config/product.yaml`
+  - `registry.py`
+- Flows are loaded from `products/<product>/flows/*.yaml` (YAML only in v1).
+
+```mermaid
+flowchart TB
+  Manifest[manifest.yaml] --> Loader[Product Loader]
+  Config[config/product.yaml] --> Loader
+  Registry[registry.py] --> Loader
+  Flows[flows/*.yaml] --> Loader
+  Loader --> Catalog[ProductCatalog]
+  Catalog --> Orchestrator
+  Catalog --> Gateway
+```
+
+---
+
+## 5. Orchestrator
+
+**Source of truth:** `core/orchestrator/*`.
+
+Purpose: control flow execution, retries, HITL pauses, and resume.
+
+### Key Modules
 ```
 core/orchestrator/
 ├── engine.py
@@ -107,263 +138,312 @@ core/orchestrator/
 ├── error_policy.py
 └── hitl.py
 ```
+
 ### Responsibilities
-- Load flow definitions (YAML/manifest) via `FlowLoader`
-- Execute steps in order, honoring retry policies & backoff
-- Pause execution for HITL approvals and persist approvals
-- Resume execution deterministically using stored run/step snapshots
-- Emit trace events for every transition (run, step, tool, approval)
+- Load flow definitions (YAML/JSON) via `FlowLoader` from `products/<product>/flows/`.
+- Enforce autonomy policy **before** a run starts.
+- Execute steps in order, honoring retry policies & backoff.
+- Pause execution for HITL approvals and persist approvals.
+- Resume execution deterministically using stored run/step snapshots.
+- Emit trace events for every transition (run, step, tool, approval).
 
 ### What It Does NOT Do
-- Call models directly
-- Call tools directly
-- Persist data directly
-- Contain business logic
+- Call models directly.
+- Call tools directly.
+- Persist data directly.
+- Contain business logic.
+
+### Execution Flow (Sequence)
+```mermaid
+sequenceDiagram
+  participant Gateway as API/CLI
+  participant Engine as OrchestratorEngine
+  participant FlowLoader
+  participant Governance
+  participant StepExec as StepExecutor
+  participant ToolExec as ToolExecutor
+  participant Memory
+  participant Tracer
+
+  Gateway->>Engine: run_flow(product, flow, payload)
+  Engine->>FlowLoader: load(flow)
+  Engine->>Governance: check_autonomy
+  Engine->>Memory: create_run
+  Engine->>Tracer: run_started
+  loop steps
+    Engine->>Memory: add_step
+    Engine->>Governance: before_step
+    Engine->>Tracer: step_started
+    alt tool step
+      Engine->>StepExec: execute
+      StepExec->>ToolExec: execute(tool)
+      ToolExec->>Tracer: tool.executed
+      StepExec-->>Engine: ToolResult
+    else agent step
+      Engine->>StepExec: execute
+      StepExec-->>Engine: AgentResult
+    else human approval
+      Engine->>Memory: create_approval
+      Engine->>Tracer: pending_human
+      Engine-->>Gateway: PENDING_HUMAN
+    end
+    Engine->>Memory: update_step
+    Engine->>Tracer: step_completed
+  end
+  Engine->>Memory: update_run_status(COMPLETED)
+  Engine->>Tracer: run_completed
+  Engine-->>Gateway: COMPLETED
+```
+
+### Step Parameter Rendering
+`StepExecutor` replaces string values of the form `{{payload.<key>}}` using the run payload.
 
 ---
 
-## 5. Agents
+## 6. Flow Definitions & Contracts
 
-**Purpose:**  
-Encapsulate reasoning logic. Agents decide *what* to do, not *how* to do it.
-```
-core/agents/
-├── base.py
-├── registry.py
-└── utils.py
-```
-### Responsibilities
-- Consume `RunContext`/`StepContext` supplied via orchestrator
-- Perform reasoning or planning purely in-memory
-- Request tool execution via the orchestrator (never directly)
-- Return structured `AgentResult` (envelope + meta)
+**Source of truth:** `core/contracts/flow_schema.py`.
 
-### Constraints
-- Stateless
-- No IO
-- No tool execution
-- No persistence
+- `FlowDef` is the canonical flow structure.
+- Step types: `agent`, `tool`, `human_approval`, `subflow` (subflow is not implemented in v1).
+- Retry policy is declarative (`max_attempts`, `backoff_seconds`, `retry_on_codes`).
 
 ---
 
-## 6. Tools
+## 7. Governance & Security
 
-**Purpose:**  
-Encapsulate external actions (APIs, scripts, DB access).
-```
-core/tools/
-├── base.py
-├── registry.py
-├── executor.py
-└── backends/
-├── local_backend.py
-├── remote_backend.py
-└── mcp_backend.py
-```
-### Responsibilities
-- Validate inputs via Pydantic contracts
-- Execute actions via registered backends (local, future adapters)
-- Return structured `ToolResult` and never raise for expected failures
-- Surface governance errors & retries via `ToolExecutor`
+**Source of truth:** `core/governance/*`.
 
-### Constraints
-- No direct calls from agents
-- No persistence (memory router owns DB)
-- No retry loops (retry policy & orchestrator enforce)
+- `PolicyEngine` enforces tool/model allowlists and autonomy rules.
+- `GovernanceHooks` are the standard integration point for orchestrator and tools.
+- `SecurityRedactor` sanitizes payloads before persistence or logging.
 
----
-
-## 7. Memory
-
-**Purpose:**  
-Persist everything needed to audit, pause, and resume execution.
-```
-core/memory/
-├── base.py
-├── sqlite_backend.py
-├── in_memory.py
-└── router.py
-```
-### Stores
-- Runs, steps, approvals, trace events, artifacts, governance metadata
-### Key Guarantee
-> Any run can be resumed after a crash or restart because every approval and step state is persisted via SQLite (or in-memory for tests).
-
-### Key Guarantee
-> Any run can be resumed after a crash or restart.
-
----
-
-## 8. Knowledge (RAG + Structured Data)
-
-**Purpose:**  
-Provide retrieval capability for agents.
-```
-core/knowledge/
-├── base.py
-├── vector_store.py
-├── retriever.py
-└── structured.py
-```
-### Supports
-- Unstructured vector retrieval from the local sqlite vector store in `storage/vectors`
-- Structured helpers for CSV ingestion/querying (pandas fallback)
-- Ingest pipeline via `scripts/ingest_knowledge.py` that chunk documents with deterministic ids
-
----
-
-## 9. Models
-
-**Purpose:**  
-Centralize all LLM / embedding access.
-```
-core/models/
-├── router.py
-└── providers/
-├── openai_provider.py
-└── other_provider.py
-```
-### Responsibilities
-- Select models via a routing table (`core/models/router.py`)
-- Abstract vendor SDKs behind providers
-- Enforce model-level governance policies (per `configs/policies.yaml`)
-
-### Constraint
-> No other module may call vendors directly.
-
----
-
-## 10. Governance
-
-**Purpose:**  
-Enforce safety, policy, and enterprise constraints.
-```
-core/governance/
-├── policies.py
-├── security.py
-└── hooks.py
-```
-### Enforces
-- Allowed tools, autonomy levels, and model choices
-- Data redaction before logging/tracing
-- Flow/step restrictions and approval gating before execution/resume
-
-Governance hooks run:
+Hooks run:
+- At run initialization (autonomy check)
 - Before step execution
 - Before tool execution
-- Before flow completion
+- Before run completion
+
+```mermaid
+flowchart LR
+  ORC[Orchestrator] --> HOOKS[Governance Hooks]
+  TOOL[ToolExecutor] --> HOOKS
+  HOOKS --> POLICY[Policy Engine]
+  HOOKS --> REDACT[Security Redactor]
+  HOOKS --> DECISION[Allow/Deny]
+  DECISION --> ORC
+```
 
 ---
 
-## 11. Logging & Observability
+## 8. Tools & Backends
 
-**Purpose:**  
-Provide full traceability.
+**Source of truth:** `core/tools/*`.
+
+- Tools execute only through `ToolExecutor`.
+- Backends:
+  - `LocalToolBackend` (in-process)
+  - `RemoteToolBackend` (stub, not implemented)
+  - `MCPBackend` (stub, disabled by default)
+
+```mermaid
+sequenceDiagram
+  participant StepExec as StepExecutor
+  participant ToolExec as ToolExecutor
+  participant Governance
+  participant Backend
+  participant Tool
+
+  StepExec->>ToolExec: execute(tool, params)
+  ToolExec->>Governance: before_tool_call
+  alt local backend
+    ToolExec->>Backend: LocalToolBackend.run
+    Backend->>Tool: run(params)
+    Tool-->>Backend: ToolResult
+  else remote/mcp backend
+    ToolExec->>Backend: run
+    Backend-->>ToolExec: ToolResult (error stub)
+  end
+  ToolExec-->>StepExec: ToolResult
 ```
-core/logging/
-├── logger.py
-├── tracing.py
-└── metrics.py
-```
-### Guarantees
-- Every step, tool, pause, resume, and error is traced (`tracing.py`)
-- Trace events persist via the memory router for API/UI visibility
-- Metrics/alerts can hook into `metrics.py` for observability
 
 ---
 
-## 12. Contracts & Envelopes
+## 9. Memory & Persistence
 
-**Purpose:**  
-Ensure every cross-boundary interaction (agents, tools, orchestrator, API) is typed and auditable.
+**Source of truth:** `core/memory/*`.
 
-Location:
-`core/contracts/agent_schema.py`, `core/contracts/tool_schema.py`, `core/contracts/flow_schema.py`, `core/contracts/run_schema.py`
+Memory is the only layer allowed to persist state.
 
-Responsibilities:
-- Define `AgentResult`, `ToolResult`, `RunRecord`, `StepRecord`, and `TraceEvent` envelopes.
-- Provide enums (`RunStatus`, `StepStatus`, `AutonomyLevel`, `AgentErrorCode`, `ToolErrorCode`) so runtime data never uses ad-hoc strings.
-- Supply `FlowDef`/`StepDef`/`RetryPolicy` consumed by flow loader/engine for retries, autonomy, and HITL semantics.
-- Guarantee serialization via `.model_dump()` so gateway/API/UI/tracer receive consistent sanitized payloads.
+### Backends
+- `SQLiteBackend` (durable; default)
+- `InMemoryBackend` (test/dev; non-durable)
 
-Any module that crosses the agent-to-tool/orchestrator boundary returns these contracts instead of raw dicts.
+### SQLite Tables (v1)
+- `runs`
+- `steps`
+- `events` (trace events)
+- `approvals`
+
+```mermaid
+erDiagram
+  RUNS {
+    string run_id PK
+    string product
+    string flow
+    string status
+    string autonomy
+    int started_at
+    int finished_at
+    text input_json
+    text output_json
+    text summary_json
+  }
+  STEPS {
+    string run_id PK
+    string step_id PK
+    int step_index
+    string name
+    string type
+    string status
+    int started_at
+    int finished_at
+    text input_json
+    text output_json
+    text error_json
+    text meta_json
+  }
+  EVENTS {
+    int id PK
+    string run_id
+    string step_id
+    string product
+    string flow
+    string kind
+    int ts
+    text payload_json
+  }
+  APPROVALS {
+    string approval_id PK
+    string run_id
+    string step_id
+    string product
+    string flow
+    string status
+    string requested_by
+    int requested_at
+    string resolved_by
+    int resolved_at
+    string decision
+    string comment
+    text payload_json
+  }
+  RUNS ||--o{ STEPS : has
+  RUNS ||--o{ EVENTS : has
+  RUNS ||--o{ APPROVALS : has
+```
 
 ---
 
-## 12. Prompts
+## 10. Logging, Tracing, Metrics
 
-**Purpose:**  
-Centralize prompt templates.
+**Source of truth:** `core/logging/*`.
+
+- `Tracer` sanitizes and persists `TraceEvent` via memory.
+- `logger.py` emits JSON-formatted logs.
+- `metrics.py` provides in-memory counters/timers (no exporters in v1).
+
+```mermaid
+flowchart TB
+  Event[TraceEvent] --> Redactor[SecurityRedactor]
+  Redactor --> Tracer
+  Tracer --> Memory[MemoryBackend]
+  Tracer --> Logs[Structured Logs]
 ```
-core/prompts/
-├── system/
-├── tasks/
-└── fewshot/
-```
-Used by products and agents but owned by the platform.
 
 ---
 
-## 13. Products
+## 11. Models
 
-**Purpose:**  
-Define business logic without touching core.
-```
-products//
-├── flows/
-├── agents/
-├── tools/
-├── prompts/
-├── config/
-└── tests/
-```
-### Product Capabilities
-- Define flows (`flows/*.yaml`) that reference registered agents/tools
-- Provide agents/tools that obey platform laws
-- Ship product-specific prompts/configs/registries without touching core
+**Source of truth:** `core/models/*`.
 
-### Product Limitations
-- Cannot modify execution engine
-- Cannot bypass governance
-- Cannot persist state outside `core/memory`
+- `ModelRouter` selects provider/model by product/purpose.
+- Providers live under `core/models/providers/`.
+- v1 providers are **stubs** and do not call external APIs.
+
+---
+
+## 12. Knowledge Layer
+
+**Source of truth:** `core/knowledge/*` and `scripts/ingest_knowledge.py`.
+
+- SQLite-backed chunk store with lexical scoring (Jaccard).
+- Structured access reads CSV deterministically (pandas optional).
+- Ingestion is the only write path into the store.
+
+```mermaid
+flowchart TB
+  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Store --> Retriever[Retriever]
+  Retriever --> Orchestrator
+  Orchestrator --> Agents
+```
+
+---
+
+## 13. Contracts & Envelopes
+
+**Source of truth:** `core/contracts/*`.
+
+- `AgentResult` and `ToolResult` are mandatory envelopes.
+- Run records (`RunRecord`, `StepRecord`, `TraceEvent`) enforce stable persistence and serialization.
 
 ---
 
 ## 14. Gateway
 
-**Purpose:**  
-Expose the platform.
-```
-gateway/
-├── api/
-├── ui/
-└── cli/
-```
-### API
-- Run flows (`/api/run/{product}/{flow}`)
-- Resume HITL approvals (`/api/resume_run/{run_id}`)
-- Fetch run status/approvals and product catalog
+**Source of truth:** `gateway/*`.
 
-### UI
-- Streamlit control center (`gateway/ui/platform_app.py`) that lists products and flows, runs flows, and shows approvals/run history
-- Communicates exclusively with the gateway API and keeps state in Streamlit `session_state`
+- API: `gateway/api` (FastAPI)
+- UI: `gateway/ui` (Streamlit control center)
+- CLI: `gateway/cli` (argparse)
+
+The CLI calls the orchestrator directly; the UI talks only to the API.
 
 ---
 
-## 15. Adding a New Product (No Core Changes)
+## 15. Run Lifecycle (Status Model)
+
+**Source of truth:** `core/contracts/run_schema.py`, `core/orchestrator/state.py`.
+
+```mermaid
+stateDiagram-v2
+  [*] --> RUNNING
+  RUNNING --> PENDING_HUMAN: approval needed
+  PENDING_HUMAN --> RUNNING: approved
+  PENDING_HUMAN --> FAILED: rejected
+  RUNNING --> COMPLETED: success
+  RUNNING --> FAILED: error
+  RUNNING --> CANCELLED
+  COMPLETED --> [*]
+  FAILED --> [*]
+  CANCELLED --> [*]
+```
+
+---
+
+## 16. Adding a New Product (No Core Changes)
 
 Steps:
-1. Create `products/<new_product>/`
-2. Define flows in YAML
-3. Add agents/tools
-4. Register via manifest
-5. UI auto-discovers product
-
-No changes required in `core/`.
+1. Create `products/<new_product>/`.
+2. Add `manifest.yaml` and `config/product.yaml`.
+3. Implement agents/tools and register them in `registry.py`.
+4. Add flows under `flows/`.
+5. UI/API auto-discover the product when enabled.
 
 ---
 
-## 16. Why This Architecture Scales
+## 17. Why This Architecture Scales
 
 - Clear ownership boundaries
 - Strong contracts
@@ -373,5 +453,3 @@ No changes required in `core/`.
 - Resume-safe execution
 
 This is a **platform**, not a bot.
-
----

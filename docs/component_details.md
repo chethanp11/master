@@ -1,7 +1,10 @@
 # Component Details
 
 This document summarizes the major components in the `master` codebase, including their code
-paths, intent, and key technical characteristics.
+paths, intent, and key technical characteristics. It mirrors the codebase structure and
+highlights how components collaborate at runtime.
+
+---
 
 ## Top-Level Structure
 
@@ -12,13 +15,13 @@ paths, intent, and key technical characteristics.
 | `/core` | Core runtime | Houses the reusable orchestration, tool, and agent infrastructure shared by every product. | Pure Python package, typed and organized into submodules (agents, tools, orchestrator, memory, etc.). |
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
-| `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfiles, docker-compose, and k8s manifests (no Terraform in v1). |
-| `/logs` | Local log sink | Default on-disk location for structured run logs. | Writable at runtime; `core/logging/logger.py` (plus tracing/metrics) routes events here. |
+| `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfile, docker-compose, and k8s manifests. |
+| `/logs` | Local log sink | Default on-disk location for structured run logs. | `core/logging/logger.py` and tracer mirror events here. |
 | `/products` | Product packs | Individual product definitions (flows, agents, prompts, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
-| `/scripts` | Ops scripts | Helper scripts for maintenance (e.g., data migrations, health checks). | Python/Bash utilities executed manually or via CI. |
+| `/scripts` | Ops scripts | Helper scripts for scaffolding, ingestion, and migrations. | `create_product.py`, `ingest_knowledge.py`, `migrate_memory.py`, `run_flow.py`. |
 | `/storage` | Persistent state | Storage folders for artifacts and memory DB files. | Includes `storage/{memory,raw,processed,vectors}` for local/dev use. |
-| `/tests` | Automated tests | Comprehensive Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `tests/products`; exercises registries, orchestrator, governance, memory, and UI layers via sqlite-based fixtures. |
-| `/pyproject.toml` / `/requirements.txt` | Build metadata | Poetry/PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions for agents, orchestration, and gateway. |
+| `/tests` | Automated tests | Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `products/*/tests`. |
+| `/pyproject.toml` / `/requirements.txt` | Build metadata | PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions. |
 
 ```mermaid
 flowchart LR
@@ -32,137 +35,275 @@ flowchart LR
   LOGS[logs/] --> CORE
 ```
 
+---
+
 ## Core Package (`/core`)
-
-### Agents
-
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `core/agents/base.py` | `BaseAgent` | Abstract contract all agents must follow (goal-driven, no env reads, no direct tool calls). | Defines `BaseAgent.run(step_context)` returning `AgentResult`; enforces config injection and StepContext usage. |
-| `core/agents/registry.py` | Agent registry | Global dependency injection container that maps agent names to factories. | Normalizes names, prevents duplicates, and returns fresh agent instances upon resolution. |
-| `core/agents/__init__.py` & submodules | Concrete agents | Product/platform-specific agent implementations registered at boot. | Agents rely on `core.contracts.agent_schema.AgentResult` for outputs. |
-
-### Tools
-
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `core/tools/base.py` | `BaseTool` | Shared contract for tools invoked by agents via the orchestrator. | Provides `run(params, StepContext)` abstract method returning `ToolResult`; configuration injected via constructor. |
-| `core/tools/executor.py` | Tool executor | Centralized dispatcher that validates tool calls and executes the concrete tool implementations. | Handles serialization, audit logging, and ensures sandboxing policies defined in configs. |
-| `core/tools/*` | Built-in tools | Standard tool catalog (filesystem, git, HTTP, LLM adapters, etc.). | Each inherits `BaseTool` and is registered through the tool registry. |
 
 ### Orchestrator
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/orchestrator/context.py` | `RunContext/StepContext` | Provides run metadata, shared artifacts, and tracing hooks to agents/tools. | Pydantic models propagated through orchestrator; tracks status, artifacts, and trace hook wiring. |
-| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef, persists runs via `memory.router`, interacts with `hitl`, emits trace events. |
-| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from product manifests. | Validates manifests, resolves agent/tool bindings, normalizes retry metadata. |
-| `core/orchestrator/runners.py` | Flow runners | Entry points for synchronous or HITL flows. | Instantiates `OrchestratorEngine` and exposes simple helper wrappers. |
-| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Routes through `ToolExecutor`, `AgentRegistry`, enforces `error_policy`, emits attempt traces. |
-| `core/orchestrator/state.py` | Run state manager | Tracks per-run/step snapshots and approval metadata. | Hooks into `memory.router` for persistence and supports resume queries. |
-| `core/orchestrator/error_policy.py` / `core/orchestrator/hitl.py` | Guardrails | Retry policies, HITL approvals, and error handling. | Ensures retries/backoff only via flow definitions and persists approvals safely. |
+| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy policy, persists runs/steps, emits trace events. |
+| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML/JSON. | Validates and normalizes step ids; no execution or persistence. |
+| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
+| `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
+| `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
+| `core/orchestrator/runners.py` | Convenience wrappers | Thin helpers for CLI/API. | Calls OrchestratorEngine directly. |
+
+```mermaid
+sequenceDiagram
+  participant Gateway as API/CLI
+  participant Engine
+  participant FlowLoader
+  participant Governance
+  participant StepExec
+  participant ToolExec
+  participant Memory
+  participant Tracer
+
+  Gateway->>Engine: run_flow
+  Engine->>FlowLoader: load
+  Engine->>Governance: check_autonomy
+  Engine->>Memory: create_run
+  Engine->>Tracer: run_started
+  Engine->>StepExec: execute step
+  StepExec->>ToolExec: execute tool
+  ToolExec->>Tracer: tool.executed
+  StepExec-->>Engine: result
+  Engine->>Memory: update_step
+  Engine->>Tracer: step_completed
+```
+
+### Agents
+
+| Code Path | Code Name | Functional Details | Technical Details |
+| --- | --- | --- | --- |
+| `core/agents/base.py` | `BaseAgent` | Abstract contract for agents. | `run(step_context)` returns `AgentResult`. |
+| `core/agents/registry.py` | Agent registry | Global DI container for agent factories. | Case-normalized name resolution; new instance per resolution. |
+
+### Tools
+
+| Code Path | Code Name | Functional Details | Technical Details |
+| --- | --- | --- | --- |
+| `core/tools/base.py` | `BaseTool` | Tool contract used by products. | `run(params, ctx)` returns `ToolResult`. |
+| `core/tools/executor.py` | Tool executor | Central dispatcher for tool execution. | Applies governance hooks and redaction; emits trace events. |
+| `core/tools/backends/local_backend.py` | Local backend | In-process tool execution. | Calls Python tool implementation directly. |
+| `core/tools/backends/remote_backend.py` | Remote backend (stub) | Placeholder for HTTP/gRPC tools. | Returns error in v1. |
+| `core/tools/backends/mcp_backend.py` | MCP backend (stub) | Placeholder for MCP tools. | Disabled by default; returns error in v1. |
+
+```mermaid
+sequenceDiagram
+  participant StepExec
+  participant ToolExec
+  participant Governance
+  participant Backend
+  participant Tool
+
+  StepExec->>ToolExec: execute(tool, params)
+  ToolExec->>Governance: before_tool_call
+  alt local backend
+    ToolExec->>Backend: LocalToolBackend.run
+    Backend->>Tool: run
+    Tool-->>Backend: ToolResult
+  else stub backend
+    ToolExec->>Backend: run
+    Backend-->>ToolExec: ToolResult (error)
+  end
+  ToolExec-->>StepExec: ToolResult
+```
 
 ### Memory
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/memory/base.py` | Memory interfaces | Contracts for adapters (runs, steps, events, approvals). | Shared base classes consumed by routers/backends. |
-| `core/memory/in_memory.py` | In-memory store | Lightweight cache for ephemeral artifacts/context (tests/dev). | Python dict-based backend with predictable semantics. |
-| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence (runs/steps/events/approvals). | Writes to `storage/memory/*.db` or configured path; auto-migrates schema. |
-| `core/memory/router.py` | Memory router | Chooses appropriate backend (in-memory vs SQLite) and exposes CRUD helpers. | Used by orchestrator, API, CLI, tests, and HITL service. |
+| `core/memory/base.py` | Memory interfaces | Contracts for adapters (runs, steps, events, approvals). | Base classes consumed by routers/backends. |
+| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence. | Stores runs, steps, events, approvals in SQLite. |
+| `core/memory/in_memory.py` | In-memory backend | Lightweight store for tests/dev. | Dict-backed, non-durable. |
+| `core/memory/router.py` | Memory router | Chooses appropriate backend and exposes CRUD. | Used by orchestrator, API, CLI, tracer. |
 
-### Contracts & Models
+```mermaid
+erDiagram
+  RUNS {
+    string run_id PK
+    string product
+    string flow
+    string status
+    string autonomy
+    int started_at
+    int finished_at
+    text input_json
+    text output_json
+    text summary_json
+  }
+  STEPS {
+    string run_id PK
+    string step_id PK
+    int step_index
+    string name
+    string type
+    string status
+    int started_at
+    int finished_at
+    text input_json
+    text output_json
+    text error_json
+    text meta_json
+  }
+  EVENTS {
+    int id PK
+    string run_id
+    string step_id
+    string product
+    string flow
+    string kind
+    int ts
+    text payload_json
+  }
+  APPROVALS {
+    string approval_id PK
+    string run_id
+    string step_id
+    string product
+    string flow
+    string status
+    string requested_by
+    int requested_at
+    string resolved_by
+    int resolved_at
+    string decision
+    string comment
+    text payload_json
+  }
+  RUNS ||--o{ STEPS : has
+  RUNS ||--o{ EVENTS : has
+  RUNS ||--o{ APPROVALS : has
+```
+
+### Governance & Security
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/contracts/agent_schema.py` | Agent result schema | Pydantic models for agent envelopes, errors, and output payloads. | Enforces serialization for gateway responses and logging. |
-| `core/contracts/tool_schema.py` | Tool result schema | Standard response object for tool execution. | Includes metadata (status, artifacts) and optional error payloads. |
-| `core/models/*` | Model integrations | LLM/model abstractions (OpenAI, Anthropic, local). | Provide typed interfaces to upstream SDKs; configs pulled from `/configs/models.yaml`. |
+| `core/governance/policies.py` | Policy engine | Evaluates tool/model allowlists and autonomy rules. | Per-product overrides supported. |
+| `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy check at run start; tool/step checks at execution. |
+| `core/governance/security.py` | Redaction | Scrubs secrets/PII from payloads. | Regex + key-hint based sanitization. |
 
-### Governance & Knowledge
+```mermaid
+flowchart LR
+  ORC[Orchestrator] --> HOOKS[Governance Hooks]
+  TOOL[ToolExecutor] --> HOOKS
+  HOOKS --> POLICY[Policy Engine]
+  HOOKS --> REDACT[Security Redactor]
+```
+
+### Models
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/governance/policies.py` | Policy engine | Defines guardrails (tool allowlists, autonomy, approvals). | Consulted by governance hooks before tool execution/resume decisions. |
-| `core/governance/security.py` / `core/governance/hooks.py` | Security + hooks | Redact PII/secrets and deliver allow/deny decisions. | Hooks drive tool executor/governance events with structured payloads. |
-| `core/knowledge/{base.py,vector_store.py,retriever.py,structured.py}` | Knowledge interfaces | Local vector/structured helpers for retrieval. | Provides chunk contracts, sqlite-backed vector store under `storage/vectors`, and ingestion helpers. |
+| `core/models/router.py` | Model router | Selects provider/model per product/purpose. | Enforces model policies. |
+| `core/models/providers/openai_provider.py` | OpenAI provider (stub) | Placeholder adapter. | No network calls in v1. |
+| `core/models/providers/other_provider.py` | Other provider (stub) | Placeholder adapter. | Returns structured error in v1. |
 
-### Logging & Utils
+### Knowledge
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/logging/{logger.py,tracing.py,metrics.py}` | Logging + telemetry | Configures logging, traces, and metrics using `/configs/logging.yaml`. | Centralized wrappers around Python logging and OTEL exporters; tracing persists events via `memory.router`. |
-| `core/utils/*` | Utilities | Helpers for file IO, JSON/YAML parsing, time handling, retries. | Pure functions with Pytest coverage. |
+| `core/knowledge/vector_store.py` | Vector store | SQLite-backed chunk store. | Lexical Jaccard scoring in v1. |
+| `core/knowledge/retriever.py` | Retriever | Thin wrapper over VectorStore. | Adds filters/top_k defaults. |
+| `core/knowledge/structured.py` | Structured access | Deterministic CSV reads. | Pandas optional; no SQL. |
+
+```mermaid
+flowchart TB
+  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Store --> Retriever[Retriever]
+  Retriever --> Orchestrator
+  Orchestrator --> Agents
+```
+
+### Logging & Metrics
+
+| Code Path | Code Name | Functional Details | Technical Details |
+| --- | --- | --- | --- |
+| `core/logging/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend. |
+| `core/logging/logger.py` | Logger | JSON log formatting. | Structured context fields (run_id, step_id, product, flow). |
+| `core/logging/metrics.py` | Metrics | In-memory counters/timers. | No external exporters in v1. |
+
+---
 
 ## Gateway (`/gateway`)
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `gateway/api/http_app.py` | FastAPI factory | Builds the HTTP API exposing run/flow endpoints. | Includes `gateway.api.routes_run` router under `/api`; uses dependency providers in `deps.py`. |
-| `gateway/api/routes_run.py` | Run routes | REST endpoints for submitting requirements, querying runs, and streaming logs. | Calls into `core.orchestrator.runner` and serializes `AgentResult`/`ToolResult` objects. |
-| `gateway/cli/main.py` | CLI entry | Argparse CLI for developers to trigger flows locally (inspect, run, list products). | Shares config loading with API, uses same registries. |
-| `gateway/ui/platform_app.py` | Streamlit UI | Single-file Streamlit dashboard for v1 run monitoring. | Communicates with API via HTTP/websocket helpers. |
+| `gateway/api/http_app.py` | FastAPI factory | Builds API router and app. | `/api` routes wired in `routes_run.py`. |
+| `gateway/api/routes_run.py` | Run routes | Starts/resumes flows and reads runs. | Uses orchestrator + product catalog. |
+| `gateway/cli/main.py` | CLI entry | Argparse CLI for local runs. | Directly calls orchestrator. |
+| `gateway/ui/platform_app.py` | Streamlit UI | Control center for products, runs, approvals. | Talks to API only. |
+
+---
 
 ## Products (`/products`)
 
-Each folder under `/products` is a “product pack” with:
-- `manifest.yaml`: product metadata + enabled flows.
-- `config/product.yaml`: product-specific configuration injected into agents/tools.
-- `/agents`: custom agent implementations inheriting from `BaseAgent`.
-- `/tools`: product-specific tools.
-- `/prompts`: curated prompt assets (if still required).
-- `/tests`: optional product-level tests.
+Each product pack includes:
+- `manifest.yaml`
+- `config/product.yaml`
+- `flows/*.yaml`
+- `agents/` and `tools/`
+- `registry.py`
+- `tests/`
 
-Example entry:
+Products are discovered and registered by `core/utils/product_loader.py`.
 
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `products/example_app/manifest.yaml` | Example product manifest | Declares supported flows (e.g., `build_app`, `diagnose_bug`), governance overrides. | Parsed by product loader at startup and registered with the gateway. |
+---
 
 ## Configurations (`/configs`)
 
 | File | Purpose | Notes |
 | --- | --- | --- |
-| `app.yaml` | Global app metadata (name, version, telemetry flags). | Loaded during gateway boot. |
-| `logging.yaml` | Logging formatting and sink settings. | Supports local file, stdout, OTEL exporters. |
-| `models.yaml` | LLM/model catalog with provider keys and rate limits. | Entries referenced by agents via config injection. |
-| `policies.yaml` | Governance rules (tool allowlists, approval requirements). | Consumed by `core.governance`. |
-| `products.yaml` | Product enablement list and default configs. | Boot loader reads this to know which products to register. |
+| `app.yaml` | Global app metadata | Host/ports, paths, flags. |
+| `logging.yaml` | Logging config | Level, redaction, sinks. |
+| `models.yaml` | Model routing | Provider and model defaults. |
+| `policies.yaml` | Governance rules | Tool/model allowlists, autonomy. |
+| `products.yaml` | Product enablement | Discovery settings. |
 
-## Infrastructure & Scripts
+---
 
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `/infra` | Containers + K8s | Dockerfile, docker-compose, and k8s manifests for local/prod. | Standard multi-stage build with `infra/Dockerfile`. |
-| `/scripts` | Ops scripts | Helper scripts for product scaffolding, knowledge ingest, and memory migration. | `scripts/create_product.py`, `scripts/ingest_knowledge.py`, `scripts/migrate_memory.py`, `scripts/run_flow.py`. |
+## Tests
 
-## Storage & Logs
-
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `/storage/{memory,raw,processed,vectors}` | Local storage backend | Keeps artifacts, SQLite memory DBs, processed assets for dev/local runs. | File-based; mirrors remote stores for portability. |
-| `/logs` | Runtime logs | Stores structured JSON logs and rotation strategy per config. | Ensures developer visibility without external services. |
-
-## Tests (`/tests` and product tests)
-
-| File/Path | Purpose | Technical Notes |
+| Path | Purpose | Notes |
 | --- | --- | --- |
-| `tests/core` | Unit/regression suites for core subsystems (contracts, agents, tools, governance, orchestrator, memory). | Examples: `test_contracts.py`, `test_agents_core.py`, `test_tools_core.py`, `test_governance_core.py`, `test_orchestrator.py`, `test_memory_core.py`. Relies on sqlite fixtures and deterministic fake backends. |
-| `tests/integration` | End-to-end integration flows covering CLI, API, UI, knowledge, and resilience suites. | Examples: `test_sample_flows.py`, `test_api_runs.py`, `test_cli_runs.py`, `test_ui_smoke.py`, `test_knowledge_ingest.py`, `test_resilience_retries_timeouts.py`, `test_concurrency_isolation.py`. |
-| `products/*/tests` | Product-specific regression suites (golden paths + flows). | Each product may add tests that leverage the shared orchestrator; sandbox ships `products/sandbox/tests/test_sandbox_flow.py` as the canonical HITL workflow. |
+| `tests/core` | Unit/regression suites for core subsystems. | Orchestrator, memory, governance, tools, contracts. |
+| `tests/integration` | End-to-end flows. | CLI, API, UI, knowledge, resilience. |
+| `products/*/tests` | Product regressions. | Golden paths for each product. |
+
+---
 
 ## Component Relationships
 
-- **Gateway** (API/CLI/UI) ingests user requirements and instantiates **core orchestrator** flows.
-- Orchestrator resolves **agents** via the registry, which may emit **tool** requests executed by the Tool Executor.
-- Execution results, artifacts, and traces are written to **memory** and **storage**, while governance checks consult **configs/policies**.
-- Products bundle their own agents/tools and register them during gateway boot, extending the shared platform without modifying `core`.
+- Gateway (API/CLI/UI) invokes the core orchestrator.
+- Orchestrator executes steps via tool and agent registries.
+- Tool execution flows through `ToolExecutor` with governance checks.
+- Memory persists runs, steps, events, and approvals.
+- Tracing emits sanitized events to memory + logs.
+
+```mermaid
+flowchart LR
+  Gateway --> Orchestrator
+  Orchestrator --> AgentRegistry
+  Orchestrator --> ToolExecutor
+  ToolExecutor --> ToolBackend
+  Orchestrator --> Memory
+  Orchestrator --> Tracer
+  Tracer --> Memory
+```
+
+---
 
 ## Technical Standards Recap
 
-- Agents/tools never read environment variables directly; configurations are injected from `configs/*`.
-- All agent/tool outputs must use the contracts in `core/contracts/*` (Pydantic models) to ensure gateway serialization.
-- Logging goes through `core.logging` so that monitoring/observability hooks can process events uniformly.
-- Governance and policy checks are centralized; products can only extend them via declarative configs, not bypass them.
+- Agents/tools never read environment variables directly.
+- All agent/tool outputs must use Pydantic contracts.
+- Logging goes through `core.logging`.
+- Governance checks are centralized and non-bypassable.
+
+---
 
 This document should be updated whenever new top-level components or subsystems are added.
