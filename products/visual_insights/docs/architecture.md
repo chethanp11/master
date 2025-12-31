@@ -1,24 +1,22 @@
 # Visual Insights — Architecture (v1)
 
 ## Decision Chain
-- **User upload** → `UploadRequest` containing CSV/PDF `FileRef`s and selected `InsightMode`.  
-- **Planner agent** (`InsightPlannerAgent`) produces an `InsightPlan` (card specs + required tools).  
-- **Tools** execute: ingest → profile → analytics (aggregate/anomaly/driver) → retrievals → chart spec → assembly.  
-- **Viz agent** (`VizAgent`) picks one of five allowed chart types before cards are rendered.  
-- **Cards** come back as `InsightCard` objects that include chart spec, narrative template, metrics, and citations.  
-- **Export** step renders cards into a governance-ready PDF artifact.
+- **User input** → dataset is staged under `observability/<product>/<run_id>/input/`.  
+- **Planning agent** selects the next step when a replan is requested.  
+- **Tools** execute: read → detect anomalies → recommend chart → build chart spec → assemble card.  
+- **Human approvals** gate visualization and export decisions.  
+- **Cards** are emitted as `InsightCard` objects with chart spec, narrative, metrics, and citations.  
+- **Export** writes a PDF and a JSON stub to `observability/<product>/<run_id>/output/`.
 
 ## Orchestrator Responsibilities
-- Controls the run lifecycle (ingest → profile → plan → compute → evidence → render → export).  
-- Emits trace markers (`ingest:start`, `plan:end`, etc.) so each step/tool call is auditable.  
-- Ensures agents stay stateless and rely on `core/tools/executor.py` for any execution.  
-- Applies guardrails before returning `RunResponse`: citations present and chart types limited to the allowed five.
+- Controls the run lifecycle (plan → read → detect_anomalies → recommend_chart → summarize → approval → build_chart_spec → assemble_card → approval_export → export).  
+- Emits trace events per step/tool call into `observability/.../runtime/events.jsonl`.  
+- Ensures agents stay stateless and rely on `core/tools/executor.py` for execution.  
+- Applies guardrails via contracts and tool validation (chart types limited to the allowed set).
 
 ## Contracts & Data Flow
-- `UploadRequest` → describes files, mode, optional prompt.  
-- `InsightPlan` → ordered `PlanStep`s and `CardSpec`s (intent + preferred chart).  
 - `InsightCard` → final output with chart_type (line/bar/stacked_bar/scatter/table), key metrics, narrative, assumptions, citations, and optional data slices.  
-- `RunResponse` → includes cards + `trace_steps`.
+- `response.json` → emitted on completion with run/step/approval records and artifacts.
 
 ## Determinism & Optional LLMs
 - All tooling (anomalies, driver analysis, chart spec, assembly) is deterministic and rule-based in v1.  

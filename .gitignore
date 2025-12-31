@@ -28,6 +28,7 @@ secrets/*.jks
 # ==============================
 storage/
 logs/
+observability/
 
 # ==============================
 # Python Cache / Build Artifacts

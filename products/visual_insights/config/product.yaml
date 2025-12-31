@@ -46,13 +46,6 @@ metadata:
       default: "Summarize key trends and highlight anomalies."
     outputs:
       enabled: true
-  visual_insights_config:
-    inputs:
-      allowed_types:
-        - "csv"
-        - "pdf"
-      max_files: 10
-      max_file_size_mb: 25
     modes:
       allowed:
         - "summarize_dataset"

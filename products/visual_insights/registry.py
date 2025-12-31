@@ -41,8 +41,6 @@ from products.visual_insights.tools.data_reader import build as build_data_reade
 from products.visual_insights.tools.detect_anomalies import build as build_detect_anomalies
 from products.visual_insights.tools.driver_analysis import build as build_driver_analysis
 from products.visual_insights.tools.export_pdf import build as build_export_pdf
-from products.visual_insights.tools.ingest_files import build as build_ingest_files
-from products.visual_insights.tools.profile_index import build as build_profile_index
 from products.visual_insights.tools.recommend_chart import build as build_recommend_chart
 
 
@@ -55,6 +53,4 @@ def register(registries: ProductRegistries) -> None:
     registries.tool_registry.register(build_detect_anomalies().name, build_detect_anomalies)
     registries.tool_registry.register(build_driver_analysis().name, build_driver_analysis)
     registries.tool_registry.register(build_assemble_insight_card().name, build_assemble_insight_card)
-    registries.tool_registry.register(build_ingest_files().name, build_ingest_files)
-    registries.tool_registry.register(build_profile_index().name, build_profile_index)
     registries.tool_registry.register(build_export_pdf().name, build_export_pdf)
