@@ -7,7 +7,7 @@ Products are thin bundles that plug into the shared runtime; **no core changes a
 
 ## 1. Product Principles
 
-- Thin: products only define flows, agents, tools, prompts, and config.
+- Thin: products only define flows, agents, tools, and config.
 - Safe: obey the platform laws (no env reads outside config loader, no persistence outside `core/memory`, no direct tool execution).
 - Declarative: flows/prompts/policies belong in YAML; behavior is wired via manifests.
 - Testable: each product can ship regression suites that run via sqlite.
@@ -25,7 +25,6 @@ products/<product>/
 ├── agents/                        # BaseAgent implementations
 ├── tools/                         # BaseTool implementations
 ├── registry.py                    # Safe registration hook (ProductRegistries)
-├── prompts/                       # Optional prompt assets
 └── tests/                         # Optional product-level regression tests
 ```
 
@@ -39,7 +38,7 @@ flowchart TB
   Loader --> Gateway
 ```
 
-`scripts/create_product.py <name>` scaffolds this layout with placeholder manifest/config/registry files. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
+`scripts/create_product.py <name>` scaffolds this layout. By default it **copies a base product** (currently `visual_insights`) and rewrites references; use `--minimal` for the lightweight scaffold. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
 
 ## 3. Manifest & Config
 
@@ -51,7 +50,7 @@ flowchart TB
 - `flows`: list of flow IDs published by the product
 - Optional metadata (category, icon, gallery)
 
-`config/product.yaml` stores product defaults (autonomy, budgets, flags). It is merged into the global Settings object and can be injected into agents/tools via dependency injection.
+`config/product.yaml` stores product defaults (autonomy, budgets, flags). It is merged into the global Settings object and can be injected into agents/tools via dependency injection. Optional UI hints live under `metadata.ui` to drive dynamic inputs/intent in the Streamlit UI.
 
 ## 4. Flow Definitions
 
@@ -67,7 +66,7 @@ steps:
     tool: echo_tool
     backend: local
     params:
-      message: "{{payload.message}}"
+      message: "{{payload.keyword}}"
     retry:
       max_attempts: 2
       backoff_seconds: 1

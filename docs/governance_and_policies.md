@@ -61,104 +61,53 @@ Rules:
 
 ## 3. Policy Types
 
-### 3.1 Tool Policies
+### 3.1 Global Allow/Block Lists
 
-Tool policies control **which tools may execute and under what conditions**.
+Policies in `configs/policies.yaml` are allow/block lists, evaluated by the core policy engine.
 
 Example:
 ```yaml
-tools:
-  echo_tool:
-    risk: low
-
-  db_write_tool:
-    risk: high
-    require_human_approval: true
+allowed_tools: []
+blocked_tools: []
+allowed_models: []
+blocked_models: []
 ```
-Enforcement:
-	•	Evaluated before tool execution
-	•	Enforced by core/governance/hooks.before_tool_call
 
 Rules:
-	•	Risk level influences approval and autonomy requirements
-	•	Tool policies override flow intent
+	•	If `allowed_tools` is empty, all registered tools are allowed unless blocked
+	•	If `allowed_models` is empty, all registered models are allowed unless blocked
+	•	Blocked lists always take precedence
 
 ---
 
-### 3.2 Flow Policies
+### 3.2 Per-Product Overrides
 
-Flow policies constrain overall flow behavior.
+Per-product overrides are the primary way to constrain a specific product.
 
 Example:
-
-flows:
+```yaml
+by_product:
   hello_world:
-    max_steps: 10
-    allowed_autonomy: semi_auto
-
-Enforcement:
-	•	At flow initialization
-	•	During step execution
+    allowed_tools:
+      - echo_tool
+    allowed_models:
+      - gpt-4o-mini
+```
 
 Rules:
-	•	Flows exceeding limits are rejected
-	•	Flows cannot elevate autonomy beyond policy
+	•	Product policies override global defaults
+	• Products cannot access tools or models not explicitly allowed
 
 ---
 
 ### 3.3 Autonomy Policies
 
-Autonomy policies limit how autonomous execution is allowed to be.
-
-Example:
-
-autonomy:
-  default: suggest_only
-  allowed:
-    - suggest_only
-    - semi_auto
+Autonomy is enforced via governance hooks based on the flow autonomy level and policy config.
 
 Rules:
 	•	full_auto requires explicit policy enablement
 	•	Agents cannot override autonomy
-	•	Orchestrator enforces autonomy via governance hooks
-
----
-
-### 3.4 Product Policies
-
-Product-level policies scope capabilities per product.
-
-Example:
-
-products:
-  agentaura:
-    allowed_tools:
-      - echo_tool
-    blocked_models:
-      - gpt_4o
-
-Rules:
-	•	Products cannot access tools or models not explicitly allowed
-	•	Product policies override global defaults
-
----
-
-### 3.5 Model Policies
-
-Model policies control model usage and limits.
-
-Example:
-
-models:
-  default:
-    max_tokens: 8000
-    allow_external: false
-
-Rules:
-	•	Models are referenced by logical name, never vendor IDs
-	•	Providers enforce model policies at runtime
-	•	Blocked models fail fast with structured errors
+	•	Orchestrator enforces autonomy at run start
 
 ---
 

@@ -16,10 +16,11 @@ highlights how components collaborate at runtime.
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfile, docker-compose, and k8s manifests. |
-| `/logs` | Local log sink | Default on-disk location for structured run logs. | `core/logging/logger.py` and tracer mirror events here. |
+| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/logging/observability.py` defines the directory layout and output paths. |
+| `/logs` | Local log sink | Default on-disk location for structured logs (application/runtime). | `core/logging/logger.py` emits JSON logs here. |
 | `/products` | Product packs | Individual product definitions (flows, agents, prompts, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
 | `/scripts` | Ops scripts | Helper scripts for scaffolding, ingestion, and migrations. | `create_product.py`, `ingest_knowledge.py`, `migrate_memory.py`, `run_flow.py`. |
-| `/storage` | Persistent state | Storage folders for artifacts and memory DB files. | Includes `storage/{memory,raw,processed,vectors}` for local/dev use. |
+| `/storage` | Persistent state | Storage folders for legacy artifacts and memory DB files. | Still used for vector store/SQLite in dev; observability moved to `/observability`. |
 | `/tests` | Automated tests | Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `products/*/tests`. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions. |
 
@@ -45,7 +46,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy policy, persists runs/steps, emits trace events. |
 | `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML/JSON. | Validates and normalizes step ids; no execution or persistence. |
-| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
+| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
 | `core/orchestrator/runners.py` | Convenience wrappers | Thin helpers for CLI/API. | Calls OrchestratorEngine directly. |
@@ -223,9 +224,10 @@ flowchart TB
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/logging/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend. |
+| `core/logging/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend and `observability/<product>/<run_id>/runtime/events.jsonl`. |
 | `core/logging/logger.py` | Logger | JSON log formatting. | Structured context fields (run_id, step_id, product, flow). |
 | `core/logging/metrics.py` | Metrics | In-memory counters/timers. | No external exporters in v1. |
+| `core/logging/observability.py` | Observability writer | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/` and writes `response.json`. |
 
 ---
 

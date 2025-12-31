@@ -68,7 +68,7 @@ Agents:
 
 Flows live under:
 
-products//flows/
+products/<product>/flows/
 
 Example:
 
@@ -104,8 +104,8 @@ steps:
 ```
 
 Notes:
-	•	goal is the primary control input to agents
-	•	No prompts are embedded in flows
+	•	`params` are the primary control inputs to agents and tools
+	•	Prompts are optional and not control flow
 	•	Retry behavior is declarative and flow-driven
 
 ---
@@ -121,7 +121,7 @@ Notes:
 
 Behavior:
 	•	Resolves agent from registry
-	•	Provides StepContext (goal, constraints, artifacts)
+	•	Provides StepContext (params, payload, artifacts)
 	•	Executes agent reasoning
 	•	Expects an AgentResult
 
@@ -144,8 +144,8 @@ Behavior:
 	•	Produces a ToolResult
 
 Notes:
-	•	Agents may request tools indirectly via structured outputs
 	•	The orchestrator decides whether and when tools run
+	•	Tools are executed only by ToolExecutor
 
 ---
 
@@ -160,6 +160,7 @@ Behavior:
 	•	Persists run and step state
 	•	Sets run status to PENDING_HUMAN
 	•	Requires explicit resume action
+	•	Approval context can be supplied in `params` (reason, decision notes, recommended action)
 
 ---
 
@@ -219,9 +220,10 @@ class SimpleAgent(BaseAgent):
 
     def run(self, step_context):
         return AgentResult(
-            success=True,
-            output={"message": "Hello world"},
-            metadata={}
+            ok=True,
+            data={"message": "Hello world"},
+            error=None,
+            meta={"agent_name": "hello_world.simple"},
         )
 
 
@@ -266,6 +268,11 @@ Resolution:
 	6.	State persisted via memory backend
 	7.	HITL pause or continuation
 	8.	Completion or failure recorded
+
+Step parameter rendering supports:
+- `{{payload.<key>}}`
+- `{{artifacts.<key>}}`
+Missing values render as null (not empty strings).
 
 ---
 

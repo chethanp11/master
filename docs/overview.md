@@ -17,7 +17,7 @@ It is intended for engineers building products on top of the platform.
 - **No domain logic in core**
   - Core is reusable across teams and business units
 - **Config > code**
-  - Flows, prompts, policies, limits defined in YAML
+  - Flows, policies, limits, and UI hints defined in YAML
 - **Auditability first**
   - Every run, step, tool call, and decision is traceable
 
@@ -76,14 +76,17 @@ sequenceDiagram
   participant HITL
   participant Agent
   participant Memory
+  participant Observability
 
   User->>Gateway: run flow
   Gateway->>Orchestrator: run_flow
   Orchestrator->>Memory: create_run
+  Orchestrator->>Observability: stage inputs + start runtime log
   Orchestrator->>ToolExec: tool step
   ToolExec->>Tool: run(params)
   Tool-->>ToolExec: ToolResult
   ToolExec-->>Orchestrator: ToolResult
+  Orchestrator->>Observability: append step/tool events
   Orchestrator->>HITL: create approval
   Orchestrator-->>Gateway: PENDING_HUMAN
   User->>Gateway: approve
@@ -91,6 +94,7 @@ sequenceDiagram
   Orchestrator->>Agent: run(step)
   Agent-->>Orchestrator: AgentResult
   Orchestrator->>Memory: update_run(COMPLETED)
+  Orchestrator->>Observability: write response.json + outputs
 ```
 
 ---
@@ -158,10 +162,11 @@ Products **must not**:
 - `POST /api/run/{product}/{flow}`
 - `POST /api/resume_run/{run_id}`
 - `GET /api/run/{run_id}`
+- `GET /api/output/{product}/{run_id}/{filename}`
 
 ### UI
 - Streamlit control center (`gateway/ui/platform_app.py`)
-- Talks only to the API
+- Talks only to the API; product inputs/intent/output links are driven by product config
 
 ### CLI
 - Argparse-based CLI (`gateway/cli/main.py`)
@@ -195,6 +200,7 @@ flowchart LR
   - `config/product.yaml`
   - `registry.py`
   - `flows/*.yaml`
+  - Optional UI hints under `config/product.yaml: metadata.ui`
 
 ```mermaid
 flowchart TB

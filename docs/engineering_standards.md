@@ -60,12 +60,13 @@ core/tools/executor.py
 ---
 
 ### 1.3 Persistence & State
-- ❌ **FORBIDDEN**: Writing to disk, DBs, or files outside memory backends.
-- ❌ **FORBIDDEN**: SQLite, filesystem, or vector store access outside `core/memory/`.
+- ❌ **FORBIDDEN**: Writing to disk, DBs, or files outside approved core persistence layers.
+- ❌ **FORBIDDEN**: SQLite, filesystem, or vector store access outside core persistence modules.
 
 - ✅ **ALLOWED ONLY IN**:
 
 core/memory/*
+core/logging/observability.py
 
 Rules:
 - Orchestrator and agents treat memory as a black box.
@@ -197,10 +198,10 @@ FULL_AUTO
 All agents **must** return `AgentResult`.
 
 Required fields:
-- `success: bool`
-- `output: Any`
+- `ok: bool`
+- `data: Any`
 - `error: AgentError | None`
-- `metadata: dict`
+- `meta: dict`
 
 ---
 
@@ -208,10 +209,10 @@ Required fields:
 All tools **must** return `ToolResult`.
 
 Required fields:
-- `success: bool`
+- `ok: bool`
 - `data: Any`
 - `error: ToolError | None`
-- `metadata: dict`
+- `meta: dict`
 
 ---
 
@@ -246,6 +247,9 @@ Every significant action **must** emit a trace event:
 All tracing goes through:
 
 core/logging/tracing.py
+
+Runtime traces are also written to:
+- `observability/<product>/<run_id>/runtime/events.jsonl`
 
 Rules:
 - ❌ No `print()`
@@ -294,12 +298,12 @@ core/governance/security.py
 ### 7.1 Product Folder Structure
 Each product **must** follow:
 ```
-products//
+products/<product>/
 ├── flows/
 ├── agents/
 ├── tools/
-├── prompts/
 ├── config/
+├── registry.py
 └── tests/
 ```
 ---

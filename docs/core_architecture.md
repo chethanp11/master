@@ -54,7 +54,7 @@ flowchart TB
     MEM[memory]
     MOD[models]
     KNO[knowledge]
-    LOG[logging]
+    LOG[logging/observability]
   end
   subgraph Gateway
     API[API]
@@ -170,6 +170,7 @@ sequenceDiagram
   Engine->>Governance: check_autonomy
   Engine->>Memory: create_run
   Engine->>Tracer: run_started
+  Engine->>Tracer: runtime events (events.jsonl)
   loop steps
     Engine->>Memory: add_step
     Engine->>Governance: before_step
@@ -196,7 +197,11 @@ sequenceDiagram
 ```
 
 ### Step Parameter Rendering
-`StepExecutor` replaces string values of the form `{{payload.<key>}}` using the run payload.
+`StepExecutor` replaces string values of the form:
+- `{{payload.<key>}}`
+- `{{artifacts.<key>}}` (flat keys or nested access)
+
+Missing values render as null (not empty strings), so contracts can validate inputs strictly.
 
 ---
 
@@ -345,19 +350,25 @@ erDiagram
 
 ---
 
-## 10. Logging, Tracing, Metrics
+## 10. Logging, Tracing, Metrics & Observability
 
 **Source of truth:** `core/logging/*`.
 
-- `Tracer` sanitizes and persists `TraceEvent` via memory.
+- `Tracer` sanitizes and persists `TraceEvent` via memory and writes `observability/<product>/<run_id>/runtime/events.jsonl`.
 - `logger.py` emits JSON-formatted logs.
 - `metrics.py` provides in-memory counters/timers (no exporters in v1).
+- `core/logging/observability.py` provides the run directory layout:
+  - `input/`
+  - `runtime/`
+  - `output/`
+  - `response.json` is emitted on completion/failure.
 
 ```mermaid
 flowchart TB
   Event[TraceEvent] --> Redactor[SecurityRedactor]
   Redactor --> Tracer
   Tracer --> Memory[MemoryBackend]
+  Tracer --> Observability[observability/<product>/<run_id>/runtime]
   Tracer --> Logs[Structured Logs]
 ```
 
