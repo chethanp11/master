@@ -20,6 +20,18 @@ paths, intent, and key technical characteristics.
 | `/tests` | Automated tests | Comprehensive Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `tests/products`; exercises registries, orchestrator, governance, memory, and UI layers via sqlite-based fixtures. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | Poetry/PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions for agents, orchestration, and gateway. |
 
+```mermaid
+flowchart LR
+  README[README.md] --> DOCS[docs/]
+  CONFIGS[configs/] --> CORE[core/]
+  CORE --> GATEWAY[gateway/]
+  CORE --> PRODUCTS[products/]
+  CORE --> TESTS[tests/]
+  INFRA[infra/] --> GATEWAY
+  STORAGE[storage/] --> CORE
+  LOGS[logs/] --> CORE
+```
+
 ## Core Package (`/core`)
 
 ### Agents

@@ -25,6 +25,14 @@ The knowledge layer is built on the following non-negotiable principles:
 The knowledge layer supports **retrieval**, not reasoning.
 Reasoning happens in agents; orchestration happens in the orchestrator.
 
+```mermaid
+flowchart TB
+  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Store --> Retriever[Retriever]
+  Retriever --> Orchestrator
+  Orchestrator --> Agents
+```
+
 ---
 
 ## 2. Scope and Boundaries
@@ -284,4 +292,3 @@ These may be introduced in future versions without breaking contracts.
 
 This knowledge layer ensures predictable retrieval, auditability, and
 enterprise-safe foundations while leaving room for future evolution.
-

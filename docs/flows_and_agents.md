@@ -20,6 +20,25 @@ A **flow** is a declarative definition of:
 - *in what order they execute*
 - *under what constraints*
 
+```mermaid
+sequenceDiagram
+  participant User
+  participant Gateway as API/CLI/UI
+  participant Orchestrator
+  participant Agent
+  participant ToolExec as ToolExecutor
+  participant Tool
+  User->>Gateway: run flow
+  Gateway->>Orchestrator: run_flow
+  Orchestrator->>Agent: run(step)
+  Agent-->>Orchestrator: AgentResult
+  Orchestrator->>ToolExec: execute tool
+  ToolExec->>Tool: run(params)
+  Tool-->>ToolExec: ToolResult
+  ToolExec-->>Orchestrator: ToolResult
+  Orchestrator-->>Gateway: status/result
+```
+
 Flows:
 - Are defined in YAML or JSON
 - Are loaded and validated by the orchestrator

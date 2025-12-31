@@ -39,6 +39,40 @@ Everything in `products/` is **domain-specific**.
 │  HTTP, UI routing, auth stub  │
 └───────────────────────────────┘
 ```
+
+```mermaid
+flowchart TB
+  subgraph Products
+    PF[flows]
+    PA[agents]
+    PT[tools]
+  end
+  subgraph Core
+    ORC[orchestrator]
+    GOV[governance]
+    MEM[memory]
+    MOD[models]
+    KNO[knowledge]
+    LOG[logging]
+  end
+  subgraph Gateway
+    API[API]
+    UI[UI]
+    CLI[CLI]
+  end
+
+  PF --> ORC
+  PA --> ORC
+  PT --> ORC
+  API --> ORC
+  CLI --> ORC
+  UI --> API
+  ORC --> GOV
+  ORC --> MEM
+  ORC --> LOG
+  ORC --> KNO
+  ORC --> MOD
+```
 ---
 
 ## 3. Core Folder Structure (Detailed)

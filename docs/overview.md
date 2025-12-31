@@ -21,6 +21,36 @@ It is intended for engineers building products on top of the platform.
 - **Auditability first**
   - Every run, step, tool call, and decision is traceable
 
+## Architecture Overview (Mermaid)
+
+```mermaid
+flowchart TB
+  subgraph Products
+    P[products/*<br/>flows, agents, tools]
+  end
+  subgraph Core
+    O[orchestrator]
+    G[governance]
+    M[memory]
+    K[knowledge]
+    T[tools]
+  end
+  subgraph Gateway
+    A[API]
+    U[UI]
+    C[CLI]
+  end
+
+  A --> O
+  U --> A
+  C --> O
+  O --> T
+  O --> M
+  O --> G
+  O --> K
+  P --> O
+```
+
 ---
 
 ## 2. Core vs Products Separation

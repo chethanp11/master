@@ -29,6 +29,16 @@ Rules:
 - No provider-specific logic outside this layer.
 - Model selection is done via logical names (never vendor IDs).
 
+```mermaid
+flowchart LR
+  Agent --> Orchestrator
+  Orchestrator --> ToolExecutor
+  ToolExecutor --> Tool
+  Orchestrator --> Memory
+  Orchestrator --> ModelsRouter
+  ModelsRouter --> Providers
+```
+
 ---
 
 ### 1.2 Tool Execution
@@ -437,4 +447,3 @@ Rules:
 - Any exception must be documented and approved
 
 **This document is binding.**
-

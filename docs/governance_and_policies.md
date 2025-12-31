@@ -34,6 +34,16 @@ Rules:
 - ❌ Agents must not self-enforce policy
 - ✅ All enforcement happens via core governance hooks
 
+```mermaid
+flowchart LR
+  ORC[Orchestrator] --> HOOKS[Governance Hooks]
+  HOOKS --> POLICY[Policy Engine]
+  HOOKS --> REDACT[Security Redactor]
+  HOOKS --> DECISION[Allow/Deny]
+  DECISION --> ORC
+  TOOL[Tool Executor] --> HOOKS
+```
+
 ---
 
 ## 2. Policy Configuration

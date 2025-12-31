@@ -29,6 +29,16 @@ products/<product>/
 └── tests/                         # Optional product-level regression tests
 ```
 
+```mermaid
+flowchart TB
+  Manifest[manifest.yaml] --> Loader[Product Loader]
+  Config[config/product.yaml] --> Loader
+  Registry[registry.py] --> Loader
+  Flows[flows/*.yaml] --> Loader
+  Loader --> Orchestrator
+  Loader --> Gateway
+```
+
 `scripts/create_product.py <name>` scaffolds this layout with placeholder manifest/config/registry files. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
 
 ## 3. Manifest & Config
