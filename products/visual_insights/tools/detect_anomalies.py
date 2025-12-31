@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from statistics import mean, pstdev
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 
@@ -20,7 +20,8 @@ class Point(BaseModel):
 class DetectAnomaliesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    series: List[Point]
+    series: List[Point] = Field(default_factory=list)
+    data: Optional["TableData"] = None
     method: Literal["zscore"] = "zscore"
     z_threshold: float = 3.0
     min_points: int = 8
@@ -45,16 +46,26 @@ class DetectAnomaliesOutput(BaseModel):
     summary: str
 
 
+class TableData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    columns: List[str]
+    rows: List[List[Any]]
+
+
 def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
-    if len(payload.series) < payload.min_points:
+    series = payload.series
+    if not series and payload.data is not None:
+        series = _derive_series_from_table(payload.data)
+    if len(series) < payload.min_points:
         return DetectAnomaliesOutput(anomalies=[], summary="series too short")
-    values = [pt.value for pt in payload.series]
+    values = [pt.value for pt in series]
     stddev = pstdev(values)
     if stddev == 0:
         return DetectAnomaliesOutput(anomalies=[], summary="no variance")
     m = mean(values)
     anomalies = []
-    for pt in payload.series:
+    for pt in series:
         z = (pt.value - m) / stddev
         if abs(z) >= payload.z_threshold:
             anomalies.append(Anomaly(ts=pt.ts, value=pt.value, zscore=z))
@@ -82,3 +93,44 @@ class DetectAnomaliesTool(BaseTool):
 
 def build() -> DetectAnomaliesTool:
     return DetectAnomaliesTool()
+
+
+def _derive_series_from_table(data: TableData) -> List[Point]:
+    numeric_columns: List[int] = []
+    for idx, _ in enumerate(data.columns):
+        values = []
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = row[idx]
+            if value is None:
+                continue
+            values.append(value)
+        if values and all(_to_float(v) is not None for v in values):
+            numeric_columns.append(idx)
+
+    series: List[Point] = []
+    for idx in numeric_columns:
+        total = 0.0
+        count = 0
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            total += value
+            count += 1
+        if count == 0:
+            continue
+        series.append(Point(ts=str(data.columns[idx]), value=total))
+    return series
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None

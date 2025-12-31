@@ -1,0 +1,1200 @@
+{
+  "run": {
+    "run_id": "run_2025-12-31-235918",
+    "product": "visual_insights",
+    "flow": "visualization",
+    "status": "FAILED",
+    "autonomy_level": "suggest_only",
+    "started_at": 1767205758,
+    "finished_at": 1767205820,
+    "input": {
+      "prompt": "Summarize key trends and highlight anomalies.",
+      "files": [
+        {
+          "file_id": "1767205103_visual_insights_input.csv",
+          "file_type": "csv",
+          "name": "visual_insights_input.csv"
+        }
+      ],
+      "upload_id": "1767205103",
+      "dataset": "visual_insights_input.csv",
+      "replan_comment": "create different chart. not bar chart",
+      "previous_run": {
+        "run": {
+          "run_id": "run_2025-12-31-235849",
+          "product": "visual_insights",
+          "flow": "visualization",
+          "status": "PENDING_HUMAN",
+          "autonomy_level": "suggest_only",
+          "started_at": 1767205729,
+          "finished_at": null,
+          "input": {
+            "prompt": "Summarize key trends and highlight anomalies.",
+            "files": [
+              {
+                "file_id": "1767205103_visual_insights_input.csv",
+                "file_type": "csv",
+                "name": "visual_insights_input.csv"
+              }
+            ],
+            "upload_id": "1767205103",
+            "dataset": "visual_insights_input.csv"
+          },
+          "output": null,
+          "summary": {
+            "current_step_index": 8
+          }
+        },
+        "steps": [
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "plan",
+            "step_index": 0,
+            "name": "plan",
+            "type": "agent",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205729,
+            "input": {
+              "params": {}
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "note": "Replan requested.",
+                "start_step_id": null,
+                "decision_reason": "default_next"
+              },
+              "error": null,
+              "meta": {
+                "agent_name": "planning_agent",
+                "kind": "other",
+                "request_id": "323beaa6-baea-4530-977b-2bd50ea2ba39",
+                "started_at": "2025-12-31T18:28:49.755108",
+                "ended_at": null,
+                "latency_ms": null,
+                "token_estimate": null,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "read",
+            "step_index": 1,
+            "name": "read",
+            "type": "tool",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205729,
+            "input": {
+              "params": {
+                "dataset": "{{payload.dataset}}"
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "summary": "Insights for visual_insights_input.csv: read 9 rows.",
+                "row_count": 9,
+                "columns": [
+                  "Expense",
+                  "H22024",
+                  "H2025",
+                  "H2026",
+                  "H2027",
+                  "H2028",
+                  "H2029"
+                ],
+                "rows": [
+                  [
+                    "A",
+                    20,
+                    320,
+                    352,
+                    387,
+                    426,
+                    469
+                  ],
+                  [
+                    "B",
+                    10,
+                    550,
+                    100,
+                    110,
+                    121,
+                    133
+                  ],
+                  [
+                    "C",
+                    30,
+                    204,
+                    224,
+                    247,
+                    272,
+                    299
+                  ],
+                  [
+                    "D",
+                    120,
+                    120,
+                    120,
+                    120,
+                    120,
+                    120
+                  ],
+                  [
+                    "E",
+                    11,
+                    150,
+                    165,
+                    182,
+                    200,
+                    220
+                  ],
+                  [
+                    "F",
+                    15,
+                    100,
+                    110,
+                    121,
+                    140,
+                    1500
+                  ],
+                  [
+                    "G",
+                    30,
+                    300,
+                    330,
+                    363,
+                    250,
+                    275
+                  ],
+                  [
+                    "H",
+                    20,
+                    400,
+                    440,
+                    484,
+                    532,
+                    586
+                  ],
+                  [
+                    "I",
+                    20,
+                    100,
+                    110,
+                    121,
+                    133,
+                    146
+                  ]
+                ],
+                "data": {
+                  "columns": [
+                    "Expense",
+                    "H22024",
+                    "H2025",
+                    "H2026",
+                    "H2027",
+                    "H2028",
+                    "H2029"
+                  ],
+                  "rows": [
+                    [
+                      "A",
+                      20,
+                      320,
+                      352,
+                      387,
+                      426,
+                      469
+                    ],
+                    [
+                      "B",
+                      10,
+                      550,
+                      100,
+                      110,
+                      121,
+                      133
+                    ],
+                    [
+                      "C",
+                      30,
+                      204,
+                      224,
+                      247,
+                      272,
+                      299
+                    ],
+                    [
+                      "D",
+                      120,
+                      120,
+                      120,
+                      120,
+                      120,
+                      120
+                    ],
+                    [
+                      "E",
+                      11,
+                      150,
+                      165,
+                      182,
+                      200,
+                      220
+                    ],
+                    [
+                      "F",
+                      15,
+                      100,
+                      110,
+                      121,
+                      140,
+                      1500
+                    ],
+                    [
+                      "G",
+                      30,
+                      300,
+                      330,
+                      363,
+                      250,
+                      275
+                    ],
+                    [
+                      "H",
+                      20,
+                      400,
+                      440,
+                      484,
+                      532,
+                      586
+                    ],
+                    [
+                      "I",
+                      20,
+                      100,
+                      110,
+                      121,
+                      133,
+                      146
+                    ]
+                  ]
+                },
+                "series": [],
+                "file_exists": true,
+                "input_path": "/Users/chethan/GitHub/master/observability/visual_insights/run_2025-12-31-235849/input/visual_insights_input.csv",
+                "x_field": "Expense",
+                "y_field": "H22024",
+                "category_field": "Expense",
+                "has_time": false,
+                "has_category": true,
+                "has_x_numeric": false,
+                "has_y_numeric": true
+              },
+              "error": null,
+              "meta": {
+                "tool_name": "data_reader",
+                "backend": "local",
+                "request_id": "6f2f5172-c1dd-4f22-947b-f9c64dbf2dea",
+                "started_at": "2025-12-31T18:28:49.765512",
+                "ended_at": null,
+                "latency_ms": 5,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "detect_anomalies",
+            "step_index": 2,
+            "name": "detect_anomalies",
+            "type": "tool",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205729,
+            "input": {
+              "params": {
+                "series": "{{artifacts.tool.data_reader.output.series}}"
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "anomalies": [],
+                "summary": "series too short"
+              },
+              "error": null,
+              "meta": {
+                "tool_name": "detect_anomalies",
+                "backend": "local",
+                "request_id": "c2fdf0b9-6006-4472-8e5e-0bb61c1ba681",
+                "started_at": "2025-12-31T18:28:49.771636",
+                "ended_at": null,
+                "latency_ms": 0,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "recommend_chart",
+            "step_index": 3,
+            "name": "recommend_chart",
+            "type": "tool",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205729,
+            "input": {
+              "params": {
+                "intent": "{{payload.prompt}}",
+                "has_time": "{{artifacts.tool.data_reader.output.has_time}}",
+                "has_category": "{{artifacts.tool.data_reader.output.has_category}}",
+                "has_x_numeric": "{{artifacts.tool.data_reader.output.has_x_numeric}}",
+                "has_y_numeric": "{{artifacts.tool.data_reader.output.has_y_numeric}}",
+                "wants_composition": false
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "chart_type": "bar",
+                "rationale": "categorical breakdown with numeric measure -> bar"
+              },
+              "error": null,
+              "meta": {
+                "tool_name": "recommend_chart",
+                "backend": "local",
+                "request_id": "2707756a-abc5-47ae-a1b7-016872729d1e",
+                "started_at": "2025-12-31T18:28:49.776320",
+                "ended_at": null,
+                "latency_ms": 0,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "summarize",
+            "step_index": 4,
+            "name": "summarize",
+            "type": "agent",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205729,
+            "input": {
+              "params": {
+                "template": "Dashboard summary: {summary}"
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "message": "Dashboard summary: Insights for visual_insights_input.csv: read 9 rows.",
+                "insight": "Insights for visual_insights_input.csv: read 9 rows."
+              },
+              "error": null,
+              "meta": {
+                "agent_name": "dashboard_agent",
+                "kind": "other",
+                "request_id": "426a4512-e3b9-46b8-a10f-696677dd433a",
+                "started_at": "2025-12-31T18:28:49.780211",
+                "ended_at": null,
+                "latency_ms": null,
+                "token_estimate": null,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "approval",
+            "step_index": 5,
+            "name": "approval",
+            "type": "human_approval",
+            "status": "COMPLETED",
+            "started_at": 1767205729,
+            "finished_at": 1767205736,
+            "input": {
+              "params": {
+                "approval_context": {
+                  "reason": "Approve dataset summary and chart recommendation before building visuals.",
+                  "decision_notes": [
+                    "Dataset parsed and summarized.",
+                    "Anomaly check completed.",
+                    "Chart recommendation computed."
+                  ],
+                  "recommended_action": "APPROVE"
+                }
+              }
+            },
+            "output": {
+              "approval": {
+                "decision": "APPROVED",
+                "comment": "",
+                "payload": {
+                  "approved": true
+                }
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": null
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "build_chart_spec",
+            "step_index": 6,
+            "name": "build_chart_spec",
+            "type": "tool",
+            "status": "COMPLETED",
+            "started_at": 1767205736,
+            "finished_at": 1767205736,
+            "input": {
+              "params": {
+                "chart_type": "{{artifacts.tool.recommend_chart.output.chart_type}}",
+                "title": "Visualization for {{payload.dataset}}",
+                "x": "{{artifacts.tool.data_reader.output.x_field}}",
+                "y": "{{artifacts.tool.data_reader.output.y_field}}",
+                "series": "{{artifacts.tool.data_reader.output.category_field}}",
+                "data": "{{artifacts.tool.data_reader.output.data}}"
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "chart_spec": {
+                  "type": "bar",
+                  "title": "Visualization for visual_insights_input.csv",
+                  "data": {
+                    "columns": [
+                      "Expense",
+                      "H22024",
+                      "H2025",
+                      "H2026",
+                      "H2027",
+                      "H2028",
+                      "H2029"
+                    ],
+                    "rows": [
+                      [
+                        "A",
+                        20,
+                        320,
+                        352,
+                        387,
+                        426,
+                        469
+                      ],
+                      [
+                        "B",
+                        10,
+                        550,
+                        100,
+                        110,
+                        121,
+                        133
+                      ],
+                      [
+                        "C",
+                        30,
+                        204,
+                        224,
+                        247,
+                        272,
+                        299
+                      ],
+                      [
+                        "D",
+                        120,
+                        120,
+                        120,
+                        120,
+                        120,
+                        120
+                      ],
+                      [
+                        "E",
+                        11,
+                        150,
+                        165,
+                        182,
+                        200,
+                        220
+                      ],
+                      [
+                        "F",
+                        15,
+                        100,
+                        110,
+                        121,
+                        140,
+                        1500
+                      ],
+                      [
+                        "G",
+                        30,
+                        300,
+                        330,
+                        363,
+                        250,
+                        275
+                      ],
+                      [
+                        "H",
+                        20,
+                        400,
+                        440,
+                        484,
+                        532,
+                        586
+                      ],
+                      [
+                        "I",
+                        20,
+                        100,
+                        110,
+                        121,
+                        133,
+                        146
+                      ]
+                    ]
+                  },
+                  "encoding": {
+                    "x": {
+                      "field": "Expense"
+                    },
+                    "y": {
+                      "field": "H22024"
+                    }
+                  }
+                },
+                "summary": "built spec for bar"
+              },
+              "error": null,
+              "meta": {
+                "tool_name": "build_chart_spec",
+                "backend": "local",
+                "request_id": "d0cd87b1-f768-4da9-a387-a5e28d1a11de",
+                "started_at": "2025-12-31T18:28:56.986307",
+                "ended_at": null,
+                "latency_ms": 0,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "assemble_card",
+            "step_index": 7,
+            "name": "assemble_card",
+            "type": "tool",
+            "status": "COMPLETED",
+            "started_at": 1767205736,
+            "finished_at": 1767205736,
+            "input": {
+              "params": {
+                "card_id": "card_1",
+                "title": "Visualization for {{payload.dataset}}",
+                "chart_type": "{{artifacts.tool.recommend_chart.output.chart_type}}",
+                "chart_spec": "{{artifacts.tool.build_chart_spec.output.chart_spec}}",
+                "narrative": "{{artifacts.agent.dashboard_agent.output.insight}}",
+                "key_metrics": [
+                  {
+                    "name": "row_count",
+                    "value": "{{artifacts.tool.data_reader.output.row_count}}"
+                  }
+                ],
+                "citations": [
+                  {
+                    "type": "csv",
+                    "csv": {
+                      "dataset_id": "{{payload.dataset}}",
+                      "columns": "{{artifacts.tool.data_reader.output.columns}}",
+                      "filters": []
+                    }
+                  }
+                ],
+                "assumptions": [
+                  "Chart generated from uploaded dataset."
+                ]
+              }
+            },
+            "output": {
+              "ok": true,
+              "data": {
+                "card": {
+                  "card_id": "card_1",
+                  "title": "Visualization for visual_insights_input.csv",
+                  "chart_type": "bar",
+                  "chart_spec": {
+                    "type": "bar",
+                    "title": "Visualization for visual_insights_input.csv",
+                    "data": {
+                      "columns": [
+                        "Expense",
+                        "H22024",
+                        "H2025",
+                        "H2026",
+                        "H2027",
+                        "H2028",
+                        "H2029"
+                      ],
+                      "rows": [
+                        [
+                          "A",
+                          20,
+                          320,
+                          352,
+                          387,
+                          426,
+                          469
+                        ],
+                        [
+                          "B",
+                          10,
+                          550,
+                          100,
+                          110,
+                          121,
+                          133
+                        ],
+                        [
+                          "C",
+                          30,
+                          204,
+                          224,
+                          247,
+                          272,
+                          299
+                        ],
+                        [
+                          "D",
+                          120,
+                          120,
+                          120,
+                          120,
+                          120,
+                          120
+                        ],
+                        [
+                          "E",
+                          11,
+                          150,
+                          165,
+                          182,
+                          200,
+                          220
+                        ],
+                        [
+                          "F",
+                          15,
+                          100,
+                          110,
+                          121,
+                          140,
+                          1500
+                        ],
+                        [
+                          "G",
+                          30,
+                          300,
+                          330,
+                          363,
+                          250,
+                          275
+                        ],
+                        [
+                          "H",
+                          20,
+                          400,
+                          440,
+                          484,
+                          532,
+                          586
+                        ],
+                        [
+                          "I",
+                          20,
+                          100,
+                          110,
+                          121,
+                          133,
+                          146
+                        ]
+                      ]
+                    },
+                    "encoding": {
+                      "x": {
+                        "field": "Expense"
+                      },
+                      "y": {
+                        "field": "H22024"
+                      }
+                    }
+                  },
+                  "key_metrics": [
+                    {
+                      "name": "row_count",
+                      "value": 9
+                    }
+                  ],
+                  "narrative": "Insights for visual_insights_input.csv: read 9 rows.",
+                  "data_slice": null,
+                  "citations": [
+                    {
+                      "type": "csv",
+                      "csv": {
+                        "dataset_id": "visual_insights_input.csv",
+                        "columns": [
+                          "Expense",
+                          "H22024",
+                          "H2025",
+                          "H2026",
+                          "H2027",
+                          "H2028",
+                          "H2029"
+                        ],
+                        "filters": []
+                      },
+                      "pdf": null
+                    }
+                  ],
+                  "assumptions": [
+                    "Chart generated from uploaded dataset."
+                  ]
+                }
+              },
+              "error": null,
+              "meta": {
+                "tool_name": "assemble_insight_card",
+                "backend": "local",
+                "request_id": "5c7f5321-c621-43e4-9bd5-c3c34ce5fb53",
+                "started_at": "2025-12-31T18:28:56.992183",
+                "ended_at": null,
+                "latency_ms": 0,
+                "cost_estimate": null,
+                "tags": {},
+                "redacted": false
+              }
+            },
+            "error": null,
+            "meta": {
+              "backend": "local"
+            }
+          },
+          {
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "approval_export",
+            "step_index": 8,
+            "name": "approval_export",
+            "type": "human_approval",
+            "status": "PENDING_HUMAN",
+            "started_at": 1767205736,
+            "finished_at": null,
+            "input": {
+              "params": {
+                "approval_context": {
+                  "reason": "Approve exporting the visualization output.",
+                  "decision_notes": [
+                    "Chart spec built.",
+                    "Insight card assembled.",
+                    "Export will generate PDF and stub."
+                  ],
+                  "recommended_action": "APPROVE"
+                }
+              }
+            },
+            "output": {
+              "approval_id": "appr_5acfa71cce2a4ae6a1de617fac62d5db"
+            },
+            "error": null,
+            "meta": {
+              "backend": null
+            }
+          }
+        ],
+        "approvals": [
+          {
+            "approval_id": "appr_5acfa71cce2a4ae6a1de617fac62d5db",
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "approval_export",
+            "product": "visual_insights",
+            "flow": "visualization",
+            "status": "PENDING",
+            "requested_by": null,
+            "requested_at": 1767205736,
+            "resolved_by": null,
+            "resolved_at": null,
+            "decision": null,
+            "comment": null,
+            "payload": {
+              "step": {
+                "run_id": "run_2025-12-31-235849",
+                "step_id": "approval_export",
+                "step_index": 8,
+                "name": "approval_export",
+                "type": "human_approval",
+                "status": "RUNNING",
+                "started_at": 1767205736,
+                "finished_at": null,
+                "input": {
+                  "params": {
+                    "approval_context": {
+                      "reason": "Approve exporting the visualization output.",
+                      "decision_notes": [
+                        "Chart spec built.",
+                        "Insight card assembled.",
+                        "Export will generate PDF and stub."
+                      ],
+                      "recommended_action": "APPROVE"
+                    }
+                  }
+                },
+                "output": null,
+                "error": null,
+                "meta": {
+                  "backend": null
+                }
+              },
+              "intent": "Summarize key trends and highlight anomalies.",
+              "approval_context": {
+                "reason": "Approve exporting the visualization output.",
+                "decision_notes": [
+                  "Chart spec built.",
+                  "Insight card assembled.",
+                  "Export will generate PDF and stub."
+                ],
+                "recommended_action": "APPROVE"
+              },
+              "artifacts": {
+                "keys": [
+                  "agent.dashboard_agent.meta",
+                  "agent.dashboard_agent.output",
+                  "agent.planning_agent.meta",
+                  "agent.planning_agent.output",
+                  "tool.assemble_insight_card.meta",
+                  "tool.assemble_insight_card.output",
+                  "tool.build_chart_spec.meta",
+                  "tool.build_chart_spec.output",
+                  "tool.data_reader.meta",
+                  "tool.data_reader.output",
+                  "tool.detect_anomalies.meta",
+                  "tool.detect_anomalies.output",
+                  "tool.recommend_chart.meta",
+                  "tool.recommend_chart.output"
+                ]
+              }
+            }
+          },
+          {
+            "approval_id": "appr_870c3bd3dddc4b9ca402fb1db69ec9f9",
+            "run_id": "run_2025-12-31-235849",
+            "step_id": "approval",
+            "product": "visual_insights",
+            "flow": "visualization",
+            "status": "APPROVED",
+            "requested_by": null,
+            "requested_at": 1767205729,
+            "resolved_by": null,
+            "resolved_at": 1767205736,
+            "decision": "APPROVED",
+            "comment": "",
+            "payload": {
+              "step": {
+                "run_id": "run_2025-12-31-235849",
+                "step_id": "approval",
+                "step_index": 5,
+                "name": "approval",
+                "type": "human_approval",
+                "status": "RUNNING",
+                "started_at": 1767205729,
+                "finished_at": null,
+                "input": {
+                  "params": {
+                    "approval_context": {
+                      "reason": "Approve dataset summary and chart recommendation before building visuals.",
+                      "decision_notes": [
+                        "Dataset parsed and summarized.",
+                        "Anomaly check completed.",
+                        "Chart recommendation computed."
+                      ],
+                      "recommended_action": "APPROVE"
+                    }
+                  }
+                },
+                "output": null,
+                "error": null,
+                "meta": {
+                  "backend": null
+                }
+              },
+              "intent": "Summarize key trends and highlight anomalies.",
+              "approval_context": {
+                "reason": "Approve dataset summary and chart recommendation before building visuals.",
+                "decision_notes": [
+                  "Dataset parsed and summarized.",
+                  "Anomaly check completed.",
+                  "Chart recommendation computed."
+                ],
+                "recommended_action": "APPROVE"
+              },
+              "artifacts": {
+                "keys": [
+                  "agent.dashboard_agent.meta",
+                  "agent.dashboard_agent.output",
+                  "agent.planning_agent.meta",
+                  "agent.planning_agent.output",
+                  "tool.data_reader.meta",
+                  "tool.data_reader.output",
+                  "tool.detect_anomalies.meta",
+                  "tool.detect_anomalies.output",
+                  "tool.recommend_chart.meta",
+                  "tool.recommend_chart.output"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": null,
+    "summary": {
+      "failed_step_id": "export"
+    }
+  },
+  "steps": [
+    {
+      "run_id": "run_2025-12-31-235918",
+      "step_id": "plan",
+      "step_index": 0,
+      "name": "plan",
+      "type": "agent",
+      "status": "COMPLETED",
+      "started_at": 1767205758,
+      "finished_at": 1767205758,
+      "input": {
+        "params": {}
+      },
+      "output": {
+        "ok": true,
+        "data": {
+          "note": "Replan requested: create different chart. not bar chart",
+          "start_step_id": "approval_export",
+          "decision_reason": "resume_incomplete_step"
+        },
+        "error": null,
+        "meta": {
+          "agent_name": "planning_agent",
+          "kind": "other",
+          "request_id": "4a426cfd-2492-4cda-a469-b6d4ca427cd8",
+          "started_at": "2025-12-31T18:29:18.153751",
+          "ended_at": null,
+          "latency_ms": null,
+          "token_estimate": null,
+          "cost_estimate": null,
+          "tags": {},
+          "redacted": false
+        }
+      },
+      "error": null,
+      "meta": {
+        "backend": "local"
+      }
+    },
+    {
+      "run_id": "run_2025-12-31-235918",
+      "step_id": "approval_export",
+      "step_index": 8,
+      "name": "approval_export",
+      "type": "human_approval",
+      "status": "COMPLETED",
+      "started_at": 1767205758,
+      "finished_at": 1767205820,
+      "input": {
+        "params": {
+          "approval_context": {
+            "reason": "Approve exporting the visualization output.",
+            "decision_notes": [
+              "Chart spec built.",
+              "Insight card assembled.",
+              "Export will generate PDF and stub."
+            ],
+            "recommended_action": "APPROVE"
+          }
+        }
+      },
+      "output": {
+        "approval": {
+          "decision": "APPROVED",
+          "comment": "create different chart. not bar chart",
+          "payload": {
+            "approved": true
+          }
+        }
+      },
+      "error": null,
+      "meta": {
+        "backend": null
+      }
+    },
+    {
+      "run_id": "run_2025-12-31-235918",
+      "step_id": "export",
+      "step_index": 9,
+      "name": "export",
+      "type": "tool",
+      "status": "FAILED",
+      "started_at": 1767205820,
+      "finished_at": 1767205820,
+      "input": {
+        "params": {
+          "cards": [
+            "{{artifacts.tool.assemble_insight_card.output.card}}"
+          ],
+          "export_requested": true
+        }
+      },
+      "output": null,
+      "error": {
+        "message": "1 validation error for ExportPdfInput\ncards.0\n  Input should be a valid dictionary or instance of InsightCard [type=model_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.10/v/model_type",
+        "type": "RuntimeError"
+      },
+      "meta": {
+        "backend": "local"
+      }
+    }
+  ],
+  "approvals": [
+    {
+      "approval_id": "appr_e0e4977870fa479cad06f017daa0e866",
+      "run_id": "run_2025-12-31-235918",
+      "step_id": "approval_export",
+      "product": "visual_insights",
+      "flow": "visualization",
+      "status": "APPROVED",
+      "requested_by": null,
+      "requested_at": 1767205758,
+      "resolved_by": null,
+      "resolved_at": 1767205820,
+      "decision": "APPROVED",
+      "comment": "create different chart. not bar chart",
+      "payload": {
+        "step": {
+          "run_id": "run_2025-12-31-235918",
+          "step_id": "approval_export",
+          "step_index": 8,
+          "name": "approval_export",
+          "type": "human_approval",
+          "status": "RUNNING",
+          "started_at": 1767205758,
+          "finished_at": null,
+          "input": {
+            "params": {
+              "approval_context": {
+                "reason": "Approve exporting the visualization output.",
+                "decision_notes": [
+                  "Chart spec built.",
+                  "Insight card assembled.",
+                  "Export will generate PDF and stub."
+                ],
+                "recommended_action": "APPROVE"
+              }
+            }
+          },
+          "output": null,
+          "error": null,
+          "meta": {
+            "backend": null
+          }
+        },
+        "intent": "Summarize key trends and highlight anomalies.",
+        "approval_context": {
+          "reason": "Approve exporting the visualization output.",
+          "decision_notes": [
+            "Chart spec built.",
+            "Insight card assembled.",
+            "Export will generate PDF and stub."
+          ],
+          "recommended_action": "APPROVE"
+        },
+        "artifacts": {
+          "keys": [
+            "agent.dashboard_agent.meta",
+            "agent.dashboard_agent.output",
+            "agent.planning_agent.meta",
+            "agent.planning_agent.output",
+            "tool.assemble_insight_card.meta",
+            "tool.assemble_insight_card.output",
+            "tool.build_chart_spec.meta",
+            "tool.build_chart_spec.output",
+            "tool.data_reader.meta",
+            "tool.data_reader.output",
+            "tool.detect_anomalies.meta",
+            "tool.detect_anomalies.output",
+            "tool.recommend_chart.meta",
+            "tool.recommend_chart.output"
+          ]
+        }
+      }
+    }
+  ],
+  "artifacts": {
+    "agent.planning_agent.output": {
+      "note": "Replan requested: create different chart. not bar chart",
+      "start_step_id": "approval_export",
+      "decision_reason": "resume_incomplete_step"
+    },
+    "agent.planning_agent.meta": {
+      "agent_name": "planning_agent",
+      "kind": "other",
+      "request_id": "4a426cfd-2492-4cda-a469-b6d4ca427cd8",
+      "started_at": "2025-12-31T18:29:18.153751",
+      "ended_at": null,
+      "latency_ms": null,
+      "token_estimate": null,
+      "cost_estimate": null,
+      "tags": {},
+      "redacted": false
+    }
+  }
+}

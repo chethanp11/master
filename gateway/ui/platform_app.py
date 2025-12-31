@@ -351,6 +351,10 @@ def _render_run_history(*, observability_root: Path) -> None:
                     elif kind == "pending_human":
                         step_state[step_id] = {"step_id": step_id, "status": "PENDING_HUMAN"}
                     if kind in {"run_resumed", "run_rejected"}:
+                        step_state[step_id] = {
+                            "step_id": step_id,
+                            "status": "APPROVED" if kind == "run_resumed" else "REJECTED",
+                        }
                         approvals.append(
                             {
                                 "time": event.get("ts"),
@@ -412,6 +416,28 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
     approval = selection[1]
     run_id = approval["run_id"]
     st.write(f"Selected run: {run_id}")
+    events = _load_run_events(_observability_root(), product=approval["product"], run_id=run_id)
+    decisions: List[Dict[str, Any]] = []
+    for event in events:
+        kind = event.get("kind")
+        if kind in {"run_resumed", "run_rejected"}:
+            decisions.append(
+                {
+                    "time": event.get("ts"),
+                    "decision": (event.get("payload") or {}).get("decision"),
+                    "comment": (event.get("payload") or {}).get("comment") or "",
+                    "step_id": event.get("step_id"),
+                }
+            )
+    if decisions:
+        st.markdown("**Decision history**")
+        for entry in decisions:
+            line = f"{entry.get('time')} • {entry.get('step_id')} • {entry.get('decision')}"
+            if entry.get("comment"):
+                line = f"{line} — {entry.get('comment')}"
+            st.write(line)
+    else:
+        st.caption("Decision and notes will appear here after approval or rejection.")
     payload = approval.get("payload") or {}
     summary = payload.get("summary") if isinstance(payload, dict) else None
     instructions = payload.get("instructions") if isinstance(payload, dict) else None
@@ -428,10 +454,19 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
         st.markdown("**Approval needed for**")
         reason = approval_context.get("reason") if isinstance(approval_context, dict) else None
         step_name = approval_context.get("step_name") if isinstance(approval_context, dict) else None
+        decision_notes = approval_context.get("decision_notes") if isinstance(approval_context, dict) else None
+        recommended = approval_context.get("recommended_action") if isinstance(approval_context, dict) else None
         if step_name:
             st.write(f"Step: {step_name}")
         if reason:
             st.write(reason)
+        if decision_notes:
+            st.markdown("**Decision notes**")
+            for note in decision_notes:
+                st.write(f"- {note}")
+        if recommended:
+            st.markdown("**System recommendation**")
+            st.write(recommended)
     if actions:
         st.markdown("**Actions taken**")
         if isinstance(actions, list):
@@ -457,6 +492,7 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
             if resp.ok:
                 st.success(f"Run resumed (approved): {run_id.strip()}")
                 _append_history(run_id.strip())
+                st.rerun()
             else:
                 st.error(f"Failed to resume run: {resp.error or resp.body}")
     with col2:
@@ -471,6 +507,7 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
             if resp.ok:
                 st.success(f"Run resumed (rejected): {run_id.strip()}")
                 _append_history(run_id.strip())
+                st.rerun()
             else:
                 st.error(f"Failed to reject run: {resp.error or resp.body}")
 

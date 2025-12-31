@@ -47,7 +47,6 @@ class OrchestratorEngine:
         memory: MemoryRouter,
         tracer: Tracer,
         governance: GovernanceHooks,
-        product_goal_cache: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.flow_loader = flow_loader
         self.step_executor = step_executor
@@ -55,7 +54,6 @@ class OrchestratorEngine:
         self.tracer = tracer
         self.governance = governance
         self.hitl = HitlService(memory)
-        self._product_goal_cache = product_goal_cache or {}
 
     @classmethod
     def from_settings(
@@ -281,6 +279,8 @@ class OrchestratorEngine:
                     payload=replan_payload,
                 )
                 replan_ctx.trace = self._trace_hook(replan_ctx)
+                self._stage_inputs(replan_ctx)
+                self._rehydrate_artifacts(bundle.steps, replan_ctx)
                 self._emit_event(
                     kind="run_replan_started",
                     run_id=replan_run_id,
@@ -411,7 +411,7 @@ class OrchestratorEngine:
             )
 
             if step_def.type == StepType.HUMAN_APPROVAL:
-                approval_payload = self._build_approval_payload(run_ctx, step_record)
+                approval_payload = self._build_approval_payload(run_ctx, step_record, step_def)
                 approval = self.hitl.create_approval(
                     run_id=run_ctx.run_id,
                     step_id=step_id,
@@ -435,7 +435,10 @@ class OrchestratorEngine:
                     step_id=step_id,
                     product=run_ctx.product,
                     flow=run_ctx.flow,
-                    payload={"approval_id": approval.approval_id},
+                    payload={
+                        "approval_id": approval.approval_id,
+                        "approval_context": approval_payload.get("approval_context"),
+                    },
                 )
                 return RunStatus.PENDING_HUMAN.value
 
@@ -611,7 +614,7 @@ class OrchestratorEngine:
             if not target.exists():
                 shutil.copy2(source, target)
 
-    def _build_approval_payload(self, run_ctx: RunContext, step_record: StepRecord) -> Dict[str, Any]:
+    def _build_approval_payload(self, run_ctx: RunContext, step_record: StepRecord, step_def: StepDef) -> Dict[str, Any]:
         intent = (
             run_ctx.payload.get("prompt")
             or run_ctx.payload.get("intent")
@@ -619,119 +622,14 @@ class OrchestratorEngine:
             or run_ctx.payload.get("notes")
             or ""
         )
-        product_goal = self._load_product_goal(run_ctx.product)
-        summary_parts: List[str] = []
-        data_reader = run_ctx.artifacts.get("tool.data_reader.output")
-        if isinstance(data_reader, dict):
-            reader_summary = data_reader.get("summary")
-            if reader_summary:
-                summary_parts.append(f"Dataset summary: {reader_summary}")
-
-        anomalies = run_ctx.artifacts.get("tool.detect_anomalies.output")
-        if isinstance(anomalies, dict):
-            anomaly_list = anomalies.get("anomalies")
-            if isinstance(anomaly_list, list):
-                if len(anomaly_list) == 0:
-                    summary_parts.append("No anomalies found. Ready to visualize.")
-                else:
-                    summary_parts.append(f"Detected {len(anomaly_list)} anomalies.")
-            anomaly_summary = anomalies.get("summary")
-            if anomaly_summary:
-                summary_parts.append(f"Anomaly summary: {anomaly_summary}")
-
-        chart_rec = run_ctx.artifacts.get("tool.recommend_chart.output")
-        if isinstance(chart_rec, dict):
-            chart_type = chart_rec.get("chart_type")
-            rationale = chart_rec.get("rationale")
-            if chart_type:
-                summary_parts.append(f"Recommended chart: {chart_type}.")
-            if rationale:
-                summary_parts.append(f"Chart rationale: {rationale}")
-
-        drivers = run_ctx.artifacts.get("tool.driver_analysis.output")
-        if isinstance(drivers, dict):
-            driver_summary = drivers.get("summary")
-            if driver_summary:
-                summary_parts.append(f"Driver summary: {driver_summary}")
-
-        plan_note = run_ctx.artifacts.get("agent.planning_agent.output")
-        if isinstance(plan_note, dict):
-            note = plan_note.get("note")
-            if note:
-                summary_parts.append(f"Plan note: {note}")
-
-        summary = " ".join(summary_parts).strip() or "Run is ready to proceed."
-        actions = self._summarize_actions(run_ctx)
-        approval_context = {
-            "step_id": step_record.step_id,
-            "step_name": step_record.name,
-            "reason": self._approval_reason(run_ctx, step_record.step_id),
-        }
+        params = step_def.params or {}
+        approval_context = params.get("approval_context") if isinstance(params, dict) else None
         return {
             "step": step_record.model_dump(),
             "intent": intent,
-            "product_goal": product_goal,
-            "summary": summary,
-            "actions": actions,
             "approval_context": approval_context,
-            "artifacts": run_ctx.artifacts,
+            "artifacts": {"keys": sorted(run_ctx.artifacts.keys())},
         }
-
-    def _load_product_goal(self, product: str) -> Dict[str, Any]:
-        if product in self._product_goal_cache:
-            return self._product_goal_cache[product]
-        config_path = self.flow_loader.products_root / product / "config" / "product.yaml"
-        try:
-            import yaml  # type: ignore
-        except Exception:
-            self._product_goal_cache[product] = {}
-            return {}
-        if not config_path.exists():
-            self._product_goal_cache[product] = {}
-            return {}
-        try:
-            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        except Exception:
-            data = {}
-        goal = (data.get("metadata") or {}).get("product_goal") or {}
-        self._product_goal_cache[product] = goal
-        return goal
-
-    def _summarize_actions(self, run_ctx: RunContext) -> List[str]:
-        actions: List[str] = []
-        reader = run_ctx.artifacts.get("tool.data_reader.output")
-        if isinstance(reader, dict):
-            row_count = reader.get("row_count")
-            if row_count is not None:
-                actions.append(f"Read dataset ({row_count} rows).")
-        anomalies = run_ctx.artifacts.get("tool.detect_anomalies.output")
-        if isinstance(anomalies, dict):
-            summary = anomalies.get("summary")
-            if summary:
-                actions.append(f"Anomalies check: {summary}.")
-        chart_rec = run_ctx.artifacts.get("tool.recommend_chart.output")
-        if isinstance(chart_rec, dict):
-            chart_type = chart_rec.get("chart_type")
-            rationale = chart_rec.get("rationale")
-            if chart_type:
-                actions.append(f"Recommended chart: {chart_type}.")
-            if rationale:
-                actions.append(f"Rationale: {rationale}.")
-        summary_agent = run_ctx.artifacts.get("agent.dashboard_agent.output")
-        if isinstance(summary_agent, dict):
-            insight = summary_agent.get("insight")
-            if insight:
-                actions.append(f"Summary prepared: {insight}")
-        if not actions:
-            actions.append("No prior actions recorded.")
-        return actions
-
-    def _approval_reason(self, run_ctx: RunContext, step_id: str) -> str:
-        if step_id == "approval":
-            return "Approve dataset summary and chart recommendation before building visuals."
-        if step_id == "approval_export":
-            return "Approve exporting the visualization output."
-        return "Approval required to proceed."
 
 # Backwards compatibility for older imports/tests
 Engine = OrchestratorEngine

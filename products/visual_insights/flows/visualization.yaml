@@ -33,6 +33,7 @@ steps:
     tool: "detect_anomalies"
     params:
       series: "{{artifacts.tool.data_reader.output.series}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
 
   - id: "recommend_chart"
     type: "tool"
@@ -57,6 +58,14 @@ steps:
     type: "human_approval"
     title: "Approve visualization inputs"
     message: "Approve the dataset summary before generating visuals."
+    params:
+      approval_context:
+        reason: "Approve dataset summary and chart recommendation before building visuals."
+        decision_notes:
+          - "Dataset parsed and summarized."
+          - "Anomaly check completed."
+          - "Chart recommendation computed."
+        recommended_action: "APPROVE"
     form:
       fields:
         - name: "approved"
@@ -104,6 +113,14 @@ steps:
     type: "human_approval"
     title: "Approve export"
     message: "Approve exporting the visualization."
+    params:
+      approval_context:
+        reason: "Approve exporting the visualization output."
+        decision_notes:
+          - "Chart spec built."
+          - "Insight card assembled."
+          - "Export will generate PDF and stub."
+        recommended_action: "APPROVE"
     form:
       fields:
         - name: "approved"
