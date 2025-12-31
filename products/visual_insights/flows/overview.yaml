@@ -1,0 +1,29 @@
+# ==============================
+# Flow: overview
+# ==============================
+# Golden path:
+#   1) Read dataset summary
+#   2) Agent produces dashboard narrative
+
+id: "overview"
+version: "1.0.0"
+description: "Data reader -> dashboard agent summary"
+autonomy_level: "suggest_only"
+
+steps:
+  - id: "read"
+    type: "tool"
+    backend: "local"
+    tool: "data_reader"
+    params:
+      dataset: "{{payload.dataset}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+
+  - id: "summarize"
+    type: "agent"
+    backend: "local"
+    agent: "dashboard_agent"
+    params:
+      template: "Dashboard summary: {summary}"

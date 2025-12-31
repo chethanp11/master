@@ -4,6 +4,10 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, validator
 
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+
 ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
 
 
@@ -63,3 +67,24 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
         spec["encoding"] = encoding
     summary = f"built spec for {payload.chart_type}"
     return BuildChartSpecOutput(chart_spec=spec, summary=summary)
+
+
+class BuildChartSpecTool(BaseTool):
+    name = "build_chart_spec"
+    description = "Builds a chart specification from structured inputs."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = BuildChartSpecInput.model_validate(params or {})
+            output = build_chart_spec(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> BuildChartSpecTool:
+    return BuildChartSpecTool()

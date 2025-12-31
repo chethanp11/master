@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
 
 
 class SegmentRow(BaseModel):
@@ -70,3 +74,24 @@ def driver_analysis(payload: DriverAnalysisInput) -> DriverAnalysisOutput:
         drivers=drivers,
         summary=summary,
     )
+
+
+class DriverAnalysisTool(BaseTool):
+    name = "driver_analysis"
+    description = "Computes driver contributions for before/after segments."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = DriverAnalysisInput.model_validate(params or {})
+            output = driver_analysis(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> DriverAnalysisTool:
+    return DriverAnalysisTool()

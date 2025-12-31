@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Dict, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
 ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
 
 
@@ -43,3 +46,24 @@ def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
         rationale = "fallback to table when chart heuristics do not match"
 
     return RecommendChartOutput(chart_type=chart_type, rationale=rationale)
+
+
+class RecommendChartTool(BaseTool):
+    name = "recommend_chart"
+    description = "Recommends a chart type based on basic data heuristics."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = RecommendChartInput.model_validate(params or {})
+            output = recommend_chart(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> RecommendChartTool:
+    return RecommendChartTool()

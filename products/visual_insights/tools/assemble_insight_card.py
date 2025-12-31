@@ -4,6 +4,9 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
 from products.visual_insights.contracts.card import InsightCard, KeyMetric
 from products.visual_insights.contracts.citations import CitationRef
 from products.visual_insights.contracts.slices import DataSlice
@@ -50,3 +53,24 @@ def assemble_insight_card(payload: AssembleInsightCardInput) -> AssembleInsightC
         assumptions=payload.assumptions,
     )
     return AssembleInsightCardOutput(card=card)
+
+
+class AssembleInsightCardTool(BaseTool):
+    name = "assemble_insight_card"
+    description = "Assembles an InsightCard from validated inputs."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = AssembleInsightCardInput.model_validate(params or {})
+            output = assemble_insight_card(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> AssembleInsightCardTool:
+    return AssembleInsightCardTool()

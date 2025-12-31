@@ -52,7 +52,11 @@ class StepExecutor:
         if step_def.type == StepType.TOOL:
             rendered_params = self._render_params(step_def.params or {}, run_ctx.payload)
             step_def = step_def.model_copy(update={"params": rendered_params})
-            return self._execute_tool(step_ctx=step_ctx, step_def=step_def).model_dump(mode="json")
+            tool_result = self._execute_tool(step_ctx=step_ctx, step_def=step_def)
+            if tool_result.ok:
+                run_ctx.artifacts[f"tool.{step_def.tool}.output"] = tool_result.data
+                run_ctx.artifacts[f"tool.{step_def.tool}.meta"] = tool_result.meta.model_dump(mode="json")
+            return tool_result.model_dump(mode="json")
 
         if step_def.type == StepType.AGENT:
             if not step_def.agent:
@@ -61,6 +65,8 @@ class StepExecutor:
             result: AgentResult = agent.run(step_ctx)
             if not result.ok:
                 raise RuntimeError(result.error.message if result.error else "agent_failed")
+            run_ctx.artifacts[f"agent.{step_def.agent}.output"] = result.data
+            run_ctx.artifacts[f"agent.{step_def.agent}.meta"] = result.meta.model_dump(mode="json")
             return result.model_dump(mode="json")
 
         if step_def.type == StepType.SUBFLOW:

@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
-from core.contracts.tool_schema import ToolResult, ToolError, ToolMeta
+from core.contracts.tool_schema import ToolResult, ToolError, ToolErrorCode, ToolMeta
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
@@ -26,7 +26,7 @@ class DataReaderTool(BaseTool):
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data={"summary": summary}, error=None, meta=meta)
         except Exception as exc:
-            err = ToolError(code="TOOL_ERROR", message=str(exc))
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
             return ToolResult(ok=False, data=None, error=err, meta=ToolMeta(tool_name=self.name, backend="local"))
 
 

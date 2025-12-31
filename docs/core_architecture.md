@@ -92,7 +92,7 @@ flowchart LR
   DOTENV[.env] --> LOADER
   CONFIGS[configs/*.yaml] --> LOADER
   SECRETS[secrets/secrets.yaml] --> LOADER
-  LOADER --> SETTINGS[Settings (validated)]
+  LOADER --> SETTINGS[Settings validated]
 ```
 
 ---
