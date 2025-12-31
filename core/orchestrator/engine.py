@@ -65,7 +65,7 @@ class OrchestratorEngine:
         flow_loader = FlowLoader(products_root=products_root)
         memory_router = memory or MemoryRouter.from_settings(settings)
         redactor = SecurityRedactor.from_settings(settings)
-        tracer_instance = tracer or Tracer(memory=memory_router, redactor=redactor)
+        tracer_instance = tracer or Tracer.from_settings(settings=settings, memory=memory_router)
         governance = GovernanceHooks(settings=settings, redactor=redactor)
         tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
         step_executor = StepExecutor(
@@ -238,6 +238,59 @@ class OrchestratorEngine:
                 flow=bundle.run.flow,
                 payload={"decision": decision, "approved": payload.get("approved")},
             )
+            if comment:
+                replan_payload = dict(bundle.run.input or {})
+                replan_payload.update(
+                    {
+                        "replan_comment": comment,
+                        "previous_run": {
+                            "run": bundle.run.model_dump(),
+                            "steps": [s.model_dump() for s in bundle.steps],
+                            "approvals": [a.model_dump() for a in bundle.approvals],
+                        },
+                    }
+                )
+                replan_flow = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
+                start_index = 0
+                for idx, definition in enumerate(replan_flow.steps):
+                    if (definition.id or f"step_{idx}") in {"plan", "planning"}:
+                        start_index = idx
+                        break
+                replan_run_id = _new_run_id()
+                replan_record = RunRecord(
+                    run_id=replan_run_id,
+                    product=bundle.run.product,
+                    flow=bundle.run.flow,
+                    status=RunStatus.RUNNING,
+                    autonomy_level=str(replan_flow.autonomy_level.value),
+                    input=replan_payload,
+                    summary={"current_step_index": start_index, "replan_of": run_id},
+                )
+                self.memory.create_run(replan_record)
+                replan_ctx = RunContext(
+                    run_id=replan_run_id,
+                    product=bundle.run.product,
+                    flow=bundle.run.flow,
+                    payload=replan_payload,
+                )
+                replan_ctx.trace = self._trace_hook(replan_ctx)
+                self._emit_event(
+                    kind="run_replan_started",
+                    run_id=replan_run_id,
+                    step_id=None,
+                    product=bundle.run.product,
+                    flow=bundle.run.flow,
+                    payload={"previous_run": run_id, "start_index": start_index},
+                )
+                status = self._execute_from_index(
+                    flow_def=replan_flow,
+                    run_ctx=replan_ctx,
+                    start_index=start_index,
+                    requested_by=resolved_by,
+                )
+                return RunOperationResult.success(
+                    {"run_id": run_id, "status": RunStatus.FAILED.value, "replan_run_id": replan_run_id, "replan_status": status}
+                )
             return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
 
         flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
@@ -287,7 +340,8 @@ class OrchestratorEngine:
         start_index: int,
         requested_by: Optional[str],
     ) -> str:
-        for idx in range(start_index, len(flow_def.steps)):
+        idx = start_index
+        while idx < len(flow_def.steps):
             step_def = flow_def.steps[idx]
             step_id = step_def.id or f"step_{idx}"
 
@@ -411,7 +465,11 @@ class OrchestratorEngine:
                 )
                 return RunStatus.FAILED.value
 
-            self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": idx + 1})
+            next_index = idx + 1
+            if step_id in {"plan", "planning"}:
+                next_index = self._resolve_plan_next_index(flow_def, idx, result)
+            self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+            idx = next_index
 
         self.memory.update_run_status(run_ctx.run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)})
         self._emit_event(
@@ -429,6 +487,30 @@ class OrchestratorEngine:
             if (definition.id or f"step_{idx}") == step_id:
                 return idx
         raise ValueError(f"Cannot map approval step '{step_id}' to flow definition.")
+
+    def _resolve_plan_next_index(self, flow_def: FlowDef, current_index: int, result: Dict[str, Any]) -> int:
+        data = result.get("data") if isinstance(result, dict) else None
+        start_index = None
+        if isinstance(data, dict):
+            candidate_index = data.get("start_index")
+            if isinstance(candidate_index, int):
+                start_index = candidate_index
+            else:
+                for key in ("start_step_id", "start_from", "start_step", "start_at"):
+                    step_id = data.get(key)
+                    if step_id:
+                        try:
+                            start_index = self._find_step_index(flow_def, step_id)
+                        except ValueError:
+                            start_index = None
+                        break
+        if start_index is None:
+            return current_index + 1
+        if start_index <= current_index:
+            return current_index + 1
+        if start_index > len(flow_def.steps):
+            return len(flow_def.steps)
+        return start_index
 
     def _emit_event(
         self,

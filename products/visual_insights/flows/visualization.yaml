@@ -5,12 +5,18 @@
 #   1) Read dataset summary
 #   2) Agent produces dashboard narrative
 
-id: "overview"
+id: "visualization"
 version: "1.0.0"
-description: "Data reader -> dashboard agent summary"
+description: "Data reader -> approval -> dashboard agent summary"
 autonomy_level: "suggest_only"
 
 steps:
+  - id: "plan"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
   - id: "read"
     type: "tool"
     backend: "local"
@@ -20,6 +26,19 @@ steps:
     retry:
       max_attempts: 2
       backoff_seconds: 1
+
+  - id: "approval"
+    type: "human_approval"
+    title: "Approve visualization inputs"
+    message: "Approve the dataset summary before generating visuals."
+    form:
+      fields:
+        - name: "approved"
+          type: "boolean"
+          required: true
+        - name: "notes"
+          type: "string"
+          required: false
 
   - id: "summarize"
     type: "agent"

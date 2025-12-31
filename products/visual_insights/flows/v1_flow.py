@@ -143,7 +143,7 @@ def run_visual_insights_v1(*, upload_request: UploadRequest, ctx: Dict[str, str]
     export_result = _with_trace(
         EXPORT_STEP_NAME,
         lambda: export_step(
-            ExportInput(cards=render_result.cards, export_requested=False),
+            ExportInput(cards=render_result.cards, export_requested=True),
             ctx,
         ),
     )

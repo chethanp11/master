@@ -21,6 +21,7 @@ from typing import Optional
 from core.contracts.run_schema import TraceEvent
 from core.config.schema import Settings
 from core.governance.security import SecurityRedactor
+from core.logging.observability import ObservabilityWriter
 from core.memory.base import MemoryBackend
 
 
@@ -32,11 +33,13 @@ class Tracer:
         logger: Optional[logging.Logger] = None,
         redactor: Optional[SecurityRedactor] = None,
         mirror_to_log: bool = True,
+        writer: Optional[ObservabilityWriter] = None,
     ) -> None:
         self.memory = memory
         self.logger = logger or logging.getLogger("master.trace")
         self.redactor = redactor or SecurityRedactor()
         self.mirror_to_log = mirror_to_log
+        self.writer = writer
 
     def emit(self, event: TraceEvent) -> None:
         sanitized_payload = self.redactor.sanitize(event.payload)
@@ -48,6 +51,12 @@ class Tracer:
         )
         # Persist through backend interface only
         self.memory.append_trace_event(safe)
+        if self.writer is not None:
+            self.writer.append_event(
+                product=safe.product,
+                run_id=safe.run_id,
+                payload=safe.model_dump(mode="json"),
+            )
 
         if self.mirror_to_log:
             self.logger.info(
@@ -68,4 +77,5 @@ class Tracer:
         """
         redactor = SecurityRedactor.from_settings(settings)
         mirror = bool(getattr(settings.logging, "console", True))
-        return cls(memory=memory, redactor=redactor, mirror_to_log=mirror)
+        writer = ObservabilityWriter(repo_root=settings.repo_root_path())
+        return cls(memory=memory, redactor=redactor, mirror_to_log=mirror, writer=writer)

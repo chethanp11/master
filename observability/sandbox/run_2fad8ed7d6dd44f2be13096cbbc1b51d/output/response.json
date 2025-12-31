@@ -1,0 +1,167 @@
+{
+  "ok": true,
+  "data": {
+    "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+    "run": {
+      "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+      "product": "sandbox",
+      "flow": "hello_world",
+      "status": "COMPLETED",
+      "autonomy_level": "suggest_only",
+      "started_at": 1765784219,
+      "finished_at": 1765784219,
+      "input": {
+        "message": "test"
+      },
+      "output": null,
+      "summary": {
+        "current_step_index": 3
+      }
+    },
+    "steps": [
+      {
+        "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+        "step_id": "echo",
+        "step_index": 0,
+        "name": "echo",
+        "type": "tool",
+        "status": "COMPLETED",
+        "started_at": 1765784219,
+        "finished_at": 1765784219,
+        "input": {
+          "params": {
+            "message": "{{payload.message}}"
+          }
+        },
+        "output": {
+          "ok": true,
+          "data": {
+            "echo": "{{payload.message}}"
+          },
+          "error": null,
+          "meta": {
+            "tool_name": "echo_tool",
+            "backend": "local",
+            "request_id": "9aba8e81-4a2a-4c7a-891c-5c03f801e875",
+            "started_at": "2025-12-15T07:36:59.742774",
+            "ended_at": null,
+            "latency_ms": 0,
+            "cost_estimate": null,
+            "tags": {},
+            "redacted": false,
+            "tool": "echo_tool"
+          }
+        },
+        "error": null,
+        "meta": {
+          "backend": "local"
+        }
+      },
+      {
+        "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+        "step_id": "approval",
+        "step_index": 1,
+        "name": "approval",
+        "type": "human_approval",
+        "status": "COMPLETED",
+        "started_at": 1765784219,
+        "finished_at": 1765784219,
+        "input": {
+          "params": {}
+        },
+        "output": {
+          "approval": {
+            "decision": "APPROVED",
+            "comment": null,
+            "payload": {
+              "approved": true,
+              "notes": "ok"
+            }
+          }
+        },
+        "error": null,
+        "meta": {
+          "backend": null
+        }
+      },
+      {
+        "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+        "step_id": "summary",
+        "step_index": 2,
+        "name": "summary",
+        "type": "agent",
+        "status": "COMPLETED",
+        "started_at": 1765784219,
+        "finished_at": 1765784219,
+        "input": {
+          "params": {
+            "template": "Summarize what happened and include whether it was approved."
+          }
+        },
+        "output": {
+          "ok": true,
+          "data": {
+            "summary": "Summarize what happened and include whether it was approved.\n\n- Echoed message: ''\n- Approved: None\n- Notes: ''\n"
+          },
+          "error": null,
+          "meta": {
+            "agent_name": "simple_agent",
+            "kind": "other",
+            "request_id": "c4e61773-2221-4c6f-9c4e-330e789608a1",
+            "started_at": "2025-12-15T07:36:59.761640",
+            "ended_at": null,
+            "latency_ms": null,
+            "token_estimate": null,
+            "cost_estimate": null,
+            "tags": {},
+            "redacted": false
+          }
+        },
+        "error": null,
+        "meta": {
+          "backend": "local"
+        }
+      }
+    ],
+    "approvals": [
+      {
+        "approval_id": "appr_796c1242e8664dddbb8f47b61e8ef614",
+        "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+        "step_id": "approval",
+        "product": "sandbox",
+        "flow": "hello_world",
+        "status": "APPROVED",
+        "requested_by": null,
+        "requested_at": 1765784219,
+        "resolved_by": null,
+        "resolved_at": 1765784219,
+        "decision": "APPROVED",
+        "comment": null,
+        "payload": {
+          "step": {
+            "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d",
+            "step_id": "approval",
+            "step_index": 1,
+            "name": "approval",
+            "type": "human_approval",
+            "status": "RUNNING",
+            "started_at": 1765784219,
+            "finished_at": null,
+            "input": {
+              "params": {}
+            },
+            "output": null,
+            "error": null,
+            "meta": {
+              "backend": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  "error": null,
+  "meta": {
+    "run_id": "run_2fad8ed7d6dd44f2be13096cbbc1b51d"
+  }
+}

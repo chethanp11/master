@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "data": {
+    "run_id": "run_8e2d9bd9a15144a2b5a7138b694ed43c",
+    "run": {
+      "run_id": "run_8e2d9bd9a15144a2b5a7138b694ed43c",
+      "product": "visual_insights",
+      "flow": "overview",
+      "status": "COMPLETED",
+      "autonomy_level": "suggest_only",
+      "started_at": 1767187407,
+      "finished_at": 1767187407,
+      "input": {
+        "prompt": "Summarize key trends and highlight anomalies.",
+        "files": [
+          {
+            "file_id": "1767186889_visual_insights_input.csv",
+            "file_type": "csv",
+            "name": "visual_insights_input.csv"
+          }
+        ],
+        "dataset": "visual_insights_input.csv"
+      },
+      "output": null,
+      "summary": {
+        "current_step_index": 2
+      }
+    },
+    "steps": [
+      {
+        "run_id": "run_8e2d9bd9a15144a2b5a7138b694ed43c",
+        "step_id": "read",
+        "step_index": 0,
+        "name": "read",
+        "type": "tool",
+        "status": "COMPLETED",
+        "started_at": 1767187407,
+        "finished_at": 1767187407,
+        "input": {
+          "params": {
+            "dataset": "{{payload.dataset}}"
+          }
+        },
+        "output": {
+          "ok": true,
+          "data": {
+            "summary": "Insights for visual_insights_input.csv: all metrics nominal."
+          },
+          "error": null,
+          "meta": {
+            "tool_name": "data_reader",
+            "backend": "local",
+            "request_id": "325b32e5-f11f-48cc-881a-4b6f085c5101",
+            "started_at": "2025-12-31T13:23:27.874008",
+            "ended_at": null,
+            "latency_ms": 0,
+            "cost_estimate": null,
+            "tags": {},
+            "redacted": false
+          }
+        },
+        "error": null,
+        "meta": {
+          "backend": "local"
+        }
+      },
+      {
+        "run_id": "run_8e2d9bd9a15144a2b5a7138b694ed43c",
+        "step_id": "summarize",
+        "step_index": 1,
+        "name": "summarize",
+        "type": "agent",
+        "status": "COMPLETED",
+        "started_at": 1767187407,
+        "finished_at": 1767187407,
+        "input": {
+          "params": {
+            "template": "Dashboard summary: {summary}"
+          }
+        },
+        "output": {
+          "ok": true,
+          "data": {
+            "message": "Dashboard summary: Insights for visual_insights_input.csv: all metrics nominal.",
+            "insight": "Insights for visual_insights_input.csv: all metrics nominal."
+          },
+          "error": null,
+          "meta": {
+            "agent_name": "dashboard_agent",
+            "kind": "other",
+            "request_id": "bb30a8f0-fc78-49dc-b03e-f2a2f00033bc",
+            "started_at": "2025-12-31T13:23:27.879979",
+            "ended_at": null,
+            "latency_ms": null,
+            "token_estimate": null,
+            "cost_estimate": null,
+            "tags": {},
+            "redacted": false
+          }
+        },
+        "error": null,
+        "meta": {
+          "backend": "local"
+        }
+      }
+    ],
+    "approvals": []
+  },
+  "error": null,
+  "meta": {
+    "run_id": "run_8e2d9bd9a15144a2b5a7138b694ed43c"
+  }
+}

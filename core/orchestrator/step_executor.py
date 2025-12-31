@@ -65,6 +65,13 @@ class StepExecutor:
             result: AgentResult = agent.run(step_ctx)
             if not result.ok:
                 raise RuntimeError(result.error.message if result.error else "agent_failed")
+            step_ctx.emit(
+                "agent.executed",
+                {
+                    "agent": step_def.agent,
+                    "result": result.model_dump(mode="json"),
+                },
+            )
             run_ctx.artifacts[f"agent.{step_def.agent}.output"] = result.data
             run_ctx.artifacts[f"agent.{step_def.agent}.meta"] = result.meta.model_dump(mode="json")
             return result.model_dump(mode="json")

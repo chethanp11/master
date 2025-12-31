@@ -6,12 +6,13 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from core.contracts.run_schema import RunOperationResult
 from core.orchestrator.engine import OrchestratorEngine
 from core.utils.product_loader import ProductCatalog, ProductLoadError, ProductMeta
-from gateway.api.deps import get_engine, get_product_catalog
+from gateway.api.deps import get_engine, get_product_catalog, get_memory_router, get_settings
 
 
 router = APIRouter()
@@ -148,6 +149,40 @@ def list_flows(
     meta, flows = _ensure_product_ready(catalog, product)
     return _ok({"product": meta.name, "flows": flows, "default_flow": meta.default_flow})
 
+@router.get("/runs")
+def list_runs(
+    limit: int = 50,
+    offset: int = 0,
+    memory=Depends(get_memory_router),
+) -> Dict[str, Any]:
+    runs = [r.model_dump() for r in memory.list_runs(limit=limit, offset=offset)]
+    return _ok({"runs": runs})
+
+
+@router.get("/approvals")
+def list_approvals(
+    limit: int = 50,
+    offset: int = 0,
+    memory=Depends(get_memory_router),
+) -> Dict[str, Any]:
+    approvals = [a.model_dump() for a in memory.list_pending_approvals(limit=limit, offset=offset)]
+    return _ok({"approvals": approvals})
+
+
+@router.get("/output/{product}/{run_id}/{filename}")
+def get_output_file(
+    product: str,
+    run_id: str,
+    filename: str,
+    settings=Depends(get_settings),
+) -> FileResponse:
+    base = settings.repo_root_path() / "observability" / product / run_id / "output"
+    target = (base / filename).resolve()
+    if not str(target).startswith(str(base.resolve())):
+        _error(http_status=status.HTTP_400_BAD_REQUEST, code="invalid_path", message="Invalid output path.")
+    if not target.exists():
+        _error(http_status=status.HTTP_404_NOT_FOUND, code="not_found", message="Output file not found.")
+    return FileResponse(target)
 
 @router.post("/run/{product}/{flow}")
 def run_flow(

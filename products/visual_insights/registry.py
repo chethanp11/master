@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from core.utils.product_loader import ProductRegistries
 from products.visual_insights.agents.dashboard_agent import build as build_agent
+from products.visual_insights.agents.planning_agent import build as build_planning_agent
 from products.visual_insights.tools.assemble_insight_card import build as build_assemble_insight_card
 from products.visual_insights.tools.build_chart_spec import build as build_chart_spec
 from products.visual_insights.tools.data_reader import build as build_data_reader
@@ -47,6 +48,7 @@ from products.visual_insights.tools.recommend_chart import build as build_recomm
 
 def register(registries: ProductRegistries) -> None:
     registries.agent_registry.register(build_agent().name, build_agent)
+    registries.agent_registry.register(build_planning_agent().name, build_planning_agent)
     registries.tool_registry.register(build_data_reader().name, build_data_reader)
     registries.tool_registry.register(build_chart_spec().name, build_chart_spec)
     registries.tool_registry.register(build_recommend_chart().name, build_recommend_chart)

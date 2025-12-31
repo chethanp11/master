@@ -4,12 +4,12 @@ display_name: "Visual Insights"
 description: "Agentic dashboard for CSV and PDF datasets with citational governance."
 version: "0.1.0"
 
-default_flow: "overview"
+default_flow: "visualization"
 
 exposed_api:
   enabled: true
   allowed_flows:
-    - "overview"
+    - "visualization"
 
 ui_enabled: true
 ui:
@@ -24,4 +24,4 @@ ui:
       title: "Approvals Queue"
 
 flows:
-  - "overview"
+  - "visualization"

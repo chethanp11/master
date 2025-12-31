@@ -16,7 +16,7 @@ from core.utils.product_loader import discover_products, register_enabled_produc
 
 @pytest.mark.integration
 def test_visual_insights_overview_flow(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     storage_dir = tmp_path / "storage"
     sqlite_path = tmp_path / "visual_insights.sqlite"
 
@@ -36,24 +36,27 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         register_enabled_products(catalog, settings=settings)
         engine = OrchestratorEngine.from_settings(settings)
 
-        started = engine.run_flow(
-            product="visual_insights",
-            flow="overview",
-            payload={"dataset": "sample.csv"},
-        )
-        assert started.ok, started.error
-        assert started.data and started.data["status"] == "COMPLETED"
+    started = engine.run_flow(
+        product="visual_insights",
+        flow="visualization",
+        payload={"dataset": "sample.csv"},
+    )
+    assert started.ok, started.error
+    assert started.data and started.data["status"] == "PENDING_HUMAN"
 
-        run_id = started.data["run_id"]
-        result = engine.get_run(run_id=run_id)
-        assert result.ok, result.error
-        steps = result.data["steps"]
-        read_step = next(s for s in steps if s["step_id"] == "read")
-        assert read_step["output"]["data"]["summary"].startswith("Insights for sample.csv")
+    run_id = started.data["run_id"]
+    resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+    assert resumed.ok, resumed.error
 
-        summarize_step = next(s for s in steps if s["step_id"] == "summarize")
-        message = summarize_step["output"]["data"]["message"]
-        assert "Dashboard summary" in message
+    result = engine.get_run(run_id=run_id)
+    assert result.ok, result.error
+    steps = result.data["steps"]
+    read_step = next(s for s in steps if s["step_id"] == "read")
+    assert read_step["output"]["data"]["summary"].startswith("Insights for sample.csv")
+
+    summarize_step = next(s for s in steps if s["step_id"] == "summarize")
+    message = summarize_step["output"]["data"]["message"]
+    assert "Dashboard summary" in message
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()

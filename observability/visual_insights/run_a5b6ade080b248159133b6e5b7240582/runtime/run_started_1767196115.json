@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "data": {
+    "run_id": "run_a5b6ade080b248159133b6e5b7240582",
+    "status": "PENDING_HUMAN"
+  },
+  "error": null,
+  "meta": {
+    "product": "visual_insights",
+    "flow": "visualization"
+  }
+}
