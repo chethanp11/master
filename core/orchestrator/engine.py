@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import time
 import uuid
-import time
 from typing import Any, Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
@@ -19,7 +18,7 @@ from core.contracts.run_schema import (
     StepStatus,
     TraceEvent,
 )
-from core.governance.hooks import GovernanceHooks, HookDecision
+from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
 from core.logging.tracing import Tracer
 from core.memory.router import MemoryRouter
@@ -94,6 +93,46 @@ class OrchestratorEngine:
         try:
             flow_def = self.flow_loader.load(product=product, flow=flow)
             run_id = _new_run_id()
+            run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+            run_ctx.trace = self._trace_hook(run_ctx)
+
+            autonomy_decision = self.governance.check_autonomy(
+                run_ctx=run_ctx,
+                autonomy=flow_def.autonomy_level,
+            )
+            if not autonomy_decision.allowed:
+                now = int(time.time())
+                run_record = RunRecord(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    status=RunStatus.FAILED,
+                    autonomy_level=str(flow_def.autonomy_level.value),
+                    started_at=now,
+                    finished_at=now,
+                    input=payload,
+                    summary={
+                        "error": autonomy_decision.reason or "autonomy_denied",
+                        "autonomy_level": flow_def.autonomy_level.value,
+                    },
+                )
+                self.memory.create_run(run_record)
+                self._emit_event(
+                    kind="autonomy_denied",
+                    run_id=run_id,
+                    step_id=None,
+                    product=product,
+                    flow=flow,
+                    payload={
+                        "reason": autonomy_decision.reason,
+                        "autonomy_level": flow_def.autonomy_level.value,
+                    },
+                )
+                return RunOperationResult.failure(
+                    code="autonomy_denied",
+                    message=autonomy_decision.reason or "Autonomy denied by policy.",
+                )
+
             run_record = RunRecord(
                 run_id=run_id,
                 product=product,
@@ -104,9 +143,6 @@ class OrchestratorEngine:
                 summary={"current_step_index": 0},
             )
             self.memory.create_run(run_record)
-
-            run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
-            run_ctx.trace = self._trace_hook(run_ctx)
 
             self._emit_event(
                 kind="run_started",
@@ -216,7 +252,9 @@ class OrchestratorEngine:
             payload={"decision": decision},
         )
 
-        run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        merged_payload = dict(bundle.run.input or {})
+        merged_payload.update(payload)
+        run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=merged_payload)
         run_ctx.trace = self._trace_hook(run_ctx)
 
         status = self._execute_from_index(
@@ -275,7 +313,30 @@ class OrchestratorEngine:
             )
 
             decision = self.governance.before_step(step_ctx=step_ctx)
-            self._enforce(decision, run_ctx.run_id, run_ctx.product, run_ctx.flow, step_id, "before_step_denied")
+            if not decision.allowed:
+                self._emit_event(
+                    kind="before_step_denied",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"reason": decision.reason},
+                )
+                self.memory.update_step(
+                    run_ctx.run_id,
+                    step_id,
+                    {
+                        "status": StepStatus.FAILED.value,
+                        "finished_at": int(time.time()),
+                        "error": {"message": decision.reason, "type": "PermissionError"},
+                    },
+                )
+                self.memory.update_run_status(
+                    run_ctx.run_id,
+                    RunStatus.FAILED.value,
+                    summary={"failed_step_id": step_id, "reason": decision.reason},
+                )
+                return RunStatus.FAILED.value
 
             self._emit_event(
                 kind="step_started",
@@ -315,7 +376,7 @@ class OrchestratorEngine:
                 return RunStatus.PENDING_HUMAN.value
 
             try:
-                result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def)
+                result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def, step_id=step_id)
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
@@ -389,20 +450,6 @@ class OrchestratorEngine:
             payload=payload,
         )
         self.tracer.emit(evt)
-
-    def _enforce(self, decision: HookDecision, run_id: str, product: str, flow: str, step_id: Optional[str], kind: str) -> None:
-        if decision.allowed:
-            return
-        self._emit_event(
-            kind=kind,
-            run_id=run_id,
-            step_id=step_id,
-            product=product,
-            flow=flow,
-            payload={"reason": decision.reason},
-        )
-        raise PermissionError(decision.reason or "Denied by governance")
-
 
 # Backwards compatibility for older imports/tests
 Engine = OrchestratorEngine

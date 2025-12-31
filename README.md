@@ -21,7 +21,6 @@ The core orchestrator, memory, and governance layers are battle-tested; your pro
 - `docs/product_howto.md` walks you through manifest/config, flows, registry hooks, and regression testing.
 - `docs/overview.md` presents the high-level principles and the sandbox golden path.
 - `docs/governance_and_policies.md` plus `docs/engineering_standards.md` enumerate the safety rules that every commit must respect.
-- `docs/v1_acceptance_checklist.md` records the staged hardening steps (1–15) and their validation commands — use it to confirm compliance before releases.
 
 ## Getting started
 1. Read the architecture & component docs to understand the runtime boundaries.
@@ -36,4 +35,3 @@ The core orchestrator, memory, and governance layers are battle-tested; your pro
 - `docs/product_howto.md`: Step-by-step guide to scaffolding manifests, flows, agents/tools, registration, and regression testing.
 - `docs/governance_and_policies.md`: Policy enforcement story, redaction rules, hooks, and governance artifacts.
 - `docs/engineering_standards.md`: Platform laws letting you know what you must never break (env reads, persistence, envelope rules).
-- `docs/v1_acceptance_checklist.md`: Staged hardening checklist (steps 1–15) with validation commands for compliance.

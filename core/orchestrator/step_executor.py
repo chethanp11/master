@@ -38,10 +38,12 @@ class StepExecutor:
         *,
         run_ctx: RunContext,
         step_def: StepDef,
+        step_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        resolved_step_id = step_id or step_def.id or "step"
         step_ctx = run_ctx.new_step(
             step_def=step_def,
-            step_id=step_def.id,
+            step_id=resolved_step_id,
             step_type=step_def.type.value if isinstance(step_def.type, StepType) else str(step_def.type),
             backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
             target=step_def.agent or step_def.tool,
@@ -126,9 +128,10 @@ class StepExecutor:
         return {k: render(v) for k, v in params.items()}
 
 
-def build_step_context(run_ctx: RunContext, *, step_id: str, step_def: StepDef) -> StepContext:
+def build_step_context(run_ctx: RunContext, *, step_id: Optional[str], step_def: StepDef) -> StepContext:
+    resolved_step_id = step_id or step_def.id or "step"
     return run_ctx.new_step(
-        step_id=step_id,
+        step_id=resolved_step_id,
         step_type=step_def.type.value if isinstance(step_def.type, StepType) else str(step_def.type),
         backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
         target=step_def.agent or step_def.tool,

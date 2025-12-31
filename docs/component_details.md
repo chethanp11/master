@@ -11,7 +11,7 @@ paths, intent, and key technical characteristics.
 | `/configs` | Configuration bundles | Declarative settings for the runtime (app metadata, model defaults, policies, per-product enablement). | YAML files loaded via `core.config` utilities; injected into agents/tools (no direct env access). |
 | `/core` | Core runtime | Houses the reusable orchestration, tool, and agent infrastructure shared by every product. | Pure Python package, typed and organized into submodules (agents, tools, orchestrator, memory, etc.). |
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
-| `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), Typer CLI (`gateway/cli`), and developer UI stubs (`gateway/ui`). |
+| `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfiles, docker-compose, and k8s manifests (no Terraform in v1). |
 | `/logs` | Local log sink | Default on-disk location for structured run logs. | Writable at runtime; `core/logging/logger.py` (plus tracing/metrics) routes events here. |
 | `/products` | Product packs | Individual product definitions (flows, agents, prompts, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
@@ -88,7 +88,7 @@ paths, intent, and key technical characteristics.
 | --- | --- | --- | --- |
 | `gateway/api/http_app.py` | FastAPI factory | Builds the HTTP API exposing run/flow endpoints. | Includes `gateway.api.routes_run` router under `/api`; uses dependency providers in `deps.py`. |
 | `gateway/api/routes_run.py` | Run routes | REST endpoints for submitting requirements, querying runs, and streaming logs. | Calls into `core.orchestrator.runner` and serializes `AgentResult`/`ToolResult` objects. |
-| `gateway/cli/main.py` | CLI entry | Typer/Click CLI for developers to trigger flows locally (inspect, run, list products). | Shares config loading with API, uses same registries. |
+| `gateway/cli/main.py` | CLI entry | Argparse CLI for developers to trigger flows locally (inspect, run, list products). | Shares config loading with API, uses same registries. |
 | `gateway/ui/platform_app.py` | Streamlit UI | Single-file Streamlit dashboard for v1 run monitoring. | Communicates with API via HTTP/websocket helpers. |
 
 ## Products (`/products`)
@@ -121,8 +121,8 @@ Example entry:
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `/infra/docker` | Containers | Dockerfiles / compose setups for local + prod builds. | Standard multi-stage builds referencing `/pyproject.toml`. |
-| `/scripts/bootstrap.py` | Bootstrap script | Helper to initialize configs, secrets, storage for new environments. | Called by CI or ops teams. |
+| `/infra` | Containers + K8s | Dockerfile, docker-compose, and k8s manifests for local/prod. | Standard multi-stage build with `infra/Dockerfile`. |
+| `/scripts` | Ops scripts | Helper scripts for product scaffolding, knowledge ingest, and memory migration. | `scripts/create_product.py`, `scripts/ingest_knowledge.py`, `scripts/migrate_memory.py`, `scripts/run_flow.py`. |
 
 ## Storage & Logs
 

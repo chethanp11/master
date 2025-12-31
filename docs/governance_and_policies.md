@@ -197,11 +197,10 @@ Governance hooks are mandatory enforcement points executed by the runtime.
 ### 5.1 Available Hooks
 
 Hook Name	Trigger
-before_flow_start	Flow initialization
+check_autonomy	Run initialization (autonomy policy enforcement)
 before_step	Step execution
 before_tool_call	Tool invocation
-after_step	Step completion
-before_flow_complete	Flow finalization
+before_complete	Run finalization
 
 
 ---
@@ -318,4 +317,3 @@ Product teams:
 ---
 
 This governance model ensures controlled autonomy, full auditability, and enterprise-grade safety while preserving extensibility and velocity.
-
