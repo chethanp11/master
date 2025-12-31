@@ -29,7 +29,7 @@ def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
     trace_sink.clear()
 
     # RunA -> Approve, double approve should fail
-    start = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={})
+    start = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "idempotent"})
     assert start.ok
     run_id = start.data["run_id"]
     bundle = orchestrator.memory.get_run(run_id)
@@ -54,7 +54,7 @@ def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
     trace_sink.clear()
 
     # RunB -> Reject, double reject and approve-after-reject should fail
-    start_b = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={})
+    start_b = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "idempotent"})
     assert start_b.ok
     run_b = start_b.data["run_id"]
     reject_ok = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": False}, decision="REJECTED")

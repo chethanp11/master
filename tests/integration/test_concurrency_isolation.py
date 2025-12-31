@@ -23,7 +23,7 @@ def _register_products():
 
 
 def _run_and_finish(orchestrator, trace_sink) -> str:
-    res = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={})
+    res = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
     assert res.ok
     run_id = res.data["run_id"]
     orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True})
