@@ -25,7 +25,7 @@ class _EchoAgent(BaseAgent):
         # Minimal agent that echoes payload + prior artifacts
         message = None
         try:
-            message = step_ctx.run.payload.get("message")  # type: ignore[attr-defined]
+            message = step_ctx.run.payload.get("keyword")  # type: ignore[attr-defined]
         except Exception:
             message = None
 
@@ -63,10 +63,10 @@ def test_agent_run_returns_agent_result() -> None:
 
     run = RunContext(
         run_id="r1",
-        product="sandbox",
+        product="hello_world",
         flow="hello_world",
         status=RunStatus.RUNNING,
-        payload={"message": "hi"},
+        payload={"keyword": "hi"},
         artifacts={"k1": {"v": 1}},
         meta={},
     )

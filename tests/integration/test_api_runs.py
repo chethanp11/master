@@ -43,9 +43,9 @@ def api_client(tmp_path, monkeypatch):
     _reset_deps()
 
 
-def _start_sandbox_run(api_client: TestClient, payload: Optional[Dict[str, Any]] = None) -> str:
-    req_payload = payload or {"message": "API"}
-    started = api_client.post("/api/run/sandbox/hello_world", json={"payload": req_payload}).json()
+def _start_hello_world_run(api_client: TestClient, payload: Optional[Dict[str, Any]] = None) -> str:
+    req_payload = payload or {"keyword": "API"}
+    started = api_client.post("/api/run/hello_world/hello_world", json={"payload": req_payload}).json()
     assert started["ok"] is True
     assert started["data"]["status"] == "PENDING_HUMAN"
     return started["data"]["run_id"]
@@ -55,15 +55,15 @@ def _start_sandbox_run(api_client: TestClient, payload: Optional[Dict[str, Any]]
 def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
     products = api_client.get("/api/products").json()
     assert products["ok"] is True
-    sandbox = next((p for p in products["data"]["products"] if p["name"] == "sandbox"), None)
-    assert sandbox is not None
-    assert "hello_world" in sandbox["flows"]
+    hello_world = next((p for p in products["data"]["products"] if p["name"] == "hello_world"), None)
+    assert hello_world is not None
+    assert "hello_world" in hello_world["flows"]
 
-    flows = api_client.get("/api/products/sandbox/flows").json()
+    flows = api_client.get("/api/products/hello_world/flows").json()
     assert flows["ok"] is True
     assert "hello_world" in flows["data"]["flows"]
 
-    run_id = _start_sandbox_run(api_client)
+    run_id = _start_hello_world_run(api_client)
 
     pending = api_client.get(f"/api/run/{run_id}").json()
     assert pending["ok"] is True
@@ -83,7 +83,7 @@ def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
 
 @pytest.mark.integration
 def test_gateway_api_resume_rejection_marks_failed(api_client: TestClient) -> None:
-    run_id = _start_sandbox_run(api_client)
+    run_id = _start_hello_world_run(api_client)
 
     resumed = api_client.post(
         f"/api/resume_run/{run_id}",
@@ -99,7 +99,7 @@ def test_gateway_api_resume_rejection_marks_failed(api_client: TestClient) -> No
 
 @pytest.mark.integration
 def test_gateway_api_missing_approval_field_is_rejected(api_client: TestClient) -> None:
-    run_id = _start_sandbox_run(api_client)
+    run_id = _start_hello_world_run(api_client)
     resp = api_client.post(
         f"/api/resume_run/{run_id}",
         json={"decision": "APPROVED", "approval_payload": {"notes": "missing approved flag"}},
@@ -111,7 +111,7 @@ def test_gateway_api_missing_approval_field_is_rejected(api_client: TestClient) 
 
 @pytest.mark.integration
 def test_gateway_api_trace_cleanliness(api_client: TestClient) -> None:
-    run_id = _start_sandbox_run(api_client, payload={"message": "safe", "api_key": "sk-secret"})
+    run_id = _start_hello_world_run(api_client, payload={"keyword": "safe", "api_key": "sk-secret"})
     resumed = api_client.post(
         f"/api/resume_run/{run_id}",
         json={"decision": "APPROVED", "approval_payload": {"approved": True}},

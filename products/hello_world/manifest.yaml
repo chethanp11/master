@@ -1,0 +1,31 @@
+# ==============================
+# Product Manifest (Hello World)
+# ==============================
+name: "hello_world"
+display_name: "Hello World"
+description: "Golden-path demo product for master. Safe tools and simple flows."
+version: "0.1.0"
+
+default_flow: "hello_world"
+
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "hello_world"
+
+ui_enabled: true
+ui:
+  enabled: true
+  nav_label: "Hello World"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
+    - id: "runs"
+      title: "Run History"
+    - id: "approvals"
+      title: "Approvals Queue"
+  icon: "🧪"
+  category: "demo"
+
+flows:
+  - "hello_world"

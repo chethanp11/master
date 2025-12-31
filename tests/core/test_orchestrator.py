@@ -45,7 +45,7 @@ def test_engine_runs_and_pauses_on_hitl(tmp_path: Path) -> None:
 
         engine = OrchestratorEngine.from_settings(settings)
 
-        started = engine.run_flow(product="sandbox", flow="hello_world", payload={"message": "test"})
+        started = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "test"})
         assert started.ok, started.error
         run_id = started.data["run_id"]  # type: ignore[index]
 

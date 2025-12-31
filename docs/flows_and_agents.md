@@ -72,7 +72,7 @@ products//flows/
 
 Example:
 
-products/sandbox/flows/hello_world.yaml
+products/hello_world/flows/hello_world.yaml
 
 ---
 
@@ -87,7 +87,7 @@ autonomy_level: semi_auto   # suggest_only | semi_auto | full_auto
 steps:
   - id: plan
     type: agent
-    agent: sandbox.planner
+    agent: hello_world.planner
     goal: "Generate an execution plan"
     retry:
       max_attempts: 2
@@ -99,7 +99,7 @@ steps:
 
   - id: execute
     type: agent
-    agent: sandbox.executor
+    agent: hello_world.executor
     goal: "Execute the approved plan"
 ```
 
@@ -199,7 +199,7 @@ products/<product>/agents/
 
 Example:
 
-products/sandbox/agents/simple_agent.py
+products/hello_world/agents/simple_agent.py
 
 
 ---
@@ -215,7 +215,7 @@ All agents must:
 Conceptual example:
 
 class SimpleAgent(BaseAgent):
-    name = "sandbox.simple"
+    name = "hello_world.simple"
 
     def run(self, step_context):
         return AgentResult(

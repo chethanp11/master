@@ -10,9 +10,9 @@ from core.knowledge.vector_store import SqliteVectorStore
 from scripts import ingest_knowledge
 
 
-def test_ingest_script_round_trip(tmp_path: Path, sandbox_test_env: Path) -> None:
+def test_ingest_script_round_trip(tmp_path: Path, hello_world_test_env: Path) -> None:
     """
-    The sandbox_test_env fixture drives deterministic sqlite overrides so ingestion and flow tests share storage paths.
+    The hello_world_test_env fixture drives deterministic sqlite overrides so ingestion and flow tests share storage paths.
     """
     data_dir = tmp_path / "docs"
     data_dir.mkdir()
@@ -25,7 +25,7 @@ def test_ingest_script_round_trip(tmp_path: Path, sandbox_test_env: Path) -> Non
             "--db",
             str(db_path),
             "--collection",
-            "sandbox",
+            "hello_world",
             "--path",
             str(data_dir),
         ]
@@ -35,14 +35,14 @@ def test_ingest_script_round_trip(tmp_path: Path, sandbox_test_env: Path) -> Non
     assert exit_code == 0
 
     store = SqliteVectorStore(str(db_path))
-    stats = store.stats(collection="sandbox")
+    stats = store.stats(collection="hello_world")
     assert stats.total_chunks > 0
 
-    results = store.query(Query(collection="sandbox", text="alpha"))
+    results = store.query(Query(collection="hello_world", text="alpha"))
     assert results
 
     # Re-ingesting the same folder should be idempotent.
     exit_code_repeat = ingest_knowledge.run_ingest(args)
     assert exit_code_repeat == 0
-    stats_after = store.stats(collection="sandbox")
+    stats_after = store.stats(collection="hello_world")
     assert stats_after.total_chunks == stats.total_chunks

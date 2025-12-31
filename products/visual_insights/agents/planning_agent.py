@@ -36,8 +36,8 @@ class PlanningAgent(BaseAgent):
             reason = "default_next"
             comment_lower = comment.lower()
             if comment_lower:
-                if any(token in comment_lower for token in ("chart", "bar", "line", "scatter", "stacked", "table", "visual")):
-                    start_step_id = "build_chart_spec"
+                if any(token in comment_lower for token in ("chart", "plot", "bar", "line", "scatter", "stacked", "table", "visual", "visualization")):
+                    start_step_id = "recommend_chart"
                     reason = "comment_mentions_chart_change"
                 elif any(token in comment_lower for token in ("approval", "approve", "review")):
                     start_step_id = "approval"

@@ -63,12 +63,12 @@ def test_ui_imports_without_errors(monkeypatch):
 def test_api_client_list_products(monkeypatch):
     import gateway.ui.platform_app as platform_app
 
-    stub_body = {"ok": True, "data": {"products": [{"name": "sandbox", "display_name": "Sandbox", "flows": ["hello_world"]}]}}
+    stub_body = {"ok": True, "data": {"products": [{"name": "hello_world", "display_name": "Hello World", "flows": ["hello_world"]}]}}
     monkeypatch.setattr(platform_app.requests, "get", lambda *args, **kwargs: _FakeResponse(stub_body))
     client = platform_app.ApiClient("https://api.example.com")
     resp = client.list_products()
     assert resp.ok
-    assert resp.body["data"]["products"][0]["name"] == "sandbox"
+    assert resp.body["data"]["products"][0]["name"] == "hello_world"
 
 
 def test_product_summary_render(monkeypatch):
@@ -76,7 +76,7 @@ def test_product_summary_render(monkeypatch):
 
     stub_st = _FakeStreamlit()
     monkeypatch.setattr(platform_app, "st", stub_st)
-    products = [{"name": "sandbox", "display_name": "Sandbox", "description": "Demo", "flows": ["hello_world"]}]
+    products = [{"name": "hello_world", "display_name": "Hello World", "description": "Demo", "flows": ["hello_world"]}]
     platform_app._render_product_summary(products)
     assert any(call[0] == "subheader" for call in stub_st.calls)
-    assert any("Sandbox" in call[1] for call in stub_st.calls if call[0] == "expander_open")
+    assert any("Hello World" in call[1] for call in stub_st.calls if call[0] == "expander_open")

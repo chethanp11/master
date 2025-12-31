@@ -1,1 +1,0 @@
-{"event_id": "be5fc864-e9e3-44bc-aaac-8eaa862e392d", "run_id": "run_8d1e815b34854e07b270cfed5c7567d9", "step_id": "approval", "product": "sandbox", "flow": "hello_world", "kind": "run_rejected", "ts": 1767203893, "payload": {"decision": "REJECTED", "approved": false, "comment": ""}, "redacted": false}

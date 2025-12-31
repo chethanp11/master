@@ -58,8 +58,8 @@ def test_parallel_failure_isolation(orchestrator, trace_sink: List[Dict[str, str
     original = _override_echo(lambda: PayloadDrivenTool())
     try:
         def run_task(marker: str, fail: bool):
-            payload = {"message": f"run-{marker}", "fail_run": fail}
-            res = orchestrator.run_flow(product="sandbox", flow="hello_world", payload=payload)
+            payload = {"keyword": f"run-{marker}", "fail_run": fail}
+            res = orchestrator.run_flow(product="hello_world", flow="hello_world", payload=payload)
             return res.data["run_id"], fail
 
         results = []

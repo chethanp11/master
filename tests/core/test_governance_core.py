@@ -14,7 +14,7 @@ def _settings() -> Settings:
     return Settings()
 
 
-def _step_ctx(product: str = "sandbox") -> StepContext:
+def _step_ctx(product: str = "hello_world") -> StepContext:
     run_record = RunRecord(run_id="run_test", product=product, flow_id="hello", status=RunStatus.RUNNING)
     flow = FlowDef(
         id="hello",
@@ -56,7 +56,7 @@ def test_policy_engine_blocks_tool_via_blocklist() -> None:
 def test_policy_engine_applies_per_product_override() -> None:
     settings = _settings()
     settings.policies.blocked_tools = ["echo_tool"]
-    settings.policies.by_product = {"sandbox": {"blocked_tools": []}}
+    settings.policies.by_product = {"hello_world": {"blocked_tools": []}}
     engine = PolicyEngine(settings)
     decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
     assert decision.allow is True
@@ -66,7 +66,7 @@ def test_policy_engine_enforces_model_allowlist() -> None:
     settings = _settings()
     settings.policies.allowed_models = ["gpt-4o-mini"]
     engine = PolicyEngine(settings)
-    allowed = engine.evaluate_model_selection(product="sandbox", model_name="gpt-4o-mini")
-    denied = engine.evaluate_model_selection(product="sandbox", model_name="other-model")
+    allowed = engine.evaluate_model_selection(product="hello_world", model_name="gpt-4o-mini")
+    denied = engine.evaluate_model_selection(product="hello_world", model_name="other-model")
     assert allowed.allow is True
     assert denied.allow is False

@@ -276,6 +276,54 @@ def _append_history(run_id: str) -> None:
     history.append(run_id)
 
 
+def _get_product_record(products: List[Dict[str, Any]], name: str) -> Dict[str, Any]:
+    for product in products:
+        if product.get("name") == name:
+            return product
+    return {}
+
+
+def _get_product_config(product: Dict[str, Any]) -> Dict[str, Any]:
+    config = product.get("config") or {}
+    return config if isinstance(config, dict) else {}
+
+
+def _resolve_input_spec(config: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = config.get("metadata") if isinstance(config, dict) else None
+    if not isinstance(metadata, dict):
+        metadata = {}
+    ui = metadata.get("ui")
+    if isinstance(ui, dict):
+        inputs = ui.get("inputs")
+        if isinstance(inputs, dict):
+            return inputs
+    inputs = metadata.get("inputs")
+    if isinstance(inputs, dict):
+        return inputs
+    for value in metadata.values():
+        if isinstance(value, dict) and isinstance(value.get("inputs"), dict):
+            return value.get("inputs") or {}
+    return {}
+
+
+def _resolve_intent_spec(config: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = config.get("metadata") if isinstance(config, dict) else None
+    if not isinstance(metadata, dict):
+        metadata = {}
+    ui = metadata.get("ui")
+    if isinstance(ui, dict):
+        intent = ui.get("intent")
+        if isinstance(intent, dict):
+            return intent
+    intent = metadata.get("intent")
+    if isinstance(intent, dict):
+        return intent
+    for value in metadata.values():
+        if isinstance(value, dict) and isinstance(value.get("intent"), dict):
+            return value.get("intent") or {}
+    return {}
+
+
 def _render_product_summary(products: List[Dict[str, Any]]) -> None:
     st.subheader("Products")
     if not products:
@@ -310,30 +358,23 @@ def _render_run_history(*, observability_root: Path) -> None:
             events = _load_run_events(observability_root, product=product, run_id=run_id)
             st.write(f"Events: {len(events)}")
             approvals_from_output: List[Dict[str, Any]] = []
-            if status == "COMPLETED":
-                output_dir = _materialize_run_dirs(observability_root, product=product, run_id=run_id)["output"]
+            output_dir = observability_root / product / run_id / "output"
+            base_url = _api_base_url(load_settings())
+            if output_dir.exists() and output_dir.is_dir():
                 response_path = output_dir / "response.json"
-                pdf_path = output_dir / "visualization.pdf"
-                stub_path = output_dir / "visualization_stub.json"
-                base_url = _api_base_url(load_settings())
                 if response_path.exists():
                     try:
                         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
                         approvals_from_output = response_payload.get("approvals") or []
                     except Exception:
                         approvals_from_output = []
-                if response_path.exists():
-                    st.markdown(
-                        f"[Download response.json]({base_url}/api/output/{product}/{run_id}/response.json)"
-                    )
-                if pdf_path.exists():
-                    st.markdown(
-                        f"[Download visualization.pdf]({base_url}/api/output/{product}/{run_id}/visualization.pdf)"
-                    )
-                if stub_path.exists():
-                    st.markdown(
-                        f"[Download visualization_stub.json]({base_url}/api/output/{product}/{run_id}/visualization_stub.json)"
-                    )
+                output_files = sorted([p for p in output_dir.iterdir() if p.is_file()])
+                if output_files:
+                    st.markdown("**Outputs**")
+                    for output_file in output_files:
+                        st.markdown(
+                            f"[Download {output_file.name}]({base_url}/api/output/{product}/{run_id}/{output_file.name})"
+                        )
             if events:
                 step_state: Dict[str, Dict[str, str]] = {}
                 approvals: List[Dict[str, Any]] = []
@@ -541,6 +582,8 @@ def main() -> None:
             st.info("No enabled products discovered.")
             return
         prod = st.selectbox("Product", [prod["name"] for prod in products])
+        product_record = _get_product_record(products, prod)
+        product_config = _get_product_config(product_record)
         flows_resp = client.list_flows(prod)
         if not flows_resp.ok or not flows_resp.body:
             st.warning(f"Unable to get flows for '{prod}': {flows_resp.error or flows_resp.body}")
@@ -554,19 +597,33 @@ def main() -> None:
 
         flow = st.selectbox("Flow", flows)
         file_refs: List[Dict[str, Any]] = []
-        if prod == "visual_insights":
-            st.markdown("### Upload files (CSV/PDF)")
+        input_spec = _resolve_input_spec(product_config)
+        allowed_types = input_spec.get("allowed_types") or []
+        if isinstance(allowed_types, list):
+            allowed_types = [str(ext).lower().lstrip(".") for ext in allowed_types if str(ext).strip()]
+        else:
+            allowed_types = []
+        inputs_enabled = bool(input_spec.get("enabled", bool(allowed_types)))
+        max_files = input_spec.get("max_files")
+        files_field = input_spec.get("files_field") or "files"
+        upload_id_field = input_spec.get("upload_id_field") or "upload_id"
+        dataset_field = input_spec.get("dataset_field")
+        upload_key = f"{prod}_upload_id"
+        items_key = f"{prod}_upload_items"
+
+        if inputs_enabled and allowed_types:
+            st.markdown("### Upload files")
             uploaded = st.file_uploader(
                 "Attach data files",
-                type=["csv", "pdf"],
-                accept_multiple_files=True,
+                type=allowed_types,
+                accept_multiple_files=(max_files is None or max_files != 1),
             )
             include_uploads = st.checkbox("Include uploaded files in payload", value=True)
             if uploaded and include_uploads:
-                upload_id = st.session_state.get("vi_upload_id")
+                upload_id = st.session_state.get(upload_key)
                 if not upload_id:
                     upload_id = str(int(time.time()))
-                    st.session_state["vi_upload_id"] = upload_id
+                    st.session_state[upload_key] = upload_id
                 file_refs, items = _save_uploaded_files(
                     uploaded,
                     upload_id=upload_id,
@@ -580,32 +637,38 @@ def main() -> None:
                     )
                     st.caption(f"Files staged for upload {upload_id}.")
                 if file_refs:
-                    st.code(_pretty({"files": file_refs}), language="json")
-                st.session_state["vi_upload_items"] = items
+                    st.code(_pretty({files_field: file_refs}), language="json")
+                st.session_state[items_key] = items
 
         payload: Dict[str, Any] = {}
         ok = True
-        if prod == "visual_insights":
+        intent_spec = _resolve_intent_spec(product_config)
+        intent_enabled = bool(intent_spec.get("enabled", False))
+        if intent_enabled:
+            intent_field = str(intent_spec.get("field") or "prompt")
+            intent_label = intent_spec.get("label") or "Instructions"
+            intent_help = intent_spec.get("help") or "Optional guidance for the analysis."
+            intent_default = intent_spec.get("default") or ""
             instructions = st.text_area(
-                "Instructions",
-                value="Summarize key trends and highlight anomalies.",
+                intent_label,
+                value=intent_default,
                 height=140,
-                help="Optional guidance for the analysis (stored in payload as 'prompt').",
+                help=intent_help,
             )
-            payload["prompt"] = instructions.strip() if instructions else ""
+            payload[intent_field] = instructions.strip() if instructions else ""
         else:
             payload_text = st.text_area("Payload (JSON)", value="{}", height=220)
             ok, payload, err = _safe_json_loads(payload_text)
             if not ok:
                 st.error(f"Invalid JSON: {err}")
 
-        if prod == "visual_insights" and file_refs:
-            payload.setdefault("files", file_refs)
-            payload["upload_id"] = st.session_state.get("vi_upload_id")
-            if "dataset" not in payload:
+        if file_refs:
+            payload.setdefault(files_field, file_refs)
+            payload[upload_id_field] = st.session_state.get(upload_key)
+            if dataset_field and dataset_field not in payload:
                 csv_name = next((f["name"] for f in file_refs if f["file_type"] == "csv"), None)
                 if csv_name:
-                    payload["dataset"] = csv_name
+                    payload[dataset_field] = csv_name
             st.markdown("### Payload preview")
             st.code(_pretty(payload), language="json")
 
@@ -617,8 +680,7 @@ def main() -> None:
                 if run_id:
                     st.success(f"Run started: {run_id}")
                     _append_history(run_id)
-                    if prod == "visual_insights":
-                        _materialize_run_dirs(observability_root, product=prod, run_id=run_id)
+                    _materialize_run_dirs(observability_root, product=prod, run_id=run_id)
 
     elif page == "Approvals":
         _render_approvals(client)

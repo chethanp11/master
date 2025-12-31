@@ -1,0 +1,28 @@
+# ==============================
+# Product Config (Hello World)
+# ==============================
+# Product-local defaults and overrides.
+# NOTE: No secrets. Use configs/*.yaml + secrets/secrets.yaml for that.
+
+name: hello_world
+
+defaults:
+  model_profile: "default"
+  autonomy_level: "suggest_only"
+
+limits:
+  max_steps: 50
+  max_tool_calls: 50
+
+tools:
+  # Product tool exposure is enforced via policies.yaml (authoritative).
+  enabled:
+    - "echo_tool"
+
+agents:
+  enabled:
+    - "simple_agent"
+
+flows:
+  enabled:
+    - "hello_world"

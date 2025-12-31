@@ -72,7 +72,7 @@ def test_retry_success(orchestrator, trace_sink: List[Dict[str, Any]]) -> None:
     state: Dict = {}
     original = _override_echo_tool(lambda: BackendBehaviorTool(behavior="fail_once_then_success", state=state))
     try:
-        result = orchestrator.run_flow(product="sandbox", flow="hello_world", payload={})
+        result = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={})
         assert result.ok, result.error
         assert state, "Tool attempts recorded"
         tool_event_kinds = [e["kind"] for e in trace_sink if e["kind"].startswith("tool_call")]
@@ -97,7 +97,7 @@ def test_timeout_exhaustion(orchestrator, trace_sink: List[Dict[str, Any]]) -> N
     state: Dict = {}
     original = _override_echo_tool(lambda: BackendBehaviorTool(behavior="always_timeout", state=state))
     try:
-        result = orchestrator.run_flow(product="sandbox", flow="hello_world", payload={})
+        result = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={})
         assert result.ok
         assert state, "Timeout attempts recorded"
         tool_event_kinds = [e["kind"] for e in trace_sink if e["kind"].startswith("tool_call")]

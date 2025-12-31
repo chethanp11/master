@@ -6,9 +6,9 @@ CLI for master/ platform.
 
 Supported commands:
   master list-products
-  master list-flows --product sandbox
-  master run --product sandbox --flow hello_world --payload '{"msg":"hi"}'
-  master run --product sandbox --flow hello_world --payload-file payload.json
+  master list-flows --product hello_world
+  master run --product hello_world --flow hello_world --payload '{"keyword":"hi"}'
+  master run --product hello_world --flow hello_world --payload-file payload.json
   master status --run-id run_123
   master approvals
   master resume --run-id run_123 --approve --payload '{"approved": true}'

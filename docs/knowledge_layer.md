@@ -166,7 +166,7 @@ Example: ingest a directory of markdown files
 ```bash
 python scripts/ingest_knowledge.py \
 --db storage/vectors/knowledge.sqlite \
---collection sandbox \
+--collection hello_world \
 --path docs/knowledge \
 --glob "**/*.md" \
 --chunk-size 800 \
@@ -206,9 +206,9 @@ retriever = Retriever(store)
 
 chunks = retriever.retrieve(
     query="approval workflow",
-    collection="sandbox",
+    collection="hello_world",
     top_k=3,
-    filters={"product": "sandbox"},
+    filters={"product": "hello_world"},
 )
 
 for chunk in chunks:
@@ -226,7 +226,7 @@ Rules:
 The SQLite store contains one row per chunk.
 
 Column	Description
-collection	Logical namespace (default, sandbox, etc.)
+collection	Logical namespace (default, hello_world, etc.)
 doc_id	Stable document identifier (normalized path)
 chunk_id	Unique chunk key (doc_id + index)
 text	Chunk text

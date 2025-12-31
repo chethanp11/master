@@ -54,7 +54,11 @@ def _serialize_error(err: ProductLoadError) -> Dict[str, Any]:
     return {"product": err.product, "path": err.path, "message": err.message}
 
 
-def _serialize_product(meta: ProductMeta, errors: List[ProductLoadError]) -> Dict[str, Any]:
+def _serialize_product(
+    meta: ProductMeta,
+    errors: List[ProductLoadError],
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     per_product_errors = [_serialize_error(err) for err in errors if err.product == meta.name]
     return {
         "name": meta.name,
@@ -68,6 +72,7 @@ def _serialize_product(meta: ProductMeta, errors: List[ProductLoadError]) -> Dic
         "ui": meta.ui.model_dump(),
         "enabled": meta.enabled,
         "errors": per_product_errors,
+        "config": config or {},
     }
 
 
@@ -135,7 +140,12 @@ def _respond(result: RunOperationResult, *, meta: Dict[str, Any] | None = None) 
 @router.get("/products")
 def list_products(catalog: ProductCatalog = Depends(get_product_catalog)) -> Dict[str, Any]:
     products = [
-        _serialize_product(meta, catalog.errors) for meta in sorted(catalog.products.values(), key=lambda m: m.name)
+        _serialize_product(
+            meta,
+            catalog.errors,
+            config=catalog.configs.get(meta.name).model_dump() if catalog.configs.get(meta.name) else {},
+        )
+        for meta in sorted(catalog.products.values(), key=lambda m: m.name)
     ]
     orphan_errors = [_serialize_error(err) for err in catalog.errors if err.product not in catalog.products]
     return _ok({"products": products, "errors": orphan_errors})

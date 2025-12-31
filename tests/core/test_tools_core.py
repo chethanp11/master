@@ -12,7 +12,7 @@ from core.orchestrator.context import RunContext, StepContext
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 
-from products.sandbox.tools.echo_tool import EchoTool
+from products.hello_world.tools.echo_tool import EchoTool
 
 
 @dataclass
@@ -24,7 +24,7 @@ class RecordingTool(EchoTool):
         return super().run(params, ctx)
 
 
-def _build_step_ctx(*, product: str = "sandbox", events: List[Tuple[str, dict]] | None = None) -> StepContext:
+def _build_step_ctx(*, product: str = "hello_world", events: List[Tuple[str, dict]] | None = None) -> StepContext:
     run_record = RunRecord(run_id="run-tools", product=product, flow_id="hello", status=RunStatus.RUNNING)
     flow = FlowDef(id="hello", steps=[StepDef(id="s1", type=StepType.TOOL, tool="echo_tool")])
     trace: Callable[[str, dict], None] | None = None

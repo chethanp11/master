@@ -104,10 +104,10 @@ def register(registries: ProductRegistries) -> None:
 
 ## 7. Testing & Validation
 
-Product tests belong under `products/<name>/tests/`. Sandbox ships `products/sandbox/tests/test_sandbox_flow.py`, which:
+Product tests belong under `products/<name>/tests/`. Hello World ships `products/hello_world/tests/test_hello_world_flow.py`, which:
 
 - Boots settings via `load_settings(configs_dir=..., secrets_path=...)` to point the sqlite backend into a temp path
-- Discovers/registers the sandbox product
+- Discovers/registers the hello_world product
 - Runs `hello_world`, asserts the run pauses for HITL, resumes with an approval payload, and inspects persisted step outputs (echo + summary)
 
 Use pytest to keep the golden path deterministic (sqlite backend only, no network).

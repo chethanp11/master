@@ -21,7 +21,7 @@ def _register_products() -> None:
 
 def test_trace_contract(orchestrator, trace_sink: List[dict]) -> None:
     _register_products()
-    started = orchestrator.run_flow(product="sandbox", flow="hello_world", payload={"message": "trace secret"})
+    started = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "trace secret"})
     assert started.ok
     run_id = started.data["run_id"]
     resumed = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True})
@@ -36,7 +36,7 @@ def test_trace_contract(orchestrator, trace_sink: List[dict]) -> None:
 
     for event in trace_sink:
         assert event.get("run_id") == run_id
-        assert event.get("product") == "sandbox"
+        assert event.get("product") == "hello_world"
         assert event.get("flow") == "hello_world"
         assert event.get("ts") and isinstance(event["ts"], int)
         assert event.get("event_type")

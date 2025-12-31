@@ -17,9 +17,9 @@ allowed_models: []
 blocked_models: []
 
 # Per-product overrides let you tailor behaviour for a single product.
-# Example below keeps `sandbox` limited to echo_tool and a single model.
+# Example below keeps `hello_world` limited to echo_tool and a single model.
 by_product:
-  sandbox:
+  hello_world:
     allowed_tools:
       - echo_tool
     allowed_models:

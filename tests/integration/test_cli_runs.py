@@ -36,9 +36,9 @@ def test_cli_run_resume_flow(tmp_path, monkeypatch, capsys) -> None:
     try:
         code, products = _run_cli(["list-products"], capsys)
         assert code == 0
-        assert "sandbox" in products["products"]
+        assert "hello_world" in products["products"]
 
-        code, flows = _run_cli(["list-flows", "--product", "sandbox"], capsys)
+        code, flows = _run_cli(["list-flows", "--product", "hello_world"], capsys)
         assert code == 0
         assert "hello_world" in flows["flows"]
 
@@ -46,11 +46,11 @@ def test_cli_run_resume_flow(tmp_path, monkeypatch, capsys) -> None:
             [
                 "run",
                 "--product",
-                "sandbox",
+                "hello_world",
                 "--flow",
                 "hello_world",
                 "--payload",
-                '{"message":"CLI"}',
+                '{"keyword":"CLI"}',
             ],
             capsys,
         )
@@ -103,17 +103,17 @@ def test_cli_resume_rejection_marks_failed(tmp_path, monkeypatch, capsys) -> Non
     ToolRegistry.clear()
     try:
         _, _ = _run_cli(["list-products"], capsys)
-        _, _ = _run_cli(["list-flows", "--product", "sandbox"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "hello_world"], capsys)
 
         _, started = _run_cli(
             [
                 "run",
                 "--product",
-                "sandbox",
+                "hello_world",
                 "--flow",
                 "hello_world",
                 "--payload",
-                '{"message":"CLI"}',
+                '{"keyword":"CLI"}',
             ],
             capsys,
         )
@@ -153,17 +153,17 @@ def test_cli_resume_missing_payload_fails(tmp_path, monkeypatch, capsys) -> None
     ToolRegistry.clear()
     try:
         _, _ = _run_cli(["list-products"], capsys)
-        _, _ = _run_cli(["list-flows", "--product", "sandbox"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "hello_world"], capsys)
 
         _, started = _run_cli(
             [
                 "run",
                 "--product",
-                "sandbox",
+                "hello_world",
                 "--flow",
                 "hello_world",
                 "--payload",
-                '{"message":"CLI"}',
+                '{"keyword":"CLI"}',
             ],
             capsys,
         )

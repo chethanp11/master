@@ -2,35 +2,29 @@
 """
 scripts/create_product.py
 
-Scaffold a new product under products/<name>/ with required folders and starter files.
+Scaffold a new product under products/<name>/.
 
 Usage:
   python scripts/create_product.py --name myproduct
   python scripts/create_product.py myproduct
+  python scripts/create_product.py --name myproduct --base visual_insights
+  python scripts/create_product.py --name myproduct --minimal
 
 Rules:
 - Validates product name (lowercase, starts with letter, [a-z0-9_], max 50)
 - Refuses to overwrite if product folder exists
-- Creates:
-    products/<name>/
-      __init__.py
-      manifest.yaml
-      registry.py                # NEW: product registration entrypoint
-      flows/.keep
-      agents/__init__.py
-      tools/__init__.py
-      config/product.yaml
-      tests/__init__.py
-      tests/test_smoke.py
+- By default, clones products/<base>/ (defaults to visual_insights), then rewrites product references.
+- Optional: use --minimal to create the minimal scaffold instead.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Iterable, Tuple
 
 
 VALID_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
@@ -76,6 +70,24 @@ limits:
 flags:
   enable_tools: true
   enable_knowledge: true
+
+metadata:
+  ui:
+    inputs:
+      enabled: false
+      allowed_types: []
+      max_files: 5
+      files_field: "files"
+      upload_id_field: "upload_id"
+      dataset_field: "dataset"
+    intent:
+      enabled: false
+      field: "prompt"
+      label: "Instructions"
+      help: "Optional guidance for the analysis."
+      default: ""
+    outputs:
+      enabled: true
 """
 
 SMOKE_TEST_TEMPLATE = """def test_product_scaffold_smoke():
@@ -137,6 +149,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("positional_name", nargs="?", help="Product name (alternative to --name)")
     parser.add_argument("--name", "-n", dest="name", help="Product name (lowercase, [a-z0-9_])")
     parser.add_argument(
+        "--base",
+        default="visual_insights",
+        help="Base product to copy (defaults to visual_insights).",
+    )
+    parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="Create a minimal scaffold instead of copying a base product.",
+    )
+    parser.add_argument(
         "--root",
         default=".",
         help="Repo root (defaults to current directory). products/ will be created under this.",
@@ -169,6 +191,52 @@ def touch_keep(path: Path) -> None:
     write_file(path, KEEP_FILE_NOTE)
 
 
+def copy_base_product(*, base_dir: Path, target_dir: Path) -> None:
+    ignore = shutil.ignore_patterns(
+        "__pycache__",
+        "*.pyc",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+    )
+    shutil.copytree(base_dir, target_dir, ignore=ignore)
+
+
+def iter_text_files(root: Path) -> Iterable[Path]:
+    text_exts = {".py", ".md", ".yaml", ".yml", ".json", ".txt", ".ini", ".toml"}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in text_exts:
+            continue
+        yield path
+
+
+def rewrite_product_references(
+    root: Path,
+    *,
+    base_name: str,
+    name: str,
+    display_name: str,
+) -> None:
+    base_display_name = base_name.replace("_", " ").title()
+    replacements = [
+        (f"products.{base_name}", f"products.{name}"),
+        (base_display_name, display_name),
+        (base_name, name),
+    ]
+    for path in iter_text_files(root):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        updated = content
+        for old, new in replacements:
+            updated = updated.replace(old, new)
+        if updated != content:
+            path.write_text(updated, encoding="utf-8")
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     name = (args.name or args.positional_name or "").strip()
@@ -181,6 +249,8 @@ def main(argv: list[str]) -> int:
     repo_root = Path(args.root).resolve()
     products_dir = repo_root / "products"
     product_dir = products_dir / name
+    base_name = (args.base or "").strip()
+    base_dir = products_dir / base_name if base_name else None
 
     try:
         ensure_not_exists(product_dir)
@@ -188,46 +258,59 @@ def main(argv: list[str]) -> int:
         print(f"❌ {e}", file=sys.stderr)
         return 3
 
-    # ==============================
-    # Create base folders
-    # ==============================
-    (product_dir / "__init__.py").parent.mkdir(parents=True, exist_ok=True)
-    write_file(product_dir / "__init__.py", "")
-
-    (product_dir / "flows").mkdir(parents=True, exist_ok=True)
-    (product_dir / "agents").mkdir(parents=True, exist_ok=True)
-    (product_dir / "tools").mkdir(parents=True, exist_ok=True)
-    (product_dir / "config").mkdir(parents=True, exist_ok=True)
-    (product_dir / "tests").mkdir(parents=True, exist_ok=True)
-
-    # ==============================
-    # Package init files
-    # ==============================
-    write_file(product_dir / "agents" / "__init__.py", "")
-    write_file(product_dir / "tools" / "__init__.py", "")
-    write_file(product_dir / "tests" / "__init__.py", "")
-
-    # ==============================
-    # Keep placeholders
-    # ==============================
-    touch_keep(product_dir / "flows" / ".keep")
-
-    # ==============================
-    # Starter manifest + product config
-    # ==============================
     display_name = name.replace("_", " ").title()
-    write_file(product_dir / "manifest.yaml", MANIFEST_TEMPLATE.format(name=name, display_name=display_name))
-    write_file(product_dir / "config" / "product.yaml", PRODUCT_CONFIG_TEMPLATE.format(name=name))
 
-    # ==============================
-    # NEW: registry.py entrypoint
-    # ==============================
-    write_file(product_dir / "registry.py", REGISTRY_TEMPLATE.format(name=name))
+    if args.minimal:
+        # ==============================
+        # Create base folders
+        # ==============================
+        (product_dir / "__init__.py").parent.mkdir(parents=True, exist_ok=True)
+        write_file(product_dir / "__init__.py", "")
 
-    # ==============================
-    # Starter test
-    # ==============================
-    write_file(product_dir / "tests" / "test_smoke.py", SMOKE_TEST_TEMPLATE)
+        (product_dir / "flows").mkdir(parents=True, exist_ok=True)
+        (product_dir / "agents").mkdir(parents=True, exist_ok=True)
+        (product_dir / "tools").mkdir(parents=True, exist_ok=True)
+        (product_dir / "config").mkdir(parents=True, exist_ok=True)
+        (product_dir / "tests").mkdir(parents=True, exist_ok=True)
+
+        # ==============================
+        # Package init files
+        # ==============================
+        write_file(product_dir / "agents" / "__init__.py", "")
+        write_file(product_dir / "tools" / "__init__.py", "")
+        write_file(product_dir / "tests" / "__init__.py", "")
+
+        # ==============================
+        # Keep placeholders
+        # ==============================
+        touch_keep(product_dir / "flows" / ".keep")
+
+        # ==============================
+        # Starter manifest + product config
+        # ==============================
+        write_file(product_dir / "manifest.yaml", MANIFEST_TEMPLATE.format(name=name, display_name=display_name))
+        write_file(product_dir / "config" / "product.yaml", PRODUCT_CONFIG_TEMPLATE.format(name=name))
+
+        # ==============================
+        # NEW: registry.py entrypoint
+        # ==============================
+        write_file(product_dir / "registry.py", REGISTRY_TEMPLATE.format(name=name))
+
+        # ==============================
+        # Starter test
+        # ==============================
+        write_file(product_dir / "tests" / "test_smoke.py", SMOKE_TEST_TEMPLATE)
+    else:
+        if not base_dir or not base_dir.exists():
+            print(f"❌ Base product not found: {base_dir}", file=sys.stderr)
+            return 4
+        copy_base_product(base_dir=base_dir, target_dir=product_dir)
+        rewrite_product_references(
+            product_dir,
+            base_name=base_name,
+            name=name,
+            display_name=display_name,
+        )
 
     # ==============================
     # Next steps
@@ -242,7 +325,10 @@ def main(argv: list[str]) -> int:
     print(f"  4) Update manifest:  products/{name}/manifest.yaml (default_flow, exposure flags)")
     print(f"  5) Run tests:        pytest -q")
     print("")
-    print("Tip: Start with a simple hello_world flow + one tool + one agent + one HITL step.")
+    if args.minimal:
+        print("Tip: Start with a simple hello_world flow + one tool + one agent + one HITL step.")
+    else:
+        print(f"Tip: Base copied from products/{base_name}/. Review config, flows, and registry for {name}.")
     return 0
 
 

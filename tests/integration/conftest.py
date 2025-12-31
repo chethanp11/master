@@ -8,7 +8,7 @@ import pytest
 
 
 @pytest.fixture
-def sandbox_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def hello_world_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
     Shared env fixture for integration tests that rely on sqlite-backed memory.
 

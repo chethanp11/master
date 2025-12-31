@@ -15,7 +15,7 @@ from scripts import migrate_memory
 def _make_run(run_id: str, *, started_at: int) -> SimpleNamespace:
     return SimpleNamespace(
         run_id=run_id,
-        product="sandbox",
+        product="hello_world",
         flow="hello_world",
         status="RUNNING",
         autonomy_level="manual",
@@ -49,7 +49,7 @@ def _make_event(run_id: str, step_id: str) -> SimpleNamespace:
         kind="step_started",
         run_id=run_id,
         step_id=step_id,
-        product="sandbox",
+        product="hello_world",
         flow="hello_world",
         ts=int(time.time()),
         payload={"ok": True},
@@ -84,7 +84,7 @@ def test_sqlite_backend_run_step_event_and_approvals_roundtrip(tmp_path: Path) -
         approval_id="ap_1",
         run_id=run.run_id,
         step_id=step.step_id,
-        product="sandbox",
+        product="hello_world",
         flow="hello_world",
         status="PENDING",
         requested_by="tester",

@@ -45,7 +45,7 @@ class AppConfig(BaseModel):
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8000)
     ui_port: int = Field(default=8501, description="If using Streamlit/Chainlit etc.")
-    default_product: str = Field(default="sandbox")
+    default_product: str = Field(default="hello_world")
     default_flow: str = Field(default="hello_world")
     api_base_url: Optional[str] = Field(
         default=None,

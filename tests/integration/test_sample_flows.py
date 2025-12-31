@@ -1,5 +1,5 @@
 # ==============================
-# Integration Tests: Golden Path (Core + Sandbox Product)
+# Integration Tests: Golden Path (Core + Hello World Product)
 # ==============================
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from core.tools.registry import ToolRegistry
 
 
 @pytest.mark.integration
-def test_sample_flow_sandbox_hello_world(tmp_path: Path, sandbox_test_env: Path) -> None:
+def test_sample_flow_hello_world(tmp_path: Path, hello_world_test_env: Path) -> None:
     """
     Runs:
       echo -> HITL -> summary
 
-    The sandbox_test_env fixture handles sqlite/secrets overrides so other integration suites can reuse the same storage location.
+    The hello_world_test_env fixture handles sqlite/secrets overrides so other integration suites can reuse the same storage location.
     """
     repo_root = Path(__file__).resolve().parents[2]
     configs_dir = repo_root / "configs"
@@ -33,7 +33,7 @@ def test_sample_flow_sandbox_hello_world(tmp_path: Path, sandbox_test_env: Path)
 
         engine = OrchestratorEngine.from_settings(settings)
 
-        started = engine.run_flow(product="sandbox", flow="hello_world", payload={"message": "hello"})
+        started = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
         assert started.ok, started.error
         run_id = started.data["run_id"]  # type: ignore[index]
 

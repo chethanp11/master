@@ -25,7 +25,7 @@ def test_log_redaction(orchestrator, trace_sink, caplog) -> None:
     secret_value = "sk-very-secret TOKEN=pa55word"
     caplog.set_level(logging.INFO, logger="master.trace")
 
-    orchestrator.run_flow(product="sandbox", flow="hello_world", payload={"message": secret_value})
+    orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": secret_value})
 
     assert secret_value not in caplog.text
     for record in caplog.records:

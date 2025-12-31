@@ -256,24 +256,20 @@ class OrchestratorEngine:
                     }
                 )
                 replan_flow = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
-                start_index = 0
+                plan_index = None
+                plan_def = None
                 for idx, definition in enumerate(replan_flow.steps):
                     if (definition.id or f"step_{idx}") in {"plan", "planning"}:
-                        start_index = idx
+                        plan_index = idx
+                        plan_def = definition
                         break
-                replan_run_id = _new_run_id()
-                replan_record = RunRecord(
-                    run_id=replan_run_id,
-                    product=bundle.run.product,
-                    flow=bundle.run.flow,
-                    status=RunStatus.RUNNING,
-                    autonomy_level=str(replan_flow.autonomy_level.value),
-                    input=replan_payload,
-                    summary={"current_step_index": start_index, "replan_of": run_id},
+                self.memory.update_run_status(
+                    run_id,
+                    RunStatus.RUNNING.value,
+                    summary={"current_step_index": plan_index or 0, "replan_of": run_id},
                 )
-                self.memory.create_run(replan_record)
                 replan_ctx = RunContext(
-                    run_id=replan_run_id,
+                    run_id=run_id,
                     product=bundle.run.product,
                     flow=bundle.run.flow,
                     payload=replan_payload,
@@ -283,21 +279,79 @@ class OrchestratorEngine:
                 self._rehydrate_artifacts(bundle.steps, replan_ctx)
                 self._emit_event(
                     kind="run_replan_started",
-                    run_id=replan_run_id,
+                    run_id=run_id,
                     step_id=None,
                     product=bundle.run.product,
                     flow=bundle.run.flow,
-                    payload={"previous_run": run_id, "start_index": start_index},
+                    payload={"previous_run": run_id, "start_index": plan_index or 0},
                 )
+                next_index = 0
+                if plan_def is not None and plan_index is not None:
+                    replan_step_id = f"replan_plan_{int(time.time())}"
+                    step_record = StepRecord(
+                        run_id=run_id,
+                        step_id=replan_step_id,
+                        step_index=len(bundle.steps),
+                        name=plan_def.name or "replan_plan",
+                        type=plan_def.type.value,
+                        status=StepStatus.RUNNING,
+                        started_at=int(time.time()),
+                        input={"params": plan_def.params or {}},
+                        meta={"backend": plan_def.backend.value if getattr(plan_def.backend, "value", None) else plan_def.backend},
+                    )
+                    self.memory.add_step(step_record)
+                    self._emit_event(
+                        kind="step_started",
+                        run_id=run_id,
+                        step_id=replan_step_id,
+                        product=bundle.run.product,
+                        flow=bundle.run.flow,
+                        payload={"step_index": step_record.step_index, "type": plan_def.type.value, "name": step_record.name},
+                    )
+                    try:
+                        plan_result = self.step_executor.execute(run_ctx=replan_ctx, step_def=plan_def, step_id=replan_step_id)
+                        self.memory.update_step(
+                            run_id,
+                            replan_step_id,
+                            {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": plan_result},
+                        )
+                        self._emit_event(
+                            kind="step_completed",
+                            run_id=run_id,
+                            step_id=replan_step_id,
+                            product=bundle.run.product,
+                            flow=bundle.run.flow,
+                            payload={"ok": True},
+                        )
+                        next_index = self._resolve_plan_next_index(replan_flow, plan_index, plan_result)
+                    except Exception as exc:
+                        self.memory.update_step(
+                            run_id,
+                            replan_step_id,
+                            {
+                                "status": StepStatus.FAILED.value,
+                                "finished_at": int(time.time()),
+                                "error": {"message": str(exc), "type": type(exc).__name__},
+                            },
+                        )
+                        self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"failed_step_id": replan_step_id})
+                        self._emit_event(
+                            kind="step_failed",
+                            run_id=run_id,
+                            step_id=replan_step_id,
+                            product=bundle.run.product,
+                            flow=bundle.run.flow,
+                            payload={"error": {"message": str(exc), "type": type(exc).__name__}},
+                        )
+                        self._persist_run_output(replan_ctx)
+                        return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
                 status = self._execute_from_index(
                     flow_def=replan_flow,
                     run_ctx=replan_ctx,
-                    start_index=start_index,
+                    start_index=next_index,
                     requested_by=resolved_by,
                 )
-                return RunOperationResult.success(
-                    {"run_id": run_id, "status": RunStatus.FAILED.value, "replan_run_id": replan_run_id, "replan_status": status}
-                )
+                return RunOperationResult.success({"run_id": run_id, "status": status})
             return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
 
         flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)

@@ -27,6 +27,25 @@ metadata:
       - table
     explainability:
       citations_required: true
+  ui:
+    inputs:
+      enabled: true
+      allowed_types:
+        - "csv"
+        - "pdf"
+      max_files: 10
+      max_file_size_mb: 25
+      files_field: "files"
+      upload_id_field: "upload_id"
+      dataset_field: "dataset"
+    intent:
+      enabled: true
+      field: "prompt"
+      label: "Instructions"
+      help: "Optional guidance for the analysis."
+      default: "Summarize key trends and highlight anomalies."
+    outputs:
+      enabled: true
   visual_insights_config:
     inputs:
       allowed_types:
