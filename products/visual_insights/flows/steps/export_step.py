@@ -23,6 +23,7 @@ class ExportOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     export_ref: Optional[Dict[str, str]]
+    stub_ref: Optional[Dict[str, str]]
 
 
 def run_step(inputs: ExportInput, ctx: Dict[str, str]) -> ExportOutput:
@@ -35,4 +36,4 @@ def run_step(inputs: ExportInput, ctx: Dict[str, str]) -> ExportOutput:
         run_id=run_id,
         repo_root=Path(__file__).resolve().parents[4],
     )
-    return ExportOutput(export_ref=export_result.export_ref)
+    return ExportOutput(export_ref=export_result.export_ref, stub_ref=export_result.stub_ref)

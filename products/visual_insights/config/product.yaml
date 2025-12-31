@@ -13,3 +13,58 @@ limits:
 flags:
   enable_tools: true
   enable_knowledge: true
+
+metadata:
+  product_goal:
+    must_produce:
+      - insight_cards
+      - at_least_one_visual
+    allowed_visuals:
+      - line
+      - bar
+      - stacked_bar
+      - scatter
+      - table
+    explainability:
+      citations_required: true
+  visual_insights_config:
+    inputs:
+      allowed_types:
+        - "csv"
+        - "pdf"
+      max_files: 10
+      max_file_size_mb: 25
+    modes:
+      allowed:
+        - "summarize_dataset"
+        - "answer_question"
+        - "anomalies_and_drivers"
+      default: "summarize_dataset"
+      max_cards:
+        summarize_dataset: 5
+        answer_question: 5
+        anomalies_and_drivers: 7
+    charts:
+      allowed_types:
+        - "line"
+        - "bar"
+        - "stacked_bar"
+        - "scatter"
+        - "table"
+      default_table_max_rows: 50
+    retrieval:
+      top_k: 5
+      chunk_size: 800
+      chunk_overlap: 120
+    export:
+      allowed_types:
+        - "pdf"
+      include_citations_section: true
+      include_run_metadata: true
+    governance:
+      trace_enabled: true
+      citations_required: true
+      pii:
+        enabled: true
+        redact_in_outputs: true
+        redact_in_traces: true

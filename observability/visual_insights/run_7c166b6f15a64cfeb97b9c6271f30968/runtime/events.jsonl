@@ -1,0 +1,1 @@
+{"event_id": "ae78a004-4ba2-4013-996f-72e602698f69", "run_id": "run_7c166b6f15a64cfeb97b9c6271f30968", "step_id": "approval", "product": "visual_insights", "flow": "visualization", "kind": "run_rejected", "ts": 1767203886, "payload": {"decision": "REJECTED", "approved": false, "comment": ""}, "redacted": false}

@@ -153,6 +153,29 @@ def _materialize_run_dirs(observability_root: Path, *, product: str, run_id: str
     return paths
 
 
+def _materialize_upload_dirs(observability_root: Path, *, product: str, upload_id: str) -> Path:
+    upload_dir = observability_root / product / "uploads" / upload_id / "input"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    return upload_dir
+
+
+def _write_inputs_to_uploads(
+    observability_root: Path,
+    *,
+    product: str,
+    upload_id: str,
+    items: List[Dict[str, Any]],
+) -> None:
+    if not items:
+        return
+    upload_dir = _materialize_upload_dirs(observability_root, product=product, upload_id=upload_id)
+    for item in items:
+        target = upload_dir / item["name"]
+        if target.exists():
+            continue
+        target.write_bytes(item["content"])
+
+
 def _write_inputs_to_run(
     observability_root: Path,
     *,
@@ -170,20 +193,39 @@ def _write_inputs_to_run(
         target.write_bytes(item["content"])
 
 
-def _record_runtime_snapshot(
-    observability_root: Path,
-    *,
-    product: str,
-    run_id: str,
-    payload: Dict[str, Any],
-    label: str,
-) -> None:
-    runtime_dir = _materialize_run_dirs(observability_root, product=product, run_id=run_id)["runtime"]
-    ts = int(time.time())
-    snapshot_path = runtime_dir / f"{label}_{ts}.json"
-    snapshot_path.write_text(_pretty(payload), encoding="utf-8")
-    latest_path = runtime_dir / "run.json"
-    latest_path.write_text(_pretty(payload), encoding="utf-8")
+def _load_run_events(observability_root: Path, *, product: str, run_id: str) -> List[Dict[str, Any]]:
+    runtime_path = observability_root / product / run_id / "runtime" / "events.jsonl"
+    events: List[Dict[str, Any]] = []
+    if not runtime_path.exists():
+        return events
+    for line in runtime_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except Exception:
+            continue
+    return events
+
+
+def _summarize_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not events:
+        return {"status": "UNKNOWN", "started_at": 0}
+    events_sorted = sorted(events, key=lambda e: e.get("ts", 0))
+    started_at = events_sorted[0].get("ts", 0)
+    status = "RUNNING"
+    for event in reversed(events_sorted):
+        kind = event.get("kind")
+        if kind == "run_completed":
+            status = "COMPLETED"
+            break
+        if kind in {"run_failed", "run_rejected"}:
+            status = "FAILED"
+            break
+        if kind == "pending_human":
+            status = "PENDING_HUMAN"
+            break
+    return {"status": status, "started_at": started_at}
 
 
 def _list_observed_runs(observability_root: Path) -> List[Dict[str, Any]]:
@@ -194,22 +236,22 @@ def _list_observed_runs(observability_root: Path) -> List[Dict[str, Any]]:
         if not product_dir.is_dir():
             continue
         for run_dir in sorted(product_dir.glob("*")):
-            runtime_path = run_dir / "runtime" / "run.json"
-            if not runtime_path.exists():
+            if not run_dir.is_dir():
                 continue
-            try:
-                data = json.loads(runtime_path.read_text(encoding="utf-8"))
-                run = data.get("data", {}).get("run", {})
-                runs.append(
-                    {
-                        "run_id": run.get("run_id", run_dir.name),
-                        "started_at": run.get("started_at", 0),
-                        "product": run.get("product", product_dir.name),
-                        "flow": run.get("flow", "unknown"),
-                    }
-                )
-            except Exception:
+            events = _load_run_events(observability_root, product=product_dir.name, run_id=run_dir.name)
+            if not events:
                 continue
+            events_sorted = sorted(events, key=lambda e: e.get("ts", 0))
+            summary = _summarize_events(events)
+            runs.append(
+                {
+                    "run_id": run_dir.name,
+                    "product": product_dir.name,
+                    "flow": events_sorted[0].get("flow", "unknown") if events_sorted else "unknown",
+                    "started_at": summary["started_at"],
+                    "status": summary["status"],
+                }
+            )
     return runs
 
 
@@ -249,13 +291,9 @@ def _render_product_summary(products: List[Dict[str, Any]]) -> None:
             st.write(", ".join(flows) if flows else "_No flows defined yet_")
 
 
-def _render_run_history(client: ApiClient, *, observability_root: Path) -> None:
+def _render_run_history(*, observability_root: Path) -> None:
     st.subheader("Run history")
-    runs_resp = client.list_runs()
-    if not runs_resp.ok or not runs_resp.body:
-        st.warning(f"Unable to list runs: {runs_resp.error or runs_resp.body}")
-        return
-    runs = runs_resp.body["data"].get("runs", [])
+    runs = _list_observed_runs(observability_root)
     if not runs:
         st.info("No runs have been recorded yet.")
         return
@@ -263,122 +301,176 @@ def _render_run_history(client: ApiClient, *, observability_root: Path) -> None:
 
     for run in runs:
         run_id = run.get("run_id")
-        resp = client.get_run(run_id)
-        if not resp.ok or not resp.body:
-            st.warning(f"Unable to fetch run {run_id}: {resp.error or 'unknown error'}")
-            continue
-
-        run = resp.body["data"]["run"]
-        steps = resp.body["data"].get("steps", [])
-        status = run["status"]
-        title = f"{run_id} — {run['product']}/{run['flow']} ({status})"
+        product = run.get("product", "unknown")
+        flow = run.get("flow", "unknown")
+        status = run.get("status", "UNKNOWN")
+        title = f"{run_id} — {product}/{flow} ({status})"
         with st.expander(title, expanded=False):
             st.write(f"Started: {run.get('started_at')}")
-            st.write(f"Summary: {json.dumps(run.get('summary', {}), indent=2)}")
-            if run.get("status") == "COMPLETED":
-                output_dir = _materialize_run_dirs(observability_root, product=run["product"], run_id=run_id)["output"]
+            events = _load_run_events(observability_root, product=product, run_id=run_id)
+            st.write(f"Events: {len(events)}")
+            approvals_from_output: List[Dict[str, Any]] = []
+            if status == "COMPLETED":
+                output_dir = _materialize_run_dirs(observability_root, product=product, run_id=run_id)["output"]
                 response_path = output_dir / "response.json"
-                if not response_path.exists():
-                    response_path.write_text(_pretty(resp.body), encoding="utf-8")
                 pdf_path = output_dir / "visualization.pdf"
+                stub_path = output_dir / "visualization_stub.json"
                 base_url = _api_base_url(load_settings())
                 if response_path.exists():
+                    try:
+                        response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+                        approvals_from_output = response_payload.get("approvals") or []
+                    except Exception:
+                        approvals_from_output = []
+                if response_path.exists():
                     st.markdown(
-                        f"[Download response.json]({base_url}/api/output/{run['product']}/{run_id}/response.json)"
+                        f"[Download response.json]({base_url}/api/output/{product}/{run_id}/response.json)"
                     )
                 if pdf_path.exists():
                     st.markdown(
-                        f"[Download visualization.pdf]({base_url}/api/output/{run['product']}/{run_id}/visualization.pdf)"
+                        f"[Download visualization.pdf]({base_url}/api/output/{product}/{run_id}/visualization.pdf)"
                     )
-            if run.get("error"):
-                st.error(f"Error: {run['error']}")
-            if steps:
-                st.table(
-                    [
-                        {
-                            "step_id": step["step_id"],
-                            "name": step["name"],
-                            "type": step["type"],
-                            "status": step["status"],
-                        }
-                        for step in steps
-                    ]
-                )
-            else:
-                st.write("No steps recorded yet.")
+                if stub_path.exists():
+                    st.markdown(
+                        f"[Download visualization_stub.json]({base_url}/api/output/{product}/{run_id}/visualization_stub.json)"
+                    )
+            if events:
+                step_state: Dict[str, Dict[str, str]] = {}
+                approvals: List[Dict[str, Any]] = []
+                for event in events:
+                    step_id = event.get("step_id")
+                    if not step_id:
+                        continue
+                    kind = event.get("kind")
+                    if kind == "step_started":
+                        step_state[step_id] = {"step_id": step_id, "status": "RUNNING"}
+                    elif kind == "step_completed":
+                        step_state[step_id] = {"step_id": step_id, "status": "COMPLETED"}
+                    elif kind == "step_failed":
+                        step_state[step_id] = {"step_id": step_id, "status": "FAILED"}
+                    elif kind == "pending_human":
+                        step_state[step_id] = {"step_id": step_id, "status": "PENDING_HUMAN"}
+                    if kind in {"run_resumed", "run_rejected"}:
+                        approvals.append(
+                            {
+                                "time": event.get("ts"),
+                                "decision": (event.get("payload") or {}).get("decision"),
+                                "comment": (event.get("payload") or {}).get("comment") or "",
+                                "step_id": step_id,
+                            }
+                        )
+                if step_state:
+                    st.table(list(step_state.values()))
+                if approvals_from_output or approvals:
+                    st.markdown("**Approvals**")
+                    for approval in approvals_from_output:
+                        decision = approval.get("decision")
+                        comment = approval.get("comment") or ""
+                        step_id = approval.get("step_id")
+                        resolved_at = approval.get("resolved_at")
+                        line = f"{resolved_at} • {step_id} • {decision}"
+                        if comment:
+                            line = f"{line} — {comment}"
+                        st.write(line)
+                    for approval in approvals:
+                        decision = approval.get("decision")
+                        comment = approval.get("comment")
+                        step_id = approval.get("step_id")
+                        ts = approval.get("time")
+                        line = f"{ts} • {step_id} • {decision}"
+                        if comment:
+                            line = f"{line} — {comment}"
+                        st.write(line)
 
 
 def _render_approvals(client: ApiClient) -> None:
     st.subheader("Pending approvals")
-    pending_runs: List[str] = []
-    history = st.session_state.get("run_history", [])
-    for run_id in history:
-        resp = client.get_run(run_id)
-        if resp.ok and resp.body:
-            status = resp.body["data"]["run"]["status"]
-            if status == "PENDING_HUMAN":
-                pending_runs.append(run_id)
+    st.markdown(
+        """
+<style>
+button[kind="primary"] { background-color: #2e7d32 !important; color: white !important; }
+button[kind="secondary"] { background-color: #c62828 !important; color: white !important; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+    approvals_resp = client.list_approvals()
+    if not approvals_resp.ok or not approvals_resp.body:
+        st.warning(f"Unable to load approvals: {approvals_resp.error or approvals_resp.body}")
+        return
+    approvals = approvals_resp.body["data"].get("approvals", [])
+    if not approvals:
+        st.info("No pending approvals.")
+        return
 
-    if not pending_runs:
-        st.info("No pending approvals in recent runs.")
-    else:
-        st.write("Pending run approvals:")
-        for run_id in pending_runs:
-            st.write(f"- {run_id}")
+    options = []
+    for approval in approvals:
+        label = f"{approval['run_id']} — {approval['product']}/{approval['flow']} ({approval['step_id']})"
+        options.append((label, approval))
 
-    st.markdown("### Resume a run")
-    run_id = st.text_input("Run ID", value=st.session_state.get("approval_run_id", ""))
-    st.session_state["approval_run_id"] = run_id
-    payload_input = st.text_area("Approval payload (JSON)", value='{"approved": true}', height=140)
-    ok, payload, err = _safe_json_loads(payload_input)
-    if not ok:
-        st.error(f"Invalid approval JSON: {err}")
+    selection = st.selectbox("Select pending run", options, format_func=lambda item: item[0])
+    approval = selection[1]
+    run_id = approval["run_id"]
+    st.write(f"Selected run: {run_id}")
+    payload = approval.get("payload") or {}
+    summary = payload.get("summary") if isinstance(payload, dict) else None
+    instructions = payload.get("instructions") if isinstance(payload, dict) else None
+    actions = payload.get("actions") if isinstance(payload, dict) else None
+    approval_context = payload.get("approval_context") if isinstance(payload, dict) else None
+    intent = payload.get("intent") if isinstance(payload, dict) else None
+    if intent:
+        st.markdown("**User intent**")
+        st.write(intent)
+    if summary:
+        st.markdown("**Approval summary**")
+        st.write(summary)
+    if approval_context:
+        st.markdown("**Approval needed for**")
+        reason = approval_context.get("reason") if isinstance(approval_context, dict) else None
+        step_name = approval_context.get("step_name") if isinstance(approval_context, dict) else None
+        if step_name:
+            st.write(f"Step: {step_name}")
+        if reason:
+            st.write(reason)
+    if actions:
+        st.markdown("**Actions taken**")
+        if isinstance(actions, list):
+            for action in actions:
+                st.write(f"- {action}")
+        else:
+            st.write(actions)
+    if payload:
+        with st.expander("Approval context (advanced)"):
+            st.code(_pretty(payload), language="json")
+    comment = st.text_area("Reviewer comments", value="", height=120, help="Optional guidance for re-planning.")
+    approval_payload = {"approved": True}
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Approve", type="primary", disabled=(not ok or not run_id.strip())):
+        if st.button("Approve", type="primary", disabled=(not run_id.strip())):
             resp = client.resume_run(
                 run_id.strip(),
                 decision="APPROVED",
-                approval_payload=payload,
+                approval_payload=approval_payload,
+                comment=comment or None,
             )
             if resp.ok:
                 st.success(f"Run resumed (approved): {run_id.strip()}")
                 _append_history(run_id.strip())
-                run_resp = client.get_run(run_id.strip())
-                if run_resp.ok and run_resp.body:
-                    run = run_resp.body["data"]["run"]
-                    _record_runtime_snapshot(
-                        _observability_root(),
-                        product=run["product"],
-                        run_id=run_id.strip(),
-                        payload=run_resp.body,
-                        label="run_resumed",
-                    )
             else:
                 st.error(f"Failed to resume run: {resp.error or resp.body}")
     with col2:
-        if st.button("Reject", disabled=(not ok or not run_id.strip())):
-            reject_payload = dict(payload)
-            reject_payload["approved"] = False
+        if st.button("Reject", type="secondary", disabled=(not run_id.strip())):
+            reject_payload = {"approved": False}
             resp = client.resume_run(
                 run_id.strip(),
                 decision="REJECTED",
                 approval_payload=reject_payload,
+                comment=comment or None,
             )
             if resp.ok:
                 st.success(f"Run resumed (rejected): {run_id.strip()}")
                 _append_history(run_id.strip())
-                run_resp = client.get_run(run_id.strip())
-                if run_resp.ok and run_resp.body:
-                    run = run_resp.body["data"]["run"]
-                    _record_runtime_snapshot(
-                        _observability_root(),
-                        product=run["product"],
-                        run_id=run_id.strip(),
-                        payload=run_resp.body,
-                        label="run_rejected",
-                    )
             else:
                 st.error(f"Failed to reject run: {resp.error or resp.body}")
 
@@ -391,7 +483,7 @@ def main() -> None:
     client = ApiClient(api_base)
 
     st.sidebar.header("Navigation")
-    page = st.sidebar.radio("Section", ["Home", "Run", "Run history", "Approvals"])
+    page = st.sidebar.radio("Section", ["Home", "Run", "Approvals"])
     st.sidebar.caption(f"API base: {api_base}")
 
     st.session_state.setdefault("run_history", [])
@@ -443,7 +535,13 @@ def main() -> None:
                     upload_id=upload_id,
                 )
                 if items:
-                    st.caption("Files will be saved under the run id once the flow starts.")
+                    _write_inputs_to_uploads(
+                        observability_root,
+                        product=prod,
+                        upload_id=upload_id,
+                        items=items,
+                    )
+                    st.caption(f"Files staged for upload {upload_id}.")
                 if file_refs:
                     st.code(_pretty({"files": file_refs}), language="json")
                 st.session_state["vi_upload_items"] = items
@@ -466,6 +564,7 @@ def main() -> None:
 
         if prod == "visual_insights" and file_refs:
             payload.setdefault("files", file_refs)
+            payload["upload_id"] = st.session_state.get("vi_upload_id")
             if "dataset" not in payload:
                 csv_name = next((f["name"] for f in file_refs if f["file_type"] == "csv"), None)
                 if csv_name:
@@ -483,24 +582,11 @@ def main() -> None:
                     _append_history(run_id)
                     if prod == "visual_insights":
                         _materialize_run_dirs(observability_root, product=prod, run_id=run_id)
-                        items = st.session_state.get("vi_upload_items", [])
-                        _write_inputs_to_run(observability_root, product=prod, run_id=run_id, items=items)
-                        output_path = observability_root / prod / run_id / "output" / "response.json"
-                        output_path.write_text(_pretty(resp.body), encoding="utf-8")
-                        st.caption(f"Saved response to {output_path}")
-                        _record_runtime_snapshot(
-                            observability_root,
-                            product=prod,
-                            run_id=run_id,
-                            payload=resp.body,
-                            label="run_started",
-                        )
-
-    elif page == "Run history":
-        _render_run_history(client, observability_root=observability_root)
 
     elif page == "Approvals":
         _render_approvals(client)
+        st.divider()
+        _render_run_history(observability_root=observability_root)
 
 
 if __name__ == "__main__":

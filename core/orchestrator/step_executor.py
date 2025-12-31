@@ -50,7 +50,7 @@ class StepExecutor:
         )
 
         if step_def.type == StepType.TOOL:
-            rendered_params = self._render_params(step_def.params or {}, run_ctx.payload)
+            rendered_params = self._render_params(step_def.params or {}, run_ctx.payload, run_ctx.artifacts)
             step_def = step_def.model_copy(update={"params": rendered_params})
             tool_result = self._execute_tool(step_ctx=step_ctx, step_def=step_def)
             if tool_result.ok:
@@ -124,14 +124,45 @@ class StepExecutor:
                 self.sleep_fn(delay)
             attempt += 1
 
-    def _render_params(self, params: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _render_params(self, params: Dict[str, Any], payload: Dict[str, Any], artifacts: Dict[str, Any]) -> Dict[str, Any]:
         def render(value: Any) -> Any:
             if isinstance(value, str):
-                def replace(match: re.Match[str]) -> str:
-                    key = match.group(1)
-                    return str(payload.get(key, ""))
+                def resolve(path: str) -> Any:
+                    parts = path.split(".")
+                    root = parts[0]
+                    if root == "payload":
+                        current: Any = payload
+                    elif root == "artifacts":
+                        current = artifacts
+                    else:
+                        return None
+                    if root == "artifacts" and len(parts) > 1:
+                        for idx in range(len(parts) - 1, 0, -1):
+                            flat_key = ".".join(parts[1:idx + 1])
+                            if flat_key in artifacts:
+                                current = artifacts.get(flat_key)
+                                remaining = parts[idx + 1 :]
+                                for part in remaining:
+                                    if isinstance(current, dict) and part in current:
+                                        current = current[part]
+                                    else:
+                                        return None
+                                return current
+                    for part in parts[1:]:
+                        if isinstance(current, dict) and part in current:
+                            current = current[part]
+                        else:
+                            return None
+                    return current
 
-                return re.sub(r"\{\{\s*payload\.([\w_]+)\s*\}\}", replace, value)
+                def replace(match: re.Match[str]) -> str:
+                    resolved = resolve(match.group(1))
+                    return str(resolved) if resolved is not None else ""
+
+                full_match = re.fullmatch(r"\{\{\s*([a-zA-Z_][\w\.]*)\s*\}\}", value)
+                if full_match:
+                    return resolve(full_match.group(1))
+                return re.sub(r"\{\{\s*([a-zA-Z_][\w\.]*)\s*\}\}", replace, value)
             if isinstance(value, dict):
                 return {k: render(v) for k, v in value.items()}
             if isinstance(value, list):

@@ -46,3 +46,7 @@ class ObservabilityWriter:
     def output_path(self, *, product: str, run_id: str, name: str) -> Path:
         paths = self._ensure_dirs(product=product, run_id=run_id)
         return paths["output"] / name
+
+    def input_path(self, *, product: str, run_id: str, name: str) -> Path:
+        paths = self._ensure_dirs(product=product, run_id=run_id)
+        return paths["input"] / name
