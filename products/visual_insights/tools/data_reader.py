@@ -9,7 +9,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from core.config.loader import load_settings
 from core.contracts.tool_schema import ToolResult, ToolError, ToolErrorCode, ToolMeta
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
@@ -27,9 +26,19 @@ class DataReaderTool(BaseTool):
     def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         try:
             validated = ReadParams.model_validate(params or {})
-            settings = load_settings()
-            repo_root = settings.repo_root_path()
-            dataset_path = repo_root / "observability" / ctx.product / ctx.run_id / "input" / validated.dataset
+            input_dir = (ctx.run.meta or {}).get("input_dir")
+            if not input_dir:
+                meta = ToolMeta(tool_name=self.name, backend="local")
+                return ToolResult(
+                    ok=False,
+                    data=None,
+                    error=ToolError(
+                        code=ToolErrorCode.INVALID_INPUT,
+                        message="Input directory not available for this run.",
+                    ),
+                    meta=meta,
+                )
+            dataset_path = Path(str(input_dir)) / validated.dataset
             columns: List[str] = []
             rows: List[List[Any]] = []
             row_count = 0

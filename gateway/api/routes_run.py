@@ -20,6 +20,7 @@ router = APIRouter()
 
 class RunRequest(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
+    text: Optional[str] = Field(default=None, description="Optional plain-text input for intent-driven flows.")
 
 
 class ResumeRequest(BaseModel):
@@ -204,7 +205,14 @@ def run_flow(
 ) -> Dict[str, Any]:
     meta, flows = _ensure_product_ready(catalog, product)
     _ensure_flow(meta, flows, flow)
-    res = engine.run_flow(product=product, flow=flow, payload=req.payload)
+    payload = req.payload
+    if not payload and req.text is not None:
+        intent_field = "keyword"
+        ui = meta.ui
+        if ui and getattr(ui, "intent", None) and ui.intent.enabled:
+            intent_field = ui.intent.field or intent_field
+        payload = {intent_field: req.text}
+    res = engine.run_flow(product=product, flow=flow, payload=payload)
     return _respond(res, meta={"product": product, "flow": flow})
 
 

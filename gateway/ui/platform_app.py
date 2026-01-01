@@ -22,6 +22,7 @@ All actions go through the Gateway API. No direct core imports besides settings.
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
@@ -153,10 +154,29 @@ def _materialize_run_dirs(observability_root: Path, *, product: str, run_id: str
     return paths
 
 
+def _clear_dir(path: Path) -> None:
+    if not path.exists():
+        return
+    for entry in path.iterdir():
+        if entry.is_dir():
+            for child in entry.iterdir():
+                if child.is_dir():
+                    for grandchild in child.iterdir():
+                        if grandchild.is_dir():
+                            shutil.rmtree(grandchild, ignore_errors=True)
+                        else:
+                            grandchild.unlink(missing_ok=True)
+                else:
+                    child.unlink(missing_ok=True)
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
+
+
 def _materialize_upload_dirs(observability_root: Path, *, product: str, upload_id: str) -> Path:
-    upload_dir = observability_root / product / "uploads" / upload_id / "input"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    return upload_dir
+    staging_dir = REPO_ROOT / "products" / product / "staging" / "input"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    return staging_dir
 
 
 def _write_inputs_to_uploads(
@@ -169,6 +189,10 @@ def _write_inputs_to_uploads(
     if not items:
         return
     upload_dir = _materialize_upload_dirs(observability_root, product=product, upload_id=upload_id)
+    _clear_dir(upload_dir)
+    output_dir = REPO_ROOT / "products" / product / "staging" / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _clear_dir(output_dir)
     for item in items:
         target = upload_dir / item["name"]
         if target.exists():

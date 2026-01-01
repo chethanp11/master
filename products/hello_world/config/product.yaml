@@ -26,3 +26,12 @@ agents:
 flows:
   enabled:
     - "hello_world"
+
+metadata:
+  ui:
+    intent:
+      enabled: true
+      field: "keyword"
+      label: "Message"
+      help: "Plain text input for the hello world flow."
+      default: "Hello"

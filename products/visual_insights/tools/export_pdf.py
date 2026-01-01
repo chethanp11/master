@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
+from io import BytesIO
+import base64
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ConfigDict
@@ -11,7 +12,6 @@ from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolR
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.visual_insights.contracts.card import InsightCard
-from core.logging.observability import ObservabilityWriter
 
 
 class ExportPdfInput(BaseModel):
@@ -24,11 +24,10 @@ class ExportPdfInput(BaseModel):
 class ExportPdfOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    export_ref: Optional[Dict[str, str]]
-    stub_ref: Optional[Dict[str, str]]
+    output_files: List[Dict[str, Any]]
 
 
-def _render_cards_pdf(cards: List[InsightCard], output_path: Path) -> None:
+def _render_cards_pdf(cards: List[InsightCard]) -> bytes:
     pages: List[Image.Image] = []
     for card in cards:
         img = Image.new("RGB", (1240, 1754), "white")
@@ -53,7 +52,9 @@ def _render_cards_pdf(cards: List[InsightCard], output_path: Path) -> None:
 
     if not pages:
         pages = [Image.new("RGB", (1240, 1754), "white")]
-    pages[0].save(output_path, save_all=True, append_images=pages[1:])
+    buffer = BytesIO()
+    pages[0].save(buffer, format="PDF", save_all=True, append_images=pages[1:])
+    return buffer.getvalue()
 
 
 def _render_chart(
@@ -301,19 +302,27 @@ def _build_stub_payload(cards: List[InsightCard]) -> Dict[str, Any]:
     }
 
 
-def export_pdf(payload: ExportPdfInput, *, run_id: str, repo_root: Path) -> ExportPdfOutput:
+def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
     if not payload.export_requested:
-        return ExportPdfOutput(export_ref=None, stub_ref=None)
+        return ExportPdfOutput(output_files=[])
 
-    writer = ObservabilityWriter(repo_root=repo_root)
-    output_path = writer.output_path(product="visual_insights", run_id=run_id, name="visualization.pdf")
-    stub_path = writer.output_path(product="visual_insights", run_id=run_id, name="visualization_stub.json")
     stub_payload = _build_stub_payload(payload.cards)
-    stub_path.write_text(json.dumps(stub_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    _render_cards_pdf(payload.cards, output_path)
+    stub_bytes = json.dumps(stub_payload, indent=2, ensure_ascii=False).encode("utf-8")
+    pdf_bytes = _render_cards_pdf(payload.cards)
+    output_files = [
+        {
+            "name": "visualization.pdf",
+            "content_type": "application/pdf",
+            "content_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+        },
+        {
+            "name": "visualization_stub.json",
+            "content_type": "application/json",
+            "content_base64": base64.b64encode(stub_bytes).decode("ascii"),
+        },
+    ]
     return ExportPdfOutput(
-        export_ref={"run_id": run_id, "uri": str(output_path)},
-        stub_ref={"run_id": run_id, "uri": str(stub_path)},
+        output_files=output_files,
     )
 
 
@@ -325,8 +334,7 @@ class ExportPdfTool(BaseTool):
     def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         try:
             payload = ExportPdfInput.model_validate(params or {})
-            repo_root = Path(__file__).resolve().parents[3]
-            output = export_pdf(payload, run_id=ctx.run_id, repo_root=repo_root)
+            output = export_pdf(payload)
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

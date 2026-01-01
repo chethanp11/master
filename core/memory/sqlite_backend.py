@@ -222,6 +222,14 @@ class SQLiteBackend(MemoryBackend):
                 )
             con.commit()
 
+    def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
+        with self._connect() as con:
+            con.execute(
+                "UPDATE runs SET output_json=? WHERE run_id=?",
+                (_dumps(output) if output is not None else None, run_id),
+            )
+            con.commit()
+
     # ------------------------------
     # Steps
     # ------------------------------

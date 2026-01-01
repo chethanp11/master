@@ -37,6 +37,12 @@ class InMemoryBackend(MemoryBackend):
             patch["summary"] = summary
         self._runs[run_id] = run.model_copy(update=patch)
 
+    def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
+        run = self._runs.get(run_id)
+        if run is None:
+            return
+        self._runs[run_id] = run.model_copy(update={"output": output})
+
     def add_step(self, step: StepRecord) -> None:
         self._steps.setdefault(step.run_id, {})
         self._steps[step.run_id][step.step_id] = step

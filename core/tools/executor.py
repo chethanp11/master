@@ -150,7 +150,25 @@ class ToolExecutor:
         Keep structure stable for observability.
         """
         data = result.model_dump()
-        return self.redactor.redact_dict(data)
+        redacted = self.redactor.redact_dict(data)
+        return _strip_large_fields(redacted)
 
     def _meta(self, tool_name: str) -> ToolMeta:
         return ToolMeta(tool_name=tool_name, backend=self.backend_mode)
+
+
+def _strip_large_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, val in value.items():
+            if key in {"content_base64", "file_bytes", "bytes"}:
+                cleaned[key] = {"truncated": True}
+                continue
+            if isinstance(val, dict) and key == "output_files":
+                cleaned[key] = _strip_large_fields(val)
+            else:
+                cleaned[key] = _strip_large_fields(val)
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_large_fields(item) for item in value]
+    return value

@@ -4,10 +4,7 @@
 from __future__ import annotations
 
 import time
-import uuid
-import json
-import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, List
 
 from core.agents.registry import AgentRegistry
@@ -147,6 +144,8 @@ class OrchestratorEngine:
                 summary={"current_step_index": 0},
             )
             self.memory.create_run(run_record)
+            self.memory.clear_staging(product=product, clear_input=False, clear_output=True)
+            self._attach_run_dirs(run_ctx)
             self._stage_inputs(run_ctx)
 
             self._emit_event(
@@ -212,6 +211,14 @@ class OrchestratorEngine:
             resolved_by=resolved_by,
             comment=comment,
         )
+        self.memory.append_run_comment(
+            product=bundle.run.product,
+            run_id=run_id,
+            comment=comment,
+            decision=decision,
+            step_id=approval.step_id,
+            ts=int(time.time()),
+        )
 
         step_status = StepStatus.COMPLETED
         if not payload.get("approved") or decision.upper() != "APPROVED":
@@ -275,6 +282,7 @@ class OrchestratorEngine:
                     payload=replan_payload,
                 )
                 replan_ctx.trace = self._trace_hook(replan_ctx)
+                self._attach_run_dirs(replan_ctx)
                 self._stage_inputs(replan_ctx)
                 self._rehydrate_artifacts(bundle.steps, replan_ctx)
                 self._emit_event(
@@ -370,6 +378,7 @@ class OrchestratorEngine:
         merged_payload.update(payload)
         run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=merged_payload)
         run_ctx.trace = self._trace_hook(run_ctx)
+        self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
 
         status = self._execute_from_index(
@@ -403,6 +412,7 @@ class OrchestratorEngine:
         requested_by: Optional[str],
     ) -> str:
         idx = start_index
+        last_result_data: Optional[Dict[str, Any]] = None
         while idx < len(flow_def.steps):
             step_def = flow_def.steps[idx]
             step_id = step_def.id or f"step_{idx}"
@@ -498,6 +508,11 @@ class OrchestratorEngine:
 
             try:
                 result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def, step_id=step_id)
+                result = self._persist_output_files(run_ctx, result)
+                if isinstance(result, dict):
+                    data = result.get("data")
+                    if isinstance(data, dict) and data:
+                        last_result_data = data
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
@@ -539,7 +554,27 @@ class OrchestratorEngine:
             self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
             idx = next_index
 
-        self.memory.update_run_status(run_ctx.run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)})
+        if last_result_data is None:
+            self.memory.update_run_status(
+                run_ctx.run_id,
+                RunStatus.FAILED.value,
+                summary={"failed_step_id": "output", "reason": "missing_run_output"},
+            )
+            self._emit_event(
+                kind="run_failed",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"error": {"message": "Missing run output", "type": "RuntimeError"}},
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.FAILED.value
+
+        self.memory.update_run_output(run_ctx.run_id, output=self._normalize_run_output(last_result_data))
+        self.memory.update_run_status(
+            run_ctx.run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)}
+        )
         self._emit_event(
             kind="run_completed",
             run_id=run_ctx.run_id,
@@ -550,6 +585,32 @@ class OrchestratorEngine:
         )
         self._persist_run_output(run_ctx)
         return RunStatus.COMPLETED.value
+
+    def _normalize_run_output(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        data = {k: v for k, v in data.items() if k != "output_files"}
+        summary = data.get("summary")
+        details = data.get("details")
+        if isinstance(summary, str) and isinstance(details, dict):
+            output = dict(details)
+            output["summary"] = summary
+            return output
+        return data
+
+    def _persist_output_files(self, run_ctx: RunContext, result: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(result, dict):
+            return result
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return result
+        files = data.get("output_files")
+        if not isinstance(files, list) or not files:
+            return result
+        stored = self.memory.write_output_files(product=run_ctx.product, run_id=run_ctx.run_id, files=files) or []
+        updated = dict(result)
+        updated_data = dict(data)
+        updated_data["output_files"] = stored
+        updated["data"] = updated_data
+        return updated
 
     def _find_step_index(self, flow_def: FlowDef, step_id: str) -> int:
         for idx, definition in enumerate(flow_def.steps):
@@ -603,20 +664,60 @@ class OrchestratorEngine:
         self.tracer.emit(evt)
 
     def _persist_run_output(self, run_ctx: RunContext) -> None:
-        writer = getattr(self.tracer, "writer", None)
-        if writer is None:
-            return
         bundle = self.memory.get_run(run_ctx.run_id)
         if bundle is None:
             return
-        output = {
-            "run": bundle.run.model_dump(),
-            "steps": [s.model_dump() for s in bundle.steps],
-            "approvals": [a.model_dump() for a in bundle.approvals],
-            "artifacts": run_ctx.artifacts,
+        run = bundle.run
+        status = run.status.value if hasattr(run.status, "value") else str(run.status)
+        result = run.output if status == RunStatus.COMPLETED.value else None
+        if isinstance(result, dict) and "output_files" in result:
+            result = {k: v for k, v in result.items() if k != "output_files"}
+        if status == RunStatus.COMPLETED.value and result is None:
+            status = RunStatus.FAILED.value
+            error = {"code": "missing_output", "message": "Missing run output", "step_id": None, "details": {}}
+        error = None
+        if status != RunStatus.COMPLETED.value:
+            failed = next((s for s in bundle.steps if s.status == StepStatus.FAILED), None)
+            if failed:
+                if failed.error and isinstance(failed.error, dict):
+                    error = {
+                        "code": "step_failed",
+                        "message": failed.error.get("message") or "Step failed.",
+                        "step_id": failed.step_id,
+                        "details": failed.error,
+                    }
+                else:
+                    error = {"code": "step_failed", "message": "Step failed.", "step_id": failed.step_id, "details": {}}
+            elif run.summary:
+                error = {
+                    "code": "run_failed",
+                    "message": run.summary.get("reason") or run.summary.get("error") or "Run failed.",
+                    "step_id": None,
+                    "details": run.summary or {},
+                }
+        response = {
+            "response_version": "1.0",
+            "run_id": run.run_id,
+            "product": run.product,
+            "flow": run.flow,
+            "status": status,
+            "result": result if status != RunStatus.COMPLETED.value else (result or {"kind": "files"}),
+            "error": error,
+            "finished_at": run.finished_at,
+            "finished_at_iso": datetime.fromtimestamp(run.finished_at, tz=timezone.utc).isoformat()
+            if run.finished_at
+            else None,
         }
-        output_path = writer.output_path(product=run_ctx.product, run_id=run_ctx.run_id, name="response.json")
-        output_path.write_text(json.dumps(output, indent=2, ensure_ascii=True), encoding="utf-8")
+        output_info = self.memory.write_run_response(product=run.product, run_id=run.run_id, response=response)
+        if output_info:
+            self._emit_event(
+                kind="output_written",
+                run_id=run.run_id,
+                step_id=None,
+                product=run.product,
+                flow=run.flow,
+                payload=output_info,
+            )
 
     def _rehydrate_artifacts(self, steps: List[StepRecord], run_ctx: RunContext) -> None:
         for step in steps:
@@ -637,36 +738,21 @@ class OrchestratorEngine:
                 run_ctx.artifacts[f"agent.{agent_name}.meta"] = meta
 
     def _stage_inputs(self, run_ctx: RunContext) -> None:
-        writer = getattr(self.tracer, "writer", None)
-        if writer is None:
-            return
+        self.memory.ensure_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
         payload = run_ctx.payload or {}
-        upload_id = payload.get("upload_id")
-        files = payload.get("files") or []
-        if not upload_id:
+        self.memory.capture_run_input(product=run_ctx.product, run_id=run_ctx.run_id, payload=payload)
+        self.memory.move_staged_inputs_to_run(product=run_ctx.product, run_id=run_ctx.run_id)
+
+    def _attach_run_dirs(self, run_ctx: RunContext) -> None:
+        paths = self.memory.get_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
+        if not paths:
             return
-        source_dir = writer.root / run_ctx.product / "uploads" / str(upload_id) / "input"
-        if not source_dir.exists():
-            return
-        if not files:
-            for source in source_dir.iterdir():
-                if source.is_file():
-                    target = writer.input_path(product=run_ctx.product, run_id=run_ctx.run_id, name=source.name)
-                    if not target.exists():
-                        shutil.copy2(source, target)
-            return
-        for file_ref in files:
-            if not isinstance(file_ref, dict):
-                continue
-            name = file_ref.get("name") or file_ref.get("file_name")
-            if not name:
-                continue
-            source = source_dir / name
-            if not source.exists():
-                continue
-            target = writer.input_path(product=run_ctx.product, run_id=run_ctx.run_id, name=name)
-            if not target.exists():
-                shutil.copy2(source, target)
+        input_dir = paths.get("input")
+        output_dir = paths.get("output")
+        if input_dir:
+            run_ctx.meta["input_dir"] = str(input_dir)
+        if output_dir:
+            run_ctx.meta["output_dir"] = str(output_dir)
 
     def _build_approval_payload(self, run_ctx: RunContext, step_record: StepRecord, step_def: StepDef) -> Dict[str, Any]:
         intent = (

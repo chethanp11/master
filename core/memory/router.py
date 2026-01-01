@@ -17,18 +17,26 @@ from typing import Any, Dict, List, Optional
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.config.schema import Settings
 from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
+from core.memory.observability_store import ObservabilityStore
 from core.memory.sqlite_backend import SQLiteBackend
 
 
 class MemoryRouter(MemoryBackend):
-    def __init__(self, backend: MemoryBackend) -> None:
+    def __init__(self, backend: MemoryBackend, *, repo_root: Optional[Path] = None) -> None:
         self.backend = backend
+        self._observability = ObservabilityStore(repo_root=repo_root) if repo_root else None
 
     def create_run(self, run: RunRecord) -> None:
         self.backend.create_run(run)
 
     def update_run_status(self, run_id: str, status: str, *, summary: Optional[Dict[str, Any]] = None) -> None:
         self.backend.update_run_status(run_id, status, summary=summary)
+
+    def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
+        self.backend.update_run_output(run_id, output=output)
+
+    def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
+        self.backend.update_run_output(run_id, output=output)
 
     def add_step(self, step: StepRecord) -> None:
         self.backend.add_step(step)
@@ -41,6 +49,13 @@ class MemoryRouter(MemoryBackend):
 
     def append_trace_event(self, event: TraceEvent) -> None:
         self.backend.append_trace_event(event)
+        if self._observability is None:
+            return
+        self._observability.append_event(
+            product=event.product,
+            run_id=event.run_id,
+            payload=event.model_dump(mode="json"),
+        )
 
     def create_approval(self, approval: ApprovalRecord) -> None:
         self.backend.create_approval(approval)
@@ -54,6 +69,27 @@ class MemoryRouter(MemoryBackend):
         comment: Optional[str] = None,
     ) -> None:
         self.backend.resolve_approval(approval_id, decision=decision, resolved_by=resolved_by, comment=comment)
+
+    def append_run_comment(
+        self,
+        *,
+        product: str,
+        run_id: str,
+        comment: Optional[str],
+        decision: Optional[str] = None,
+        step_id: Optional[str] = None,
+        ts: Optional[int] = None,
+    ) -> None:
+        if self._observability is None:
+            return
+        self._observability.append_comment(
+            product=product,
+            run_id=run_id,
+            comment=comment or "",
+            decision=decision,
+            step_id=step_id,
+            ts=ts,
+        )
 
     def get_run(self, run_id: str) -> Optional[RunBundle]:
         return self.backend.get_run(run_id)
@@ -69,6 +105,44 @@ class MemoryRouter(MemoryBackend):
 
     def get_schema_version(self) -> int:
         return self.backend.get_schema_version()
+
+    def ensure_observability_dirs(self, *, product: str, run_id: str) -> None:
+        if self._observability is None:
+            return
+        self._observability.ensure_dirs(product=product, run_id=run_id)
+
+    def get_observability_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
+        if self._observability is None:
+            return {}
+        return self._observability.ensure_dirs(product=product, run_id=run_id)
+
+    def clear_staging(self, *, product: str, clear_input: bool = True, clear_output: bool = True) -> None:
+        if self._observability is None:
+            return
+        self._observability.clear_staging(product=product, clear_input=clear_input, clear_output=clear_output)
+
+    def move_staged_inputs_to_run(self, *, product: str, run_id: str) -> None:
+        if self._observability is None:
+            return
+        self._observability.move_staged_inputs_to_run(product=product, run_id=run_id)
+
+    def capture_run_input(self, *, product: str, run_id: str, payload: Dict[str, Any]) -> None:
+        if self._observability is None:
+            return
+        wrote = self._observability.write_input_payload(product=product, run_id=run_id, payload=payload)
+        if not wrote:
+            return
+        self._observability.stage_attachments(product=product, run_id=run_id, payload=payload)
+
+    def write_run_response(self, *, product: str, run_id: str, response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if self._observability is None:
+            return None
+        return self._observability.write_response(product=product, run_id=run_id, response=response)
+
+    def write_output_files(self, *, product: str, run_id: str, files: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+        if self._observability is None:
+            return None
+        return self._observability.write_output_files(product=product, run_id=run_id, files=files)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "MemoryRouter":
@@ -91,4 +165,4 @@ class MemoryRouter(MemoryBackend):
 
         backend = SQLiteBackend(db_path=str(db_file))
         backend.ensure_schema()
-        return cls(backend)
+        return cls(backend, repo_root=repo_root)

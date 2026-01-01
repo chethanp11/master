@@ -69,6 +69,10 @@ class MemoryBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
     def add_step(self, step: StepRecord) -> None:
         raise NotImplementedError
 

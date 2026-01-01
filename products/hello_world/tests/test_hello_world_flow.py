@@ -3,6 +3,7 @@
 # ==============================
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -91,6 +92,19 @@ def test_hello_world_end_to_end(tmp_path: Path) -> None:
         assert summary_data["details"]["message"] == "hello"
         assert summary_data["details"]["approved"] is True
         assert "summary" in summary_data
+
+        observability_root = repo_root / "observability" / "hello_world" / run_id
+        input_path = observability_root / "input" / "input.json"
+        events_path = observability_root / "runtime" / "events.jsonl"
+        response_path = observability_root / "output" / "response.json"
+        assert input_path.exists()
+        assert events_path.exists()
+        assert response_path.exists()
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        assert response["status"] == "COMPLETED"
+        assert response["result"] is not None
+        events = events_path.read_text(encoding="utf-8").splitlines()
+        assert any('"output_written"' in line for line in events)
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()
