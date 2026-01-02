@@ -9,7 +9,7 @@ from core.config.loader import load_settings
 from core.utils.product_loader import discover_products, register_enabled_products, ProductCatalog
 from core.orchestrator.engine import OrchestratorEngine
 from core.memory.router import MemoryRouter
-from core.logging.tracing import Tracer
+from core.memory.tracing import Tracer
 
 
 @lru_cache(maxsize=1)

@@ -124,5 +124,6 @@ class ModelRouter:
     @classmethod
     def from_settings(cls, settings: Settings, *, providers: Optional[Dict[str, Any]] = None) -> "ModelRouter":
         config = settings.models.routing.model_dump()
+        config["openai"] = settings.models.openai.model_dump()
         policy_engine = PolicyEngine(settings)
         return cls(config=config, providers=providers, policy_engine=policy_engine)

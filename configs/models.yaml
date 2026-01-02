@@ -5,16 +5,20 @@ routing:
   default_provider: openai
   default_model: gpt-4o-mini
 
+  # Optional overrides per product.
+  # by_product:
+  #   hello_world:
+  #     model: gpt-4o-mini
   by_product: {}
   by_purpose:
+    # Purpose is a routing hint passed by agents/tools.
     reasoning:
       model: gpt-4o
     cheap:
       model: gpt-4o-mini
 
 openai:
+  # Use api_base only for custom gateways/proxies.
   api_base: null
   api_key: null
   timeout_seconds: 30.0
-
-providers: {}

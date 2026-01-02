@@ -27,7 +27,7 @@ Governance applies uniformly across:
 - Models
 - Autonomy levels
 - Human-in-the-loop (HITL)
-- Tracing, logging, and persistence
+- Tracing, observability, and persistence
 
 Rules:
 - ❌ Products must not implement custom governance logic
@@ -116,9 +116,7 @@ Rules:
 ### 4.1 When HITL Is Required
 
 HITL is triggered when:
-	•	A step type is human_approval
-	•	A tool policy requires approval
-	•	A governance hook explicitly raises ApprovalRequired
+- A step type is human_approval
 
 HITL is not optional when required.
 
@@ -167,11 +165,10 @@ before_complete	Run finalization
 ### 5.2 Hook Responsibilities
 
 Hooks may:
-	•	Allow execution
-	•	Deny execution
-	•	Require human approval
-	•	Modify context metadata
-	•	Emit trace events
+- Allow execution
+- Deny execution
+- Modify context metadata
+- Emit trace events
 
 Hooks must NOT:
 	•	Execute tools
@@ -246,11 +243,10 @@ There is no “best effort” execution after violation.
 ## 9. Governance Error Types
 
 Error Type	Description
-PolicyViolation	Disallowed action
-AutonomyViolation	Autonomy exceeded
-ToolBlocked	Tool not permitted
-ModelBlocked	Model not permitted
-ApprovalRequired	HITL required
+policy_blocked	Disallowed action
+autonomy_denied	Autonomy exceeded
+tool_blocked	Tool not permitted
+model_blocked	Model not permitted
 
 Errors are returned as structured data, not exceptions.
 

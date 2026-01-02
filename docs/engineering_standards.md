@@ -66,7 +66,7 @@ core/tools/executor.py
 - ✅ **ALLOWED ONLY IN**:
 
 core/memory/*
-core/logging/observability.py
+core/memory/observability_store.py
 
 Rules:
 - Orchestrator and agents treat memory as a black box.
@@ -94,23 +94,23 @@ Rules:
 
 ## 2. Core Execution Philosophy (Foundational)
 
-### 2.1 Goal-Driven, Not Prompt-Driven
+### 2.1 Goal-Driven, Not Template-Driven
 - **Agents are strictly GOAL-DRIVEN.**
-- Prompts are **not** a control mechanism.
+- Message templates are **not** a control mechanism.
 
 Rules:
-- ❌ No product logic embedded in prompts.
-- ❌ No prompt engineering as a system behavior lever.
+- ❌ No product logic embedded in templates.
+- ❌ No template engineering as a system behavior lever.
 - ✅ Agents receive:
-  - explicit goals
+  - explicit params/instructions
   - constraints
   - expected outputs
   - allowed tools
   from the orchestrator.
 
-Prompts (if present at all):
-- Are **foundational system instructions only**
-- Live in core
+Templates (if present at all):
+- Are strictly non-authoritative presentation strings
+- Live with product flows/agents, not in core
 - Must not encode business logic or branching behavior
 
 ---
@@ -246,7 +246,7 @@ Every significant action **must** emit a trace event:
 ### 5.2 Tracing Flow
 All tracing goes through:
 
-core/logging/tracing.py
+core/memory/tracing.py
 
 Runtime traces are also written to:
 - `observability/<product>/<run_id>/runtime/events.jsonl`
@@ -322,20 +322,20 @@ Products **do NOT** define:
 - persistence
 - governance
 - model invocation logic
-- prompt-based behavior control
+- template-based behavior control
 
 ---
 
-### 7.3 Prompts in Products
+### 7.3 Templates in Products
 Rules:
-- Prompts are **optional**
-- Prompts must NOT encode logic
-- Prompts must NOT replace goals or flows
-- Prompts may only provide:
+- Templates are **optional**
+- Templates must NOT encode logic
+- Templates must NOT replace goals or flows
+- Templates may only provide:
   - formatting hints
   - domain vocabulary
   - stylistic guidance (if required)
-- Prompts are optional implementation details and must never be required for correct execution.
+- Templates are optional implementation details and must never be required for correct execution.
 
 ---
 

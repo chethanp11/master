@@ -27,7 +27,7 @@ Reasoning happens in agents; orchestration happens in the orchestrator.
 
 ```mermaid
 flowchart TB
-  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Ingest[Ingestion] --> Store[SqliteVectorStore]
   Store --> Retriever[Retriever]
   Retriever --> Orchestrator
   Orchestrator --> Agents
@@ -38,7 +38,7 @@ flowchart TB
 ## 2. Scope and Boundaries
 
 ### 2.1 What the Knowledge Layer Does
-- Stores and retrieves unstructured and structured knowledge
+- Stores and retrieves unstructured knowledge
 - Provides ranked chunks with metadata
 - Supports filtering and collections
 - Enables deterministic ingestion and re-ingestion
@@ -56,7 +56,7 @@ All access is mediated through core interfaces.
 
 ## 3. Core Primitives
 
-The knowledge subsystem consists of four primitives.
+The knowledge subsystem consists of three primitives.
 
 ---
 
@@ -110,29 +110,8 @@ Returned object:
 
 ---
 
-### 3.3 Structured Access  
-**File:** `core/knowledge/structured.py`
-
-Structured access supports **deterministic tabular reads**.
-
-Capabilities:
-- Load CSV files
-- Prefer `pandas` when available
-- Fallback to Python `csv` when required
-- Filter rows deterministically
-- Compute basic column statistics
-
-Explicit exclusions (v1):
-- ❌ No text-to-SQL
-- ❌ No database joins
-- ❌ No network access
-
-This module is read-only by design.
-
----
-
-### 3.4 Ingestion  
-**File:** `scripts/ingest_knowledge.py`
+### 3.3 Ingestion  
+**File:** `core/knowledge` (ingestion entrypoint not shipped)
 
 Ingestion is the **only write path** into the knowledge store.
 
@@ -163,24 +142,7 @@ This guarantees:
 
 Example: ingest a directory of markdown files
 
-```bash
-python scripts/ingest_knowledge.py \
---db storage/vectors/knowledge.sqlite \
---collection hello_world \
---path docs/knowledge \
---glob "**/*.md" \
---chunk-size 800 \
---chunk-overlap 150 \
---max-bytes 200000
-```
-Example: ingest explicit files
-```
-python scripts/ingest_knowledge.py \
-  --db storage/vectors/knowledge.sqlite \
-  --collection ops \
-  --file docs/runbook.md \
-  --file docs/alerts.json
-```
+Example ingestion command is not included in v1. Use your own ingestion pipeline to write into the SQLite store.
 Rules:
 	•	The CLI is idempotent
 	•	Existing chunks are updated, not duplicated

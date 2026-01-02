@@ -20,7 +20,7 @@ from core.contracts.run_schema import (
 )
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
-from core.logging.tracing import Tracer
+from core.memory.tracing import Tracer
 from core.memory.router import MemoryRouter
 from core.orchestrator.context import RunContext
 from core.orchestrator.flow_loader import FlowLoader

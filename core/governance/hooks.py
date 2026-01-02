@@ -92,6 +92,33 @@ class GovernanceHooks:
         }
         return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
 
+    def before_model_call(
+        self,
+        *,
+        model_name: str,
+        purpose: Optional[str],
+        messages: Dict[str, Any],
+        max_tokens: Optional[int],
+        ctx: StepContext,
+    ) -> HookDecision:
+        decision = self.engine.evaluate_model_use(model_name=model_name, step_ctx=ctx)
+        limit = self.settings.policies.model_max_tokens
+        if limit is not None and max_tokens is not None and max_tokens > limit:
+            decision = PolicyDecision(
+                allow=False,
+                reason="model_token_limit_exceeded",
+                details={"model": model_name, "requested": max_tokens, "limit": limit},
+            )
+        scrubbed = {
+            "model": model_name,
+            "purpose": purpose or "",
+            "messages": self.redactor.sanitize(messages),
+            "max_tokens": max_tokens,
+            "run_id": self._run_id(ctx.run),
+            "product": self._product(ctx.run),
+        }
+        return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
+
     def _decision(self, allowed: bool, reason: str, details: Dict[str, Any], scrubbed: Dict[str, Any]) -> HookDecision:
         return HookDecision(allowed=allowed, reason=reason, details=details, scrubbed=scrubbed)
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 from io import BytesIO
 import base64
 import json
-from typing import Any, Dict, List, Tuple
+from statistics import median
+from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ConfigDict
@@ -298,8 +299,300 @@ def _build_stub_payload(cards: List[InsightCard]) -> Dict[str, Any]:
     return {
         "schema_version": "1.0",
         "format": "visual_insights_stub",
-        "cards": [card.model_dump(mode="json") for card in cards],
+        "cards": [_build_stub_card(card) for card in cards],
     }
+
+
+def _build_stub_card(card: InsightCard) -> Dict[str, Any]:
+    card_payload = card.model_dump(mode="json")
+    card_payload.pop("anomaly_summary", None)
+    card_payload.pop("anomalies", None)
+    chart_spec = dict(card_payload.get("chart_spec") or {})
+    columns, rows = _extract_chart_rows(chart_spec)
+    label_idx = _label_index(chart_spec, columns)
+    dataset_id = _dataset_id_from_card(card)
+
+    insights = _build_insights(
+        columns=columns,
+        rows=rows,
+        label_idx=label_idx,
+        anomaly_summary=card.anomaly_summary,
+        anomalies=card.anomalies,
+    )
+    card_payload["insights"] = insights
+    card_payload["narrative"] = _build_narrative(insights)
+
+    if _should_inline_rows(rows):
+        card_payload["chart_spec"] = chart_spec
+        return card_payload
+
+    if rows is not None and columns is not None:
+        chart_spec = dict(chart_spec)
+        chart_spec["data"] = {"columns": columns}
+        chart_spec["data_ref"] = {
+            "dataset_id": dataset_id,
+            "columns": columns,
+            "filters": [],
+        }
+        card_payload["chart_spec"] = chart_spec
+        card_payload["data_ref"] = {
+            "dataset_id": dataset_id,
+            "columns": columns,
+            "filters": [],
+        }
+    return card_payload
+
+
+def _extract_chart_rows(chart_spec: Dict[str, Any]) -> tuple[Optional[List[str]], Optional[List[List[Any]]]]:
+    data = chart_spec.get("data")
+    if not isinstance(data, dict):
+        return None, None
+    columns = data.get("columns")
+    rows = data.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None, None
+    return [str(col) for col in columns], rows
+
+
+def _label_index(chart_spec: Dict[str, Any], columns: Optional[List[str]]) -> Optional[int]:
+    if not columns:
+        return None
+    encoding = chart_spec.get("encoding")
+    if isinstance(encoding, dict):
+        for key in ("x", "series"):
+            field = (encoding.get(key) or {}).get("field")
+            if field in columns:
+                return columns.index(field)
+    return 0 if columns else None
+
+
+def _dataset_id_from_card(card: InsightCard) -> str:
+    for citation in card.citations:
+        if citation.type == "csv" and citation.csv is not None:
+            return citation.csv.dataset_id
+    return card.title
+
+
+def _should_inline_rows(rows: Optional[List[List[Any]]]) -> bool:
+    if rows is None:
+        return True
+    if len(rows) > 50:
+        return False
+    try:
+        payload = json.dumps(rows, ensure_ascii=True).encode("utf-8")
+        return len(payload) <= 64 * 1024
+    except Exception:
+        return False
+
+
+def _build_insights(
+    *,
+    columns: Optional[List[str]],
+    rows: Optional[List[List[Any]]],
+    label_idx: Optional[int],
+    anomaly_summary: Optional[str],
+    anomalies: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    anomaly_detection = _anomaly_detection_summary(anomaly_summary, anomalies)
+    highlights: List[Dict[str, Any]] = []
+    if columns and rows:
+        highlights = _highlight_outliers(columns, rows, label_idx=label_idx)
+    trend = {"majority_monotonic_increase": False}
+    if columns and rows:
+        trend["majority_monotonic_increase"] = _majority_monotonic_increase(columns, rows, label_idx=label_idx)
+    return {
+        "data_quality": {"anomaly_detection": anomaly_detection},
+        "highlights": highlights,
+        "trend": trend,
+    }
+
+
+def _anomaly_detection_summary(
+    summary: Optional[str],
+    anomalies: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    normalized = (summary or "").strip().lower()
+    anomalies_list = anomalies or []
+
+    if normalized in {"series too short"}:
+        return {
+            "status": "INCONCLUSIVE",
+            "reason": "series too short",
+            "anomalies_count": None,
+        }
+    if normalized in {"no data", "no numeric columns"}:
+        return {
+            "status": "SKIPPED",
+            "reason": summary or "no data",
+            "anomalies_count": None,
+        }
+    if normalized == "":
+        return {
+            "status": "ERROR",
+            "reason": "missing anomaly summary",
+            "anomalies_count": None,
+        }
+
+    if normalized.startswith("found"):
+        return {
+            "status": "OK",
+            "reason": summary or "ok",
+            "anomalies_count": len(anomalies_list),
+        }
+    if normalized in {"no anomalies found", "no variance"}:
+        return {
+            "status": "OK",
+            "reason": summary or "ok",
+            "anomalies_count": 0,
+        }
+
+    return {
+        "status": "OK",
+        "reason": summary or "ok",
+        "anomalies_count": len(anomalies_list),
+    }
+
+
+def _highlight_outliers(
+    columns: List[str],
+    rows: List[List[Any]],
+    *,
+    label_idx: Optional[int],
+) -> List[Dict[str, Any]]:
+    numeric_idxs: List[int] = []
+    for idx in range(len(columns)):
+        values = [_to_float(row[idx]) for row in rows if idx < len(row)]
+        cleaned = [v for v in values if v is not None]
+        if cleaned and len(cleaned) == len(values):
+            numeric_idxs.append(idx)
+
+    if label_idx is not None and label_idx in numeric_idxs:
+        numeric_idxs = [idx for idx in numeric_idxs if idx != label_idx]
+
+    highlights: List[Dict[str, Any]] = []
+    for idx in numeric_idxs:
+        col_name = columns[idx]
+        values = []
+        for row in rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            values.append(value)
+        if not values:
+            continue
+        med = median(values)
+        max_value = max(values)
+        if max_value > med * 3:
+            row_id = None
+            for row in rows:
+                if idx >= len(row):
+                    continue
+                value = _to_float(row[idx])
+                if value == max_value:
+                    if label_idx is not None and label_idx < len(row):
+                        row_id = str(row[label_idx])
+                    break
+            highlights.append(
+                {
+                    "type": "outlier_candidate",
+                    "column": col_name,
+                    "value": max_value,
+                    "row_id": row_id,
+                    "median": med,
+                }
+            )
+    return highlights
+
+
+def _build_narrative(insights: Dict[str, Any]) -> str:
+    data_quality = insights.get("data_quality") or {}
+    anomaly = data_quality.get("anomaly_detection") or {}
+    status = anomaly.get("status")
+    reason = anomaly.get("reason")
+    anomalies_count = anomaly.get("anomalies_count")
+
+    parts: List[str] = []
+    if status in {"INCONCLUSIVE", "SKIPPED"}:
+        parts.append(f"Anomaly detection is {status.lower()} ({reason}).")
+    elif status == "ERROR":
+        parts.append(f"Anomaly detection failed ({reason}).")
+    elif status == "OK":
+        if anomalies_count == 0:
+            parts.append("No anomalies were detected by the anomaly check.")
+        elif isinstance(anomalies_count, int):
+            parts.append(f"Anomaly check detected {anomalies_count} anomalies.")
+    else:
+        parts.append("Anomaly detection status is unavailable.")
+
+    trend = insights.get("trend") or {}
+    if trend.get("majority_monotonic_increase"):
+        parts.append("Most series show a monotonic increase across numeric columns.")
+
+    highlights = insights.get("highlights") or []
+    if highlights:
+        outlier_lines = []
+        for highlight in highlights:
+            if highlight.get("type") != "outlier_candidate":
+                continue
+            row_id = highlight.get("row_id")
+            column = highlight.get("column")
+            value = highlight.get("value")
+            if row_id:
+                outlier_lines.append(f"{row_id} has {column}={value}")
+            else:
+                outlier_lines.append(f"{column} has {value}")
+        if outlier_lines:
+            parts.append("Outlier candidates: " + "; ".join(outlier_lines) + ".")
+    return " ".join(parts).strip()
+
+
+def _majority_monotonic_increase(
+    columns: List[str],
+    rows: List[List[Any]],
+    *,
+    label_idx: Optional[int],
+) -> bool:
+    numeric_idxs: List[int] = []
+    for idx in range(len(columns)):
+        if label_idx is not None and idx == label_idx:
+            continue
+        values = [_to_float(row[idx]) for row in rows if idx < len(row)]
+        cleaned = [v for v in values if v is not None]
+        if cleaned and len(cleaned) == len(values):
+            numeric_idxs.append(idx)
+    if len(numeric_idxs) < 2:
+        return False
+    monotonic_rows = 0
+    eligible_rows = 0
+    for row in rows:
+        series = []
+        for idx in numeric_idxs:
+            if idx >= len(row):
+                break
+            value = _to_float(row[idx])
+            if value is None:
+                series = []
+                break
+            series.append(value)
+        if len(series) < 2:
+            continue
+        eligible_rows += 1
+        if all(series[i] <= series[i + 1] for i in range(len(series) - 1)):
+            monotonic_rows += 1
+    if eligible_rows == 0:
+        return False
+    return monotonic_rows >= (eligible_rows / 2)
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
 
 
 def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
@@ -308,6 +601,7 @@ def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
 
     stub_payload = _build_stub_payload(payload.cards)
     stub_bytes = json.dumps(stub_payload, indent=2, ensure_ascii=False).encode("utf-8")
+    html_bytes = _build_html_bytes(stub_payload)
     pdf_bytes = _render_cards_pdf(payload.cards)
     output_files = [
         {
@@ -319,6 +613,12 @@ def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
             "name": "visualization_stub.json",
             "content_type": "application/json",
             "content_base64": base64.b64encode(stub_bytes).decode("ascii"),
+        },
+        {
+            "name": "visualization.html",
+            "content_type": "text/html",
+            "role": "interactive",
+            "content_base64": base64.b64encode(html_bytes).decode("ascii"),
         },
     ]
     return ExportPdfOutput(
@@ -345,3 +645,223 @@ class ExportPdfTool(BaseTool):
 
 def build() -> ExportPdfTool:
     return ExportPdfTool()
+
+
+def _build_html_bytes(stub_payload: Dict[str, Any]) -> bytes:
+    stub_json = json.dumps(stub_payload, ensure_ascii=False)
+    stub_json = stub_json.replace("</", "<\\/")
+    html = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visual Insights</title>
+  <style>
+    body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 24px; color: #222; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+    .card h2 { margin: 0 0 8px; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 12px; }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .chart { border: 1px solid #eee; padding: 8px; border-radius: 6px; }
+    .metrics { display: flex; flex-wrap: wrap; gap: 12px; }
+    .metric { background: #f7f7f7; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+    details { margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; }
+    th { cursor: pointer; background: #fafafa; position: sticky; top: 0; }
+    .table-wrap { max-height: 240px; overflow: auto; border: 1px solid #eee; border-radius: 6px; }
+    #tooltip { position: absolute; background: #333; color: #fff; padding: 6px 8px; border-radius: 4px; font-size: 0.8rem; pointer-events: none; opacity: 0; }
+  </style>
+</head>
+<body>
+  <h1>Visual Insights</h1>
+  <div id="cards"></div>
+  <div id="tooltip"></div>
+  <script id="stub-data" type="application/json">__STUB_JSON__</script>
+  <script>
+    const stub = JSON.parse(document.getElementById('stub-data').textContent);
+    const cards = Array.isArray(stub.cards) ? stub.cards : [];
+    const container = document.getElementById('cards');
+    const tooltip = document.getElementById('tooltip');
+
+    function showTooltip(text, x, y) {
+      tooltip.textContent = text;
+      tooltip.style.left = (x + 12) + 'px';
+      tooltip.style.top = (y + 12) + 'px';
+      tooltip.style.opacity = 1;
+    }
+    function hideTooltip() {
+      tooltip.style.opacity = 0;
+    }
+
+    function buildMetric(metric) {
+      const el = document.createElement('div');
+      el.className = 'metric';
+      el.textContent = metric.name + ': ' + metric.value;
+      return el;
+    }
+
+    function buildNarrative(card) {
+      const details = document.createElement('details');
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = 'Narrative';
+      details.appendChild(summary);
+      const p = document.createElement('p');
+      p.textContent = card.narrative || '';
+      details.appendChild(p);
+      return details;
+    }
+
+    function buildCitations(card) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Citations';
+      details.appendChild(summary);
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(card.citations || [], null, 2);
+      details.appendChild(pre);
+      return details;
+    }
+
+    function buildAssumptions(card) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Assumptions';
+      details.appendChild(summary);
+      const ul = document.createElement('ul');
+      (card.assumptions || []).forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+      details.appendChild(ul);
+      return details;
+    }
+
+    function buildTable(card) {
+      const data = card.chart_spec && card.chart_spec.data ? card.chart_spec.data : null;
+      const columns = data && Array.isArray(data.columns) ? data.columns : [];
+      const rows = data && Array.isArray(data.rows) ? data.rows.slice() : [];
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      if (!columns.length || !rows.length) {
+        const note = document.createElement('div');
+        note.textContent = 'Table data not inlined.';
+        wrap.appendChild(note);
+        return wrap;
+      }
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tr = document.createElement('tr');
+      columns.forEach((col, idx) => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        th.addEventListener('click', () => {
+          const numeric = rows.every(r => !isNaN(parseFloat(r[idx])));
+          rows.sort((a, b) => {
+            const av = a[idx];
+            const bv = b[idx];
+            if (numeric) {
+              return parseFloat(av) - parseFloat(bv);
+            }
+            return String(av).localeCompare(String(bv));
+          });
+          renderBody();
+        });
+        tr.appendChild(th);
+      });
+      thead.appendChild(tr);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      table.appendChild(tbody);
+      function renderBody() {
+        tbody.innerHTML = '';
+        rows.forEach(row => {
+          const tr = document.createElement('tr');
+          columns.forEach((_, idx) => {
+            const td = document.createElement('td');
+            td.textContent = row[idx];
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+      renderBody();
+      wrap.appendChild(table);
+      return wrap;
+    }
+
+    function buildChart(card) {
+      const data = card.chart_spec && card.chart_spec.data ? card.chart_spec.data : null;
+      const columns = data && Array.isArray(data.columns) ? data.columns : [];
+      const rows = data && Array.isArray(data.rows) ? data.rows : [];
+      const encoding = card.chart_spec && card.chart_spec.encoding ? card.chart_spec.encoding : {};
+      if (!columns.length || !rows.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Chart data not inlined.';
+        return empty;
+      }
+      let xField = encoding.x && encoding.x.field ? encoding.x.field : columns[0];
+      let yField = encoding.y && encoding.y.field ? encoding.y.field : columns.find(c => c !== xField) || columns[1];
+      const xIdx = columns.indexOf(xField);
+      const yIdx = columns.indexOf(yField);
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '640');
+      svg.setAttribute('height', '260');
+      const maxVal = Math.max(...rows.map(r => parseFloat(r[yIdx]) || 0), 1);
+      const barWidth = 640 / Math.max(rows.length, 1);
+      rows.forEach((row, idx) => {
+        const value = parseFloat(row[yIdx]) || 0;
+        const height = (value / maxVal) * 220;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(idx * barWidth + 2));
+        rect.setAttribute('y', String(240 - height));
+        rect.setAttribute('width', String(barWidth - 4));
+        rect.setAttribute('height', String(height));
+        rect.setAttribute('fill', '#4a90e2');
+        rect.addEventListener('mousemove', (evt) => {
+          const label = row[xIdx];
+          showTooltip(label + ': ' + value, evt.clientX, evt.clientY);
+        });
+        rect.addEventListener('mouseleave', hideTooltip);
+        svg.appendChild(rect);
+      });
+      return svg;
+    }
+
+    cards.forEach(card => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card';
+      const title = document.createElement('h2');
+      title.textContent = card.title || 'Insight';
+      wrapper.appendChild(title);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = 'Chart type: ' + (card.chart_type || 'unknown');
+      wrapper.appendChild(meta);
+
+      const metrics = document.createElement('div');
+      metrics.className = 'metrics';
+      (card.key_metrics || []).forEach(metric => metrics.appendChild(buildMetric(metric)));
+      wrapper.appendChild(metrics);
+
+      const layout = document.createElement('div');
+      layout.className = 'layout';
+      const chartWrap = document.createElement('div');
+      chartWrap.className = 'chart';
+      chartWrap.appendChild(buildChart(card));
+      layout.appendChild(chartWrap);
+      layout.appendChild(buildTable(card));
+      wrapper.appendChild(layout);
+      wrapper.appendChild(buildNarrative(card));
+      wrapper.appendChild(buildCitations(card));
+      wrapper.appendChild(buildAssumptions(card));
+      container.appendChild(wrapper);
+    });
+  </script>
+</body>
+</html>
+"""
+    html = html.replace("__STUB_JSON__", stub_json)
+    return html.encode("utf-8")

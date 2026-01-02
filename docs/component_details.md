@@ -16,10 +16,8 @@ highlights how components collaborate at runtime.
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfile, docker-compose, and k8s manifests. |
-| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/logging/observability.py` defines the directory layout and output paths. |
-| `/logs` | Local log sink | Default on-disk location for structured logs (application/runtime). | `core/logging/logger.py` emits JSON logs here. |
-| `/products` | Product packs | Individual product definitions (flows, agents, prompts, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
-| `/scripts` | Ops scripts | Helper scripts for scaffolding, ingestion, and migrations. | `create_product.py`, `ingest_knowledge.py`, `migrate_memory.py`, `run_flow.py`. |
+| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/memory/observability_store.py` defines the directory layout and output paths. |
+| `/products` | Product packs | Individual product definitions (flows, agents, tools, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
 | `/storage` | Persistent state | Storage folders for legacy artifacts and memory DB files. | Still used for vector store/SQLite in dev; observability moved to `/observability`. |
 | `/tests` | Automated tests | Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `products/*/tests`. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions. |
@@ -33,7 +31,6 @@ flowchart LR
   CORE --> TESTS[tests/]
   INFRA[infra/] --> GATEWAY
   STORAGE[storage/] --> CORE
-  LOGS[logs/] --> CORE
 ```
 
 ---
@@ -49,7 +46,6 @@ flowchart LR
 | `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
-| `core/orchestrator/runners.py` | Convenience wrappers | Thin helpers for CLI/API. | Calls OrchestratorEngine directly. |
 
 ```mermaid
 sequenceDiagram
@@ -202,7 +198,6 @@ flowchart LR
 | --- | --- | --- | --- |
 | `core/models/router.py` | Model router | Selects provider/model per product/purpose. | Enforces model policies. |
 | `core/models/providers/openai_provider.py` | OpenAI provider (stub) | Placeholder adapter. | No network calls in v1. |
-| `core/models/providers/other_provider.py` | Other provider (stub) | Placeholder adapter. | Returns structured error in v1. |
 
 ### Knowledge
 
@@ -210,24 +205,21 @@ flowchart LR
 | --- | --- | --- | --- |
 | `core/knowledge/vector_store.py` | Vector store | SQLite-backed chunk store. | Lexical Jaccard scoring in v1. |
 | `core/knowledge/retriever.py` | Retriever | Thin wrapper over VectorStore. | Adds filters/top_k defaults. |
-| `core/knowledge/structured.py` | Structured access | Deterministic CSV reads. | Pandas optional; no SQL. |
 
 ```mermaid
 flowchart TB
-  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Ingest[Ingestion] --> Store[SqliteVectorStore]
   Store --> Retriever[Retriever]
   Retriever --> Orchestrator
   Orchestrator --> Agents
 ```
 
-### Logging & Metrics
+### Tracing & Observability
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/logging/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend and `observability/<product>/<run_id>/runtime/events.jsonl`. |
-| `core/logging/logger.py` | Logger | JSON log formatting. | Structured context fields (run_id, step_id, product, flow). |
-| `core/logging/metrics.py` | Metrics | In-memory counters/timers. | No external exporters in v1. |
-| `core/logging/observability.py` | Observability writer | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/` and writes `response.json`. |
+| `core/memory/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend and `observability/<product>/<run_id>/runtime/events.jsonl`. |
+| `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/` and writes `response.json`. |
 
 ---
 
@@ -261,7 +253,7 @@ Products are discovered and registered by `core/utils/product_loader.py`.
 | File | Purpose | Notes |
 | --- | --- | --- |
 | `app.yaml` | Global app metadata | Host/ports, paths, flags. |
-| `logging.yaml` | Logging config | Level, redaction, sinks. |
+| `logging.yaml` | Logging config | Level, redaction, tracing toggle. |
 | `models.yaml` | Model routing | Provider and model defaults. |
 | `policies.yaml` | Governance rules | Tool/model allowlists, autonomy. |
 | `products.yaml` | Product enablement | Discovery settings. |
@@ -284,7 +276,7 @@ Products are discovered and registered by `core/utils/product_loader.py`.
 - Orchestrator executes steps via tool and agent registries.
 - Tool execution flows through `ToolExecutor` with governance checks.
 - Memory persists runs, steps, events, and approvals.
-- Tracing emits sanitized events to memory + logs.
+- Tracing emits sanitized events to memory + observability store.
 
 ```mermaid
 flowchart LR
@@ -303,7 +295,7 @@ flowchart LR
 
 - Agents/tools never read environment variables directly.
 - All agent/tool outputs must use Pydantic contracts.
-- Logging goes through `core.logging`.
+- Tracing goes through `core/memory/tracing.py`.
 - Governance checks are centralized and non-bypassable.
 
 ---

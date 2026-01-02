@@ -39,7 +39,7 @@ flowchart TB
     T[tools executor]
     K[knowledge]
     R[models router]
-    L[logging]
+    L[tracing/observability]
   end
   subgraph Gateway
     A[API]
@@ -129,8 +129,8 @@ Core owns:
 - Model routing
 - Memory & persistence
 - Governance & safety
-- Logging, tracing, metrics
-- Knowledge (RAG + structured access)
+- Tracing & observability
+- Knowledge (RAG)
 
 Core **must not**:
 - Contain domain logic
@@ -144,7 +144,6 @@ Each product defines:
 - Flows (YAML / JSON)
 - Agents (Python)
 - Tools (Python)
-- Prompts (YAML)
 - Product-level config
 
 Products **must not**:

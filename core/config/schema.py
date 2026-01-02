@@ -33,8 +33,6 @@ class PathsConfig(BaseModel):
     configs_dir: str = Field(default="configs", description="Configs directory")
     secrets_dir: str = Field(default="secrets", description="Secrets directory")
     storage_dir: str = Field(default="storage", description="Runtime storage directory")
-    logs_dir: str = Field(default="logs", description="Logs directory")
-    docs_dir: str = Field(default="docs", description="Docs directory")
 
 
 class AppConfig(BaseModel):
@@ -44,7 +42,6 @@ class AppConfig(BaseModel):
     debug: bool = Field(default=False)
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8000)
-    ui_port: int = Field(default=8501, description="If using Streamlit/Chainlit etc.")
     default_product: str = Field(default="hello_world")
     default_flow: str = Field(default="hello_world")
     api_base_url: Optional[str] = Field(
@@ -64,6 +61,7 @@ class OpenAIConfig(BaseModel):
 
     api_base: Optional[str] = Field(default=None)
     api_key: Optional[str] = Field(default=None, description="Resolved via loader from env/secrets only")
+    org_id: Optional[str] = Field(default=None, description="Optional OpenAI org id")
     timeout_seconds: float = Field(default=30.0)
 
 
@@ -84,9 +82,6 @@ class ModelsConfig(BaseModel):
     routing: ModelRoutingConfig = Field(default_factory=ModelRoutingConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
 
-    # Placeholder for future providers
-    providers: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-
 
 # ==============================
 # Policies / Governance Settings
@@ -106,6 +101,10 @@ class PoliciesConfig(BaseModel):
 
     allowed_models: List[str] = Field(default_factory=list)
     blocked_models: List[str] = Field(default_factory=list)
+    model_max_tokens: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for model max_tokens requests.",
+    )
 
     # Per-product policy overrides
     by_product: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
@@ -117,12 +116,9 @@ class PoliciesConfig(BaseModel):
 
 
 class LoggingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     level: str = Field(default="INFO")
-    json: bool = Field(default=True, description="Emit JSON logs where possible")
-    log_to_file: bool = Field(default=True)
-    file_name: str = Field(default="app.log")
     redact: bool = Field(default=True)
     redact_patterns: List[str] = Field(default_factory=list)
     trace_to_memory: bool = Field(default=True, description="Persist trace events via memory backend")
@@ -139,7 +135,6 @@ class ProductsConfig(BaseModel):
 
     # Where products live (relative to repo_root)
     products_dir: str = Field(default="products")
-    discovery_paths: List[str] = Field(default_factory=lambda: ["products"])
     enabled: List[str] = Field(default_factory=list, description="Explicit allowlist of products to enable")
     auto_enable: bool = Field(
         default=True,

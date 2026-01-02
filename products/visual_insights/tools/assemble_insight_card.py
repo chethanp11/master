@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 
@@ -26,6 +26,8 @@ class AssembleInsightCardInput(BaseModel):
     data_slice: Optional[DataSlice] = None
     citations: List[CitationRef]
     assumptions: List[str] = Field(default_factory=list)
+    anomaly_summary: Optional[str] = None
+    anomalies: Optional[List[Dict[str, Any]]] = None
 
     @validator("citations")
     def must_have_citations(cls, value: List[CitationRef]) -> List[CitationRef]:
@@ -51,6 +53,8 @@ def assemble_insight_card(payload: AssembleInsightCardInput) -> AssembleInsightC
         data_slice=payload.data_slice,
         citations=payload.citations,
         assumptions=payload.assumptions,
+        anomaly_summary=payload.anomaly_summary,
+        anomalies=payload.anomalies,
     )
     return AssembleInsightCardOutput(card=card)
 

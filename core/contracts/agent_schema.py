@@ -117,23 +117,3 @@ class AgentEnvelope(BaseModel, Generic[T]):
 
 # Backwards-compatible default envelope used across the platform.
 AgentResult = AgentEnvelope[Dict[str, Any]]
-
-
-class AgentSpec(BaseModel):
-    """
-    Agent specification used for registration and discovery.
-
-    This is not the runtime result; it is metadata about an agent and its interface.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(..., description="Unique agent name in registry.")
-    kind: AgentKind = Field(default=AgentKind.OTHER, description="Agent category.")
-    description: str = Field(..., description="Short description of responsibilities.")
-    version: str = Field(default="v1", description="Agent semantic version label.")
-    input_schema: Dict[str, Any] = Field(default_factory=dict, description="JSON-schema-like description of inputs.")
-    output_schema: Dict[str, Any] = Field(default_factory=dict, description="JSON-schema-like description of outputs.")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Stable serialization wrapper."""
-        return self.model_dump(mode="python")

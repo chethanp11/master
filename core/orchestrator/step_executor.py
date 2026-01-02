@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import time
-import re
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
@@ -13,6 +12,7 @@ from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
+from core.orchestrator.templating import render_params
 from core.tools.executor import ToolExecutor
 from core.orchestrator.error_policy import evaluate_retry
 
@@ -50,7 +50,8 @@ class StepExecutor:
         )
 
         if step_def.type == StepType.TOOL:
-            rendered_params = self._render_params(step_def.params or {}, run_ctx.payload, run_ctx.artifacts)
+            context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+            rendered_params = render_params(step_def.params or {}, context)
             step_def = step_def.model_copy(update={"params": rendered_params})
             tool_result = self._execute_tool(step_ctx=step_ctx, step_def=step_def)
             if tool_result.ok:
@@ -123,54 +124,6 @@ class StepExecutor:
             if delay > 0:
                 self.sleep_fn(delay)
             attempt += 1
-
-    def _render_params(self, params: Dict[str, Any], payload: Dict[str, Any], artifacts: Dict[str, Any]) -> Dict[str, Any]:
-        def render(value: Any) -> Any:
-            if isinstance(value, str):
-                def resolve(path: str) -> Any:
-                    parts = path.split(".")
-                    root = parts[0]
-                    if root == "payload":
-                        current: Any = payload
-                    elif root == "artifacts":
-                        current = artifacts
-                    else:
-                        return None
-                    if root == "artifacts" and len(parts) > 1:
-                        for idx in range(len(parts) - 1, 0, -1):
-                            flat_key = ".".join(parts[1:idx + 1])
-                            if flat_key in artifacts:
-                                current = artifacts.get(flat_key)
-                                remaining = parts[idx + 1 :]
-                                for part in remaining:
-                                    if isinstance(current, dict) and part in current:
-                                        current = current[part]
-                                    else:
-                                        return None
-                                return current
-                    for part in parts[1:]:
-                        if isinstance(current, dict) and part in current:
-                            current = current[part]
-                        else:
-                            return None
-                    return current
-
-                def replace(match: re.Match[str]) -> str:
-                    resolved = resolve(match.group(1))
-                    return str(resolved) if resolved is not None else ""
-
-                full_match = re.fullmatch(r"\{\{\s*([a-zA-Z_][\w\.]*)\s*\}\}", value)
-                if full_match:
-                    return resolve(full_match.group(1))
-                return re.sub(r"\{\{\s*([a-zA-Z_][\w\.]*)\s*\}\}", replace, value)
-            if isinstance(value, dict):
-                return {k: render(v) for k, v in value.items()}
-            if isinstance(value, list):
-                return [render(item) for item in value]
-            return value
-
-        return {k: render(v) for k, v in params.items()}
-
 
 def build_step_context(run_ctx: RunContext, *, step_id: Optional[str], step_def: StepDef) -> StepContext:
     resolved_step_id = step_id or step_def.id or "step"

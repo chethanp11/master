@@ -53,7 +53,7 @@ class RunBundle(BaseModel):
 
 class MemoryBackend(ABC):
     """
-    Interface used by core.orchestrator and core.logging.Tracer.
+    Interface used by core.orchestrator and core.memory.Tracer.
 
     Minimal set of operations for v1:
     - runs + steps + events

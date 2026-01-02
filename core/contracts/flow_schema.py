@@ -102,9 +102,6 @@ class StepDef(BaseModel):
     params: Dict[str, Any] = Field(default_factory=dict, description="Step parameters/arguments.")
     retry: Optional[RetryPolicy] = Field(default=None, description="Retry policy for the step.")
 
-    depends_on: List[str] = Field(default_factory=list, description="Optional dependency step ids.")
-    next_steps: List[str] = Field(default_factory=list, description="Optional explicit next steps for graph flows.")
-
     @model_validator(mode="after")
     def _validate_target_fields(self) -> "StepDef":
         if self.type == StepType.TOOL and not self.tool:

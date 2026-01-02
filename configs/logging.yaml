@@ -2,15 +2,12 @@
 # Logging & Tracing
 # ==============================
 level: INFO
-json: true
-
 console: true
-log_to_file: true
-file_name: app.log
+trace_to_memory: true
 
 redact: true
 redact_patterns:
   - "sk-[A-Za-z0-9]{20,}"          # common API key shape
   - "(?i)api[_-]?key\\s*[:=]\\s*\\S+"
-
-trace_to_memory: true
+  # Example: email addresses
+  # - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"

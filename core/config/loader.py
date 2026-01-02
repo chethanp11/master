@@ -32,6 +32,7 @@ Testability:
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -118,22 +119,27 @@ def _read_dotenv(dotenv_path: Path) -> Dict[str, str]:
     - Ignores comments and blank lines.
     - Strips surrounding quotes.
 
-    We use a minimal parser instead of python-dotenv to avoid extra dependencies and
-    because we only need basic parsing for this loader.
+    Prefer python-dotenv if available; fallback to a minimal parser.
     """
     if not dotenv_path.exists():
         return {}
-    envs: Dict[str, str] = {}
-    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s or s.startswith("#") or "=" not in s:
-            continue
-        key, val = s.split("=", 1)
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key:
-            envs[key] = val
-    return envs
+    try:
+        from dotenv import dotenv_values  # type: ignore
+
+        values = dotenv_values(dotenv_path)
+        return {k: v for k, v in values.items() if isinstance(k, str) and isinstance(v, str)}
+    except Exception:
+        envs: Dict[str, str] = {}
+        for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            key, val = s.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key:
+                envs[key] = val
+        return envs
 
 
 def _apply_env_overrides(cfg: Dict[str, Any], env: Dict[str, str]) -> Dict[str, Any]:
@@ -230,10 +236,34 @@ Inputs:
     if secrets_file is not None and secrets_path is not None:
         raise ValueError("Provide only one of secrets_file or secrets_path.")
 
+    def _resolve_base_path(base_path: Optional[str], fallback: Path) -> Path:
+        if not base_path:
+            return fallback
+        base = Path(base_path).expanduser()
+        if not base.is_absolute():
+            base = (fallback / base).resolve()
+        return base.resolve()
+
     # --- Environment variable resolution ---
     env_vars = dict(env) if env is not None else dict(os.environ)
 
     root = Path(repo_root or os.getcwd()).expanduser().resolve()
+    root = _resolve_base_path(env_vars.get("APP_BASE_PATH"), root)
+
+    # --- Load .env file and merge with env vars ---
+    dotenv_path = Path(dotenv_file) if dotenv_file else (root / ".env")
+    dotenv_vars = _read_dotenv(dotenv_path)
+    effective_env = dict(env_vars)
+    # .env should not override real env by default; real env wins
+    for k, v in dotenv_vars.items():
+        effective_env.setdefault(k, v)
+    if "APP_BASE_PATH" not in env_vars and "APP_BASE_PATH" in dotenv_vars:
+        root = _resolve_base_path(dotenv_vars.get("APP_BASE_PATH"), root)
+        if dotenv_file is None:
+            repo_dotenv_vars = _read_dotenv(root / ".env")
+            for k, v in repo_dotenv_vars.items():
+                effective_env.setdefault(k, v)
+
     cfg_dir = root / (configs_dir or "configs")
 
     # --- Load base config YAML files ---
@@ -255,16 +285,11 @@ Inputs:
     secrets_cfg = _read_yaml(sec_path)
     merged = _deep_merge(merged, {"secrets": _section(secrets_cfg, "secrets")})
 
-    # --- Load .env file and merge with env vars ---
-    dotenv_path = Path(dotenv_file) if dotenv_file else (root / ".env")
-    dotenv_vars = _read_dotenv(dotenv_path)
-    effective_env = dict(env_vars)
-    # .env should not override real env by default; real env wins
-    for k, v in dotenv_vars.items():
-        effective_env.setdefault(k, v)
-
     # --- Apply MASTER__ env var overrides ---
     merged = _apply_env_overrides(merged, effective_env)
+
+    # --- Resolve provider secret refs (non-MASTER env vars) ---
+    merged = _hydrate_provider_refs(merged, effective_env)
 
     # --- Inject repo_root path to ensure deterministic path ---
     merged = _deep_merge(merged, {"app": {"paths": {"repo_root": str(root)}}})
@@ -281,9 +306,46 @@ Inputs:
     # and to ensure the final Settings object has secrets injected appropriately.
     settings = _hydrate_provider_secrets(settings)
 
+    logger = logging.getLogger(__name__)
+    logger.info("OpenAI API key resolved: %s", bool(settings.models.openai.api_key))
+
     if include_raw:
         return settings, merged
     return settings
+
+
+def _hydrate_provider_refs(merged: Dict[str, Any], env: Dict[str, str]) -> Dict[str, Any]:
+    def _get_dot(data: Dict[str, Any], path: str) -> Any:
+        cur: Any = data
+        for part in path.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                return None
+            cur = cur[part]
+        return cur
+
+    def _resolve_secret(direct_key: str, ref_key: str) -> Optional[str]:
+        direct = env.get(direct_key)
+        if direct:
+            return direct
+        ref = env.get(ref_key)
+        if not ref:
+            return None
+        secrets = merged.get("secrets", {}) or {}
+        value = _get_dot(secrets, ref)
+        return value
+
+    openai_api_key = _resolve_secret("OPENAI_API_KEY", "OPENAI_API_KEY_REF")
+    openai_org_id = _resolve_secret("OPENAI_ORG_ID", "OPENAI_ORG_ID_REF")
+
+    models = merged.get("models", {}) or {}
+    openai_cfg = models.get("openai", {}) or {}
+    if openai_api_key is not None:
+        openai_cfg.setdefault("api_key", openai_api_key)
+    if openai_org_id is not None:
+        openai_cfg.setdefault("org_id", openai_org_id)
+    models["openai"] = openai_cfg
+    merged["models"] = models
+    return merged
 
 
 def _hydrate_provider_secrets(settings: Settings) -> Settings:
@@ -302,9 +364,13 @@ def _hydrate_provider_secrets(settings: Settings) -> Settings:
 
     # Prefer explicit models.openai.api_key if already set
     if not openai.get("api_key"):
-        # Prefer secrets.openai_api_key
         if secrets.get("openai_api_key"):
             openai["api_key"] = secrets["openai_api_key"]
+        elif isinstance(secrets.get("openai"), dict) and secrets["openai"].get("api_key"):
+            openai["api_key"] = secrets["openai"]["api_key"]
+    if not openai.get("org_id"):
+        if isinstance(secrets.get("openai"), dict) and secrets["openai"].get("org_id"):
+            openai["org_id"] = secrets["openai"]["org_id"]
 
     models["openai"] = openai
     data["models"] = models

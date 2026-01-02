@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -28,17 +28,6 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 # Typing
 # ==============================
 T = TypeVar("T")
-
-
-# ==============================
-# Enums
-# ==============================
-class ToolRisk(str, Enum):
-    """Risk classification for governance checks."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    DESTRUCTIVE = "destructive"
 
 
 class ToolErrorCode(str, Enum):
@@ -124,29 +113,3 @@ class ToolResult(ToolEnvelope[Dict[str, Any]]):
     @classmethod
     def fail(cls, *, error: ToolError, meta: ToolMeta) -> "ToolResult":
         return cls(ok=False, data=None, error=error, meta=meta)
-
-
-class ToolSpec(BaseModel):
-    """
-    Tool specification used for registration and discovery.
-
-    This is not the runtime result; it is metadata about a tool and its contract.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(..., description="Unique tool name in registry.")
-    description: str = Field(..., description="Short description of what the tool does.")
-    risk: ToolRisk = Field(default=ToolRisk.LOW, description="Governance risk classification.")
-    version: str = Field(default="v1", description="Tool semantic version label.")
-
-    input_schema: Dict[str, Any] = Field(default_factory=dict, description="JSON-schema-like description of inputs.")
-    output_schema: Dict[str, Any] = Field(default_factory=dict, description="JSON-schema-like description of outputs.")
-
-    idempotent: bool = Field(default=True, description="Whether repeated calls are safe.")
-    side_effects: bool = Field(default=False, description="Whether tool causes external side effects.")
-
-    allowed_backends: List[str] = Field(default_factory=lambda: ["local"], description="Allowed execution backends.")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Stable serialization wrapper."""
-        return self.model_dump(mode="python")

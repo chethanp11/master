@@ -9,7 +9,7 @@ Products are thin bundles that plug into the shared runtime; **no core changes a
 
 - Thin: products only define flows, agents, tools, and config.
 - Safe: obey the platform laws (no env reads outside config loader, no persistence outside `core/memory`, no direct tool execution).
-- Declarative: flows/prompts/policies belong in YAML; behavior is wired via manifests.
+- Declarative: flows/policies belong in YAML; behavior is wired via manifests.
 - Testable: each product can ship regression suites that run via sqlite.
 
 ## 2. Product Layout
@@ -38,7 +38,7 @@ flowchart TB
   Loader --> Gateway
 ```
 
-`scripts/create_product.py <name>` scaffolds this layout. By default it **copies a base product** (currently `visual_insights`) and rewrites references; use `--minimal` for the lightweight scaffold. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
+There is no scaffolding script; create the product layout manually following this document. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
 
 ## 3. Manifest & Config
 
@@ -123,6 +123,6 @@ Once registered, the gateway exposes:
 
 ## Recap
 
-- Products ship manifests, configs, flows, agents, tools, registries, and optional prompts/tests.
+- Products ship manifests, configs, flows, agents, tools, registries, and optional tests.
 - The product loader discovers manifests deterministically, registers components safely, and feeds the gateway/orchestrator.
 - Tests run via sqlite to prove the golden path (`tool → HITL → agent summary`) behaves under audit-ready persistence.

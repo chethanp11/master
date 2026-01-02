@@ -21,7 +21,6 @@ def _base_configs(root):
       host: config-host
       port: 1111
       paths:
-        logs_dir: logs
         storage_dir: storage
     """)
     _write_yaml(root / "configs" / "models.yaml", """\

@@ -25,6 +25,7 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError, ConfigDict
 
 from core.agents.registry import AgentRegistry
+from core.agents.llm_reasoner import build as build_llm_reasoner
 from core.config.schema import Settings
 from core.tools.registry import ToolRegistry
 
@@ -238,6 +239,7 @@ def register_enabled_products(
     agent_registry: Any = AgentRegistry,
     tool_registry: Any = ToolRegistry,
 ) -> List[ProductLoadError]:
+    _register_core_agents(agent_registry)
     registries = ProductRegistries(
         agent_registry=agent_registry,
         tool_registry=tool_registry,
@@ -261,6 +263,11 @@ def register_enabled_products(
 
     catalog.errors.extend(errors)
     return errors
+
+
+def _register_core_agents(agent_registry: Any) -> None:
+    if not agent_registry.has("llm_reasoner"):
+        agent_registry.register(build_llm_reasoner().name, build_llm_reasoner)
 
 
 # ==============================

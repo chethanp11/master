@@ -56,7 +56,7 @@ class TableData(BaseModel):
 def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
     series = payload.series
     if not series and payload.data is not None:
-        series = _derive_series_from_table(payload.data)
+        return _detect_anomalies_from_table(payload.data, payload)
     if len(series) < payload.min_points:
         return DetectAnomaliesOutput(anomalies=[], summary="series too short")
     values = [pt.value for pt in series]
@@ -125,6 +125,66 @@ def _derive_series_from_table(data: TableData) -> List[Point]:
             continue
         series.append(Point(ts=str(data.columns[idx]), value=total))
     return series
+
+
+def _detect_anomalies_from_table(data: TableData, payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
+    columns = data.columns
+    if not columns or not data.rows:
+        return DetectAnomaliesOutput(anomalies=[], summary="no data")
+    numeric_cols: List[int] = []
+    for idx in range(len(columns)):
+        col_values = []
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            col_values.append(value)
+        if col_values and len(col_values) == sum(1 for _ in col_values if _ is not None):
+            numeric_cols.append(idx)
+
+    label_idx = None
+    if 0 in numeric_cols:
+        numeric_cols = [idx for idx in numeric_cols if idx != 0]
+    elif columns:
+        label_idx = 0
+
+    if not numeric_cols:
+        return DetectAnomaliesOutput(anomalies=[], summary="no numeric columns")
+
+    anomalies: List[Anomaly] = []
+    for row in data.rows:
+        label = None
+        if label_idx is not None and label_idx < len(row):
+            label = str(row[label_idx])
+        points: List[Point] = []
+        for idx in numeric_cols:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            ts = f"{label}:{columns[idx]}" if label is not None else str(columns[idx])
+            points.append(Point(ts=ts, value=value))
+        if len(points) < payload.min_points:
+            continue
+        values = [pt.value for pt in points]
+        stddev = pstdev(values)
+        if stddev == 0:
+            continue
+        m = mean(values)
+        for pt in points:
+            z = (pt.value - m) / stddev
+            if abs(z) >= payload.z_threshold:
+                anomalies.append(Anomaly(ts=pt.ts, value=pt.value, zscore=z))
+
+    anomalies.sort(key=lambda a: (-abs(a.zscore), a.ts))
+    if not anomalies:
+        return DetectAnomaliesOutput(anomalies=[], summary="no anomalies found")
+    top = anomalies[0]
+    summary = f"found {len(anomalies)} anomalies (top: {top.ts}={top.value})"
+    return DetectAnomaliesOutput(anomalies=anomalies, summary=summary)
 
 
 def _to_float(value: Any) -> Optional[float]:

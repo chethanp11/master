@@ -27,3 +27,5 @@ class InsightCard(BaseModel):
     data_slice: Optional[DataSlice] = None
     citations: List[CitationRef]
     assumptions: List[str]
+    anomaly_summary: Optional[str] = None
+    anomalies: Optional[List[Dict[str, Any]]] = None

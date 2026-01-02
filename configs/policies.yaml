@@ -15,6 +15,10 @@ blocked_tools: []
 # Model routing works the same way — declare global allow/block lists.
 allowed_models: []
 blocked_models: []
+model_max_tokens: 512
+#
+# Example: enforce a tighter max token budget
+# model_max_tokens: 256
 
 # Per-product overrides let you tailor behaviour for a single product.
 # Example below keeps `hello_world` limited to echo_tool and a single model.

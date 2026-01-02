@@ -106,7 +106,7 @@ flowchart LR
   - `manifest.yaml`
   - `config/product.yaml`
   - `registry.py`
-- Flows are loaded from `products/<product>/flows/*.yaml` (YAML only in v1).
+- Flows are loaded from `products/<product>/flows/*.yaml` or `*.json`.
 
 ```mermaid
 flowchart TB
@@ -132,7 +132,6 @@ Purpose: control flow execution, retries, HITL pauses, and resume.
 core/orchestrator/
 ├── engine.py
 ├── flow_loader.py
-├── runners.py
 ├── context.py
 ├── state.py
 ├── error_policy.py
@@ -197,11 +196,11 @@ sequenceDiagram
 ```
 
 ### Step Parameter Rendering
-`StepExecutor` replaces string values of the form:
+`StepExecutor` renders params via `core/orchestrator/templating.py`, replacing:
 - `{{payload.<key>}}`
 - `{{artifacts.<key>}}` (flat keys or nested access)
 
-Missing values render as null (not empty strings), so contracts can validate inputs strictly.
+Missing values render as `null` for full-token values and as empty strings for inline tokens.
 
 ---
 
@@ -350,14 +349,12 @@ erDiagram
 
 ---
 
-## 10. Logging, Tracing, Metrics & Observability
+## 10. Tracing & Observability
 
-**Source of truth:** `core/logging/*`.
+**Source of truth:** `core/memory/tracing.py` and `core/memory/observability_store.py`.
 
 - `Tracer` sanitizes and persists `TraceEvent` via memory and writes `observability/<product>/<run_id>/runtime/events.jsonl`.
-- `logger.py` emits JSON-formatted logs.
-- `metrics.py` provides in-memory counters/timers (no exporters in v1).
-- `core/logging/observability.py` provides the run directory layout:
+- `ObservabilityStore` owns the run directory layout:
   - `input/`
   - `runtime/`
   - `output/`
@@ -369,7 +366,6 @@ flowchart TB
   Redactor --> Tracer
   Tracer --> Memory[MemoryBackend]
   Tracer --> Observability[observability/<product>/<run_id>/runtime]
-  Tracer --> Logs[Structured Logs]
 ```
 
 ---
@@ -386,7 +382,7 @@ flowchart TB
 
 ## 12. Knowledge Layer
 
-**Source of truth:** `core/knowledge/*` and `scripts/ingest_knowledge.py`.
+**Source of truth:** `core/knowledge/*`.
 
 - SQLite-backed chunk store with lexical scoring (Jaccard).
 - Structured access reads CSV deterministically (pandas optional).
@@ -394,7 +390,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-  Ingest[scripts/ingest_knowledge.py] --> Store[SqliteVectorStore]
+  Ingest[Ingestion] --> Store[SqliteVectorStore]
   Store --> Retriever[Retriever]
   Retriever --> Orchestrator
   Orchestrator --> Agents

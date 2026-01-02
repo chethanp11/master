@@ -17,7 +17,7 @@ from core.config.schema import Settings
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
-from core.logging.tracing import Tracer
+from core.memory.tracing import Tracer
 from core.memory.in_memory import InMemoryBackend
 from core.memory.router import MemoryRouter
 from core.models.providers.openai_provider import OpenAIRequest, OpenAIResponse

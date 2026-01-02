@@ -35,6 +35,8 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
             "MASTER__SECRETS__MEMORY_DB_PATH": sqlite_path.as_posix(),
         },
     )
+    if not settings.models.openai.api_key:
+        pytest.skip("OpenAI API key not configured for llm_reasoner integration test.")
 
     AgentRegistry.clear()
     ToolRegistry.clear()
@@ -72,6 +74,10 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         message = summarize_step["output"]["data"]["message"]
         assert "Dashboard summary" in message
 
+        llm_step = next(s for s in steps if s["step_id"] == "llm_review")
+        llm_content = llm_step["output"]["data"]["content"]
+        assert llm_content
+
         response_path = repo_root / "observability" / "visual_insights" / run_id / "output" / "response.json"
         assert response_path.exists()
         response = json.loads(response_path.read_text(encoding="utf-8"))
@@ -80,15 +86,33 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         stored_names = [f.get("stored_name") for f in files]
         assert "visualization.pdf" in stored_names
         assert "visualization_stub.json" in stored_names
+        assert "visualization.html" in stored_names
         stub_entry = next((f for f in files if f.get("stored_name") == "visualization_stub.json"), None)
         assert stub_entry is not None
         assert stub_entry.get("content_type") == "application/json"
         assert stub_entry.get("role") == "supporting"
+        html_entry = next((f for f in files if f.get("stored_name") == "visualization.html"), None)
+        assert html_entry is not None
+        assert html_entry.get("content_type") == "text/html"
+        assert html_entry.get("role") == "interactive"
         pdf_entry = next((f for f in files if f.get("stored_name") == "visualization.pdf"), None)
         assert pdf_entry is not None
         assert pdf_entry.get("role") == "primary"
         assert response.get("response_version") == "1.0"
         assert len(set(stored_names)) == len(stored_names)
+
+        html_path = response_path.parent / "visualization.html"
+        assert html_path.exists()
+        html_body = html_path.read_text(encoding="utf-8")
+        assert "Visualization for sample.csv" in html_body
+
+        events_path = repo_root / "observability" / "visual_insights" / run_id / "runtime" / "events.jsonl"
+        events_text = events_path.read_text(encoding="utf-8")
+        assert "<html" not in events_text.lower()
+
+        assemble_step = next(s for s in steps if s["step_id"] == "assemble_card")
+        narrative = assemble_step["output"]["data"]["card"]["narrative"]
+        assert narrative == llm_content
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()

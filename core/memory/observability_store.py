@@ -236,6 +236,8 @@ class ObservabilityStore:
             role = "supporting"
             if entry.suffix.lower() == ".pdf":
                 role = "primary"
+            if entry.suffix.lower() == ".html":
+                role = "interactive"
             files.append(
                 {
                     "name": entry.name,
@@ -279,6 +281,8 @@ def _guess_content_type(name: str) -> str:
         return "application/json"
     if suffix == ".pdf":
         return "application/pdf"
+    if suffix == ".html":
+        return "text/html"
     if suffix in {".txt", ".md"}:
         return "text/plain"
     return "application/octet-stream"

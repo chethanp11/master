@@ -1,5 +1,13 @@
 app:
-  name: master
-  environment: local
-  default_timeout_seconds: 300
+  env: local
+  debug: false
+  host: 0.0.0.0
+  port: 8000
+  default_product: hello_world
+  default_flow: hello_world
   api_base_url: "http://localhost:8000"
+  paths:
+    repo_root: .
+    configs_dir: configs
+    secrets_dir: secrets
+    storage_dir: storage

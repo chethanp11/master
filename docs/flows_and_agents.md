@@ -53,11 +53,11 @@ An **agent** is a unit of goal-driven reasoning.
 Agents are:
 - Stateless
 - Deterministic for a given context
-- Goal-driven (not prompt-driven)
+- Goal-driven (not template-driven)
 - Side-effect free
 
 Agents:
-- Receive goals and constraints from the orchestrator
+- Receive params and constraints from the orchestrator
 - Reason and decide
 - Return structured outputs (`AgentResult`)
 - Do **not** perform IO or execution directly
@@ -88,7 +88,8 @@ steps:
   - id: plan
     type: agent
     agent: hello_world.planner
-    goal: "Generate an execution plan"
+    params:
+      instruction: "Generate an execution plan"
     retry:
       max_attempts: 2
       backoff_seconds: 1
@@ -100,13 +101,13 @@ steps:
   - id: execute
     type: agent
     agent: hello_world.executor
-    goal: "Execute the approved plan"
+    params:
+      instruction: "Execute the approved plan"
 ```
 
 Notes:
-	•	`params` are the primary control inputs to agents and tools
-	•	Prompts are optional and not control flow
-	•	Retry behavior is declarative and flow-driven
+- `params` are the primary control inputs to agents and tools
+- Retry behavior is declarative and flow-driven
 
 ---
 
@@ -117,18 +118,19 @@ Notes:
 - id: step_name
   type: agent
   agent: product.agent_name
-  goal: "Describe desired outcome"
+  params:
+    instruction: "Describe desired outcome"
 
 Behavior:
-	•	Resolves agent from registry
-	•	Provides StepContext (params, payload, artifacts)
-	•	Executes agent reasoning
-	•	Expects an AgentResult
+- Resolves agent from registry
+- Provides StepContext (params, payload, artifacts)
+- Executes agent reasoning
+- Expects an AgentResult
 
 Agents:
-	•	Do not decide the next step
-	•	Do not call tools directly
-	•	Do not mutate persistent state
+- Do not decide the next step
+- Do not call tools directly
+- Do not mutate persistent state
 
 ---
 
@@ -139,13 +141,13 @@ Agents:
   tool: product.tool_name
 
 Behavior:
-	•	Executed only by the tool executor
-	•	Subject to governance and policy checks
-	•	Produces a ToolResult
+- Executed only by the tool executor
+- Subject to governance and policy checks
+- Produces a ToolResult
 
 Notes:
-	•	The orchestrator decides whether and when tools run
-	•	Tools are executed only by ToolExecutor
+- The orchestrator decides whether and when tools run
+- Tools are executed only by ToolExecutor
 
 ---
 
@@ -156,11 +158,11 @@ Notes:
   message: "Approve this output?"
 
 Behavior:
-	•	Pauses execution
-	•	Persists run and step state
-	•	Sets run status to PENDING_HUMAN
-	•	Requires explicit resume action
-	•	Approval context can be supplied in `params` (reason, decision notes, recommended action)
+- Pauses execution
+- Persists run and step state
+- Sets run status to PENDING_HUMAN
+- Requires explicit resume action
+- Approval context can be supplied in `params` (reason, decision notes, recommended action)
 
 ---
 
@@ -172,8 +174,8 @@ semi_auto	Tools may execute but require approval
 full_auto	Fully autonomous execution
 
 Rules:
-	•	Autonomy level is enforced by governance hooks
-	•	Agents do not override autonomy
+- Autonomy level is enforced by governance hooks
+- Agents do not override autonomy
 
 ---
 
@@ -186,9 +188,9 @@ retry:
   backoff_seconds: 2
 
 Rules:
-	•	Retries occur only on recoverable errors
-	•	Error classification is handled by error policy evaluation
-	•	Agents return structured errors; they do not retry themselves
+- Retries occur only on recoverable errors
+- Error classification is handled by error policy evaluation
+- Agents return structured errors; they do not retry themselves
 
 ---
 
@@ -208,10 +210,10 @@ products/hello_world/agents/simple_agent.py
 ## 8. Agent Contract
 
 All agents must:
-	•	Inherit from BaseAgent
-	•	Implement run(step_context)
-	•	Return AgentResult
-	•	Never raise exceptions for expected failures
+- Inherit from BaseAgent
+- Implement run(step_context)
+- Return AgentResult
+- Never raise exceptions for expected failures
 
 Conceptual example:
 
@@ -232,30 +234,30 @@ class SimpleAgent(BaseAgent):
 ## 9. Agent Responsibilities
 
 Agents MAY:
-	•	Read goal, constraints, and artifacts
-	•	Reason and decide
-	•	Emit trace events
-	•	Request tool usage via structured output
+- Read params, constraints, and artifacts
+- Reason and decide
+- Emit trace events
+- Request tool usage via structured output
 
 Agents MUST NOT:
-	•	Execute tools directly
-	•	Call other agents
-	•	Read/write files
-	•	Persist state
-	•	Invoke models directly
-	•	Read environment variables
+- Execute tools directly
+- Call other agents
+- Read/write files
+- Persist state
+- Invoke models directly
+- Read environment variables
 
 ---
 
 ## 10. Agent Registry
 
 Agents are registered at startup:
-	•	Product agents self-register via controlled import
-	•	Registry maps agent_name → agent class
+- Product agents self-register via controlled import
+- Registry maps agent_name -> agent class
 
 Resolution:
-	•	Orchestrator resolves agents by name at runtime
-	•	Names should be namespaced (product.agent)
+- Orchestrator resolves agents by name at runtime
+- Names should be namespaced (product.agent)
 
 ---
 
@@ -272,7 +274,7 @@ Resolution:
 Step parameter rendering supports:
 - `{{payload.<key>}}`
 - `{{artifacts.<key>}}`
-Missing values render as null (not empty strings).
+Missing values render as `null` for full-token values and as empty strings for inline tokens.
 
 ---
 
@@ -303,30 +305,29 @@ Generate → Approve → Execute
 ## 13. Product Isolation
 
 Rules:
-	•	Flows must not reference agents from other products
-	•	Tools are product-scoped unless explicitly shared
-	•	Core agents/tools may be reused
-	•	Prompts are optional and non-authoritative
+- Flows must not reference agents from other products
+- Tools are product-scoped unless explicitly shared
+- Core agents/tools may be reused
 
 ---
 
 ## 14. Testing Flows and Agents
 
 Required:
-	•	Unit test agents independently
-	•	Integration test flows via orchestrator
-	•	Explicitly test HITL paths
-	•	Assert structured outputs and state transitions
+- Unit test agents independently
+- Integration test flows via orchestrator
+- Explicitly test HITL paths
+- Assert structured outputs and state transitions
 
 ---
 
 ## 15. Best Practices
-	•	Keep flows declarative and readable
-	•	Express intent via goals, not code
-	•	Keep agents small and single-purpose
-	•	Prefer more steps over complex agents
-	•	Use approval gates early for high-risk actions
-	•	Log decisions and intent, not raw data
+- Keep flows declarative and readable
+- Express intent via params, not code
+- Keep agents small and single-purpose
+- Prefer more steps over complex agents
+- Use approval gates early for high-risk actions
+- Log decisions and intent, not raw data
 
 ---
 

@@ -34,6 +34,7 @@ steps:
     params:
       series: "{{artifacts.tool.data_reader.output.series}}"
       data: "{{artifacts.tool.data_reader.output.data}}"
+      min_points: 3
 
   - id: "recommend_chart"
     type: "tool"
@@ -53,6 +54,15 @@ steps:
     agent: "dashboard_agent"
     params:
       template: "Dashboard summary: {summary}"
+
+  - id: "llm_review"
+    type: "agent"
+    backend: "local"
+    agent: "llm_reasoner"
+    params:
+      purpose: "reasoning"
+      prompt: "Write a concise narrative for the dashboard. Dataset: {{artifacts.tool.data_reader.output.summary}}. Anomalies: {{artifacts.tool.detect_anomalies.output.summary}} (details: {{artifacts.tool.detect_anomalies.output.anomalies}}). Chart: {{artifacts.tool.recommend_chart.output.chart_type}}. Mention at least one concrete pattern if present."
+      max_tokens: 200
 
   - id: "approval"
     type: "human_approval"
@@ -96,7 +106,9 @@ steps:
       title: "Visualization for {{payload.dataset}}"
       chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
       chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
-      narrative: "{{artifacts.agent.dashboard_agent.output.insight}}"
+      narrative: "{{artifacts.agent.llm_reasoner.output.content}}"
+      anomaly_summary: "{{artifacts.tool.detect_anomalies.output.summary}}"
+      anomalies: "{{artifacts.tool.detect_anomalies.output.anomalies}}"
       key_metrics:
         - name: "row_count"
           value: "{{artifacts.tool.data_reader.output.row_count}}"
