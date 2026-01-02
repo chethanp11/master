@@ -16,6 +16,9 @@ blocked_tools: []
 allowed_models: []
 blocked_models: []
 model_max_tokens: 512
+# Demo safety caps: keep small and deterministic for public Spaces usage.
+max_steps: 10
+max_tool_calls: 10
 #
 # Example: enforce a tighter max token budget
 # model_max_tokens: 256

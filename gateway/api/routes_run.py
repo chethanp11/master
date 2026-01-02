@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -16,6 +18,16 @@ from gateway.api.deps import get_engine, get_product_catalog, get_memory_router,
 
 
 router = APIRouter()
+MAX_RUN_REQUEST_BYTES = 100 * 1024
+
+
+def _estimate_payload_size(req: RunRequest) -> int:
+    try:
+        payload = json.dumps(req.payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    except Exception:
+        payload = str(req.payload).encode("utf-8")
+    text_bytes = (req.text or "").encode("utf-8")
+    return len(payload) + len(text_bytes)
 
 
 class RunRequest(BaseModel):
@@ -197,13 +209,19 @@ def get_output_file(
     return FileResponse(target)
 
 @router.post("/run/{product}/{flow}")
-def run_flow(
+async def run_flow(
     product: str,
     flow: str,
     req: RunRequest,
     engine: OrchestratorEngine = Depends(get_engine),
     catalog: ProductCatalog = Depends(get_product_catalog),
 ) -> Dict[str, Any]:
+    if _estimate_payload_size(req) > MAX_RUN_REQUEST_BYTES:
+        _error(
+            http_status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            code="payload_too_large",
+            message=f"Payload exceeds {MAX_RUN_REQUEST_BYTES} bytes limit.",
+        )
     meta, flows = _ensure_product_ready(catalog, product)
     _ensure_flow(meta, flows, flow)
     payload = req.payload
@@ -213,7 +231,7 @@ def run_flow(
         if ui and getattr(ui, "intent", None) and ui.intent.enabled:
             intent_field = ui.intent.field or intent_field
         payload = {intent_field: req.text}
-    res = engine.run_flow(product=product, flow=flow, payload=payload)
+    res = await run_in_threadpool(engine.run_flow, product=product, flow=flow, payload=payload)
     return _respond(res, meta={"product": product, "flow": flow})
 
 

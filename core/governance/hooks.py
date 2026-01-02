@@ -23,6 +23,12 @@ from core.governance.policies import PolicyDecision, PolicyEngine
 from core.governance.security import SecurityRedactor
 from core.orchestrator.context import RunContext, StepContext
 
+_INJECTION_PATTERNS = (
+    "ignore previous instructions",
+    "dump system prompt",
+    "reveal configuration",
+)
+
 
 @dataclass(frozen=True)
 class HookDecision:
@@ -101,6 +107,19 @@ class GovernanceHooks:
         max_tokens: Optional[int],
         ctx: StepContext,
     ) -> HookDecision:
+        flattened = str(messages).lower()
+        if any(pat in flattened for pat in _INJECTION_PATTERNS):
+            return self._decision(
+                allowed=False,
+                reason="prompt_injection_detected",
+                details={"patterns": [p for p in _INJECTION_PATTERNS if p in flattened]},
+                scrubbed={
+                    "model": model_name,
+                    "purpose": purpose or "",
+                    "run_id": self._run_id(ctx.run),
+                    "product": self._product(ctx.run),
+                },
+            )
         decision = self.engine.evaluate_model_use(model_name=model_name, step_ctx=ctx)
         limit = self.settings.policies.model_max_tokens
         if limit is not None and max_tokens is not None and max_tokens > limit:

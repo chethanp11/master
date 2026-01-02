@@ -839,7 +839,22 @@ def main() -> None:
             )
             payload[intent_field] = instructions.strip() if instructions else ""
         else:
-            payload_text = st.text_area("Payload (JSON)", value="{}", height=220)
+            payload_key = f"{prod}_payload_json"
+            if payload_key not in st.session_state:
+                st.session_state[payload_key] = "{}"
+            example_key = f"{prod}_example_loaded"
+            if st.button("Load Example", type="secondary"):
+                st.session_state[example_key] = True
+                st.session_state[payload_key] = _pretty(
+                    {
+                        "dataset": "visual_insights_input.csv",
+                        "prompt": "Summarize key trends and highlight anomalies.",
+                        "files": [{"name": "visual_insights_input.csv", "file_type": "csv"}],
+                        "upload_id": "demo_upload_1",
+                    }
+                )
+            payload_text = st.text_area("Payload (JSON)", value=st.session_state[payload_key], height=220)
+            st.session_state[payload_key] = payload_text
             ok, payload, err = _safe_json_loads(payload_text)
             if not ok:
                 st.error(f"Invalid JSON: {err}")

@@ -38,10 +38,10 @@ def get_tracer() -> Tracer:
     return Tracer.from_settings(settings=settings, memory=mem)
 
 
-@lru_cache(maxsize=1)
 def get_engine() -> OrchestratorEngine:
     settings = get_settings()
-    get_product_catalog()  # ensure products are registered once
+    get_product_catalog()  # keep product registry cached; engine must be per-request for isolation
     mem = get_memory_router()
     tracer = get_tracer()
+    # Avoid caching OrchestratorEngine to prevent state leakage across users/sessions.
     return OrchestratorEngine.from_settings(settings=settings, memory=mem, tracer=tracer)

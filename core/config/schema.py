@@ -105,6 +105,14 @@ class PoliciesConfig(BaseModel):
         default=None,
         description="Optional hard ceiling for model max_tokens requests.",
     )
+    max_steps: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for total steps per run.",
+    )
+    max_tool_calls: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for tool calls per run.",
+    )
 
     # Per-product policy overrides
     by_product: Dict[str, Dict[str, Any]] = Field(default_factory=dict)

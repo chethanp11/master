@@ -62,8 +62,10 @@ class SQLiteBackend(MemoryBackend):
             self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.db_path, check_same_thread=False)
+        con = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
         con.row_factory = sqlite3.Row
+        con.execute("PRAGMA journal_mode=WAL;")
+        con.execute("PRAGMA synchronous=NORMAL;")
         return con
 
     def _init_db(self) -> None:
