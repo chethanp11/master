@@ -20,6 +20,7 @@ class ExportPdfInput(BaseModel):
 
     cards: List[InsightCard]
     export_requested: bool
+    output_format: str = "both"
 
 
 class ExportPdfOutput(BaseModel):
@@ -601,26 +602,33 @@ def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
 
     stub_payload = _build_stub_payload(payload.cards)
     stub_bytes = json.dumps(stub_payload, indent=2, ensure_ascii=False).encode("utf-8")
-    html_bytes = _build_html_bytes(stub_payload)
-    pdf_bytes = _render_cards_pdf(payload.cards)
     output_files = [
-        {
-            "name": "visualization.pdf",
-            "content_type": "application/pdf",
-            "content_base64": base64.b64encode(pdf_bytes).decode("ascii"),
-        },
         {
             "name": "visualization_stub.json",
             "content_type": "application/json",
             "content_base64": base64.b64encode(stub_bytes).decode("ascii"),
         },
-        {
-            "name": "visualization.html",
-            "content_type": "text/html",
-            "role": "interactive",
-            "content_base64": base64.b64encode(html_bytes).decode("ascii"),
-        },
     ]
+    format_value = (payload.output_format or "both").strip().lower()
+    if format_value in {"html", "both"}:
+        html_bytes = _build_html_bytes(stub_payload)
+        output_files.append(
+            {
+                "name": "visualization.html",
+                "content_type": "text/html",
+                "role": "interactive",
+                "content_base64": base64.b64encode(html_bytes).decode("ascii"),
+            }
+        )
+    if format_value in {"pdf", "both"}:
+        pdf_bytes = _render_cards_pdf(payload.cards)
+        output_files.append(
+            {
+                "name": "visualization.pdf",
+                "content_type": "application/pdf",
+                "content_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+            }
+        )
     return ExportPdfOutput(
         output_files=output_files,
     )

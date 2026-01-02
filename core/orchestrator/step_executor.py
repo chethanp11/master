@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
 from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
+from core.contracts.plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
@@ -77,6 +78,31 @@ class StepExecutor:
             run_ctx.artifacts[f"agent.{step_def.agent}.meta"] = result.meta.model_dump(mode="json")
             return result.model_dump(mode="json")
 
+        if step_def.type == StepType.PLAN_PROPOSAL:
+            if not step_def.agent:
+                raise ValueError("plan_proposal step missing 'agent' field")
+            agent = self.agent_registry.resolve(step_def.agent)
+            result = agent.run(step_ctx)
+            if not result.ok:
+                raise RuntimeError(result.error.message if result.error else "plan_proposal_failed")
+            step_ctx.emit(
+                "agent.executed",
+                {
+                    "agent": step_def.agent,
+                    "result": result.model_dump(mode="json"),
+                },
+            )
+            try:
+                plan = PlanProposal.model_validate(result.data or {})
+            except Exception as exc:
+                step_ctx.emit("plan_validation_failed", {"error": str(exc)})
+                raise RuntimeError("plan_validation_failed")
+            plan_payload = plan.model_dump(mode="json")
+            run_ctx.artifacts["plan.proposal"] = plan_payload
+            step_ctx.emit("plan_proposed", {"plan": _summarize_plan(plan)})
+            result = result.model_copy(update={"data": plan_payload})
+            return result.model_dump(mode="json")
+
         if step_def.type == StepType.SUBFLOW:
             raise NotImplementedError("subflow execution is not implemented in v1")
 
@@ -133,3 +159,15 @@ def build_step_context(run_ctx: RunContext, *, step_id: Optional[str], step_def:
         backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
         target=step_def.agent or step_def.tool,
     )
+
+
+def _summarize_plan(plan: PlanProposal) -> Dict[str, Any]:
+    step_ids = [step.step_id for step in plan.steps]
+    return {
+        "summary": plan.summary,
+        "steps_count": len(plan.steps),
+        "step_ids": step_ids[:10],
+        "required_tools": plan.required_tools,
+        "approvals_count": len(plan.approvals),
+        "estimated_cost": plan.estimated_cost.model_dump(mode="json"),
+    }

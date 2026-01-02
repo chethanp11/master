@@ -30,6 +30,8 @@ class StepType(str, Enum):
     AGENT = "agent"
     TOOL = "tool"
     HUMAN_APPROVAL = "human_approval"
+    USER_INPUT = "user_input"
+    PLAN_PROPOSAL = "plan_proposal"
     SUBFLOW = "subflow"
 
 
@@ -51,6 +53,8 @@ class BackendType(str, Enum):
 StepType.agent = StepType.AGENT  # type: ignore[attr-defined]
 StepType.tool = StepType.TOOL  # type: ignore[attr-defined]
 StepType.human_approval = StepType.HUMAN_APPROVAL  # type: ignore[attr-defined]
+StepType.user_input = StepType.USER_INPUT  # type: ignore[attr-defined]
+StepType.plan_proposal = StepType.PLAN_PROPOSAL  # type: ignore[attr-defined]
 StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
 
 AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
@@ -108,6 +112,8 @@ class StepDef(BaseModel):
             raise ValueError("tool steps require the 'tool' field")
         if self.type == StepType.AGENT and not self.agent:
             raise ValueError("agent steps require the 'agent' field")
+        if self.type == StepType.PLAN_PROPOSAL and not self.agent:
+            raise ValueError("plan_proposal steps require the 'agent' field")
         return self
 
 

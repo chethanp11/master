@@ -85,12 +85,38 @@ steps:
           type: "string"
           required: false
 
+  - id: "chart_config"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "chart_config"
+      title: "Select chart options"
+      description: "Choose chart and metric settings before export."
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["auto", "bar", "line", "scatter"]
+          primary_metric:
+            type: "string"
+            enum: ["sum", "mean", "median", "min", "max"]
+          output_format:
+            type: "string"
+            enum: ["html", "pdf", "both"]
+      defaults:
+        chart_type: "auto"
+        primary_metric: "sum"
+        output_format: "both"
+      required: ["chart_type", "primary_metric", "output_format"]
+
   - id: "build_chart_spec"
     type: "tool"
     backend: "local"
     tool: "build_chart_spec"
     params:
-      chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
+      chart_type: "{{artifacts.user_input.chart_config.values.chart_type}}"
+      fallback_chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
       title: "Visualization for {{payload.dataset}}"
       x: "{{artifacts.tool.data_reader.output.x_field}}"
       y: "{{artifacts.tool.data_reader.output.y_field}}"
@@ -104,9 +130,10 @@ steps:
     params:
       card_id: "card_1"
       title: "Visualization for {{payload.dataset}}"
-      chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
+      chart_type: "{{artifacts.tool.build_chart_spec.output.chart_spec.type}}"
       chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
       narrative: "{{artifacts.agent.llm_reasoner.output.content}}"
+      primary_metric: "{{artifacts.user_input.chart_config.values.primary_metric}}"
       anomaly_summary: "{{artifacts.tool.detect_anomalies.output.summary}}"
       anomalies: "{{artifacts.tool.detect_anomalies.output.anomalies}}"
       key_metrics:
@@ -150,3 +177,4 @@ steps:
       cards:
         - "{{artifacts.tool.assemble_insight_card.output.card}}"
       export_requested: true
+      output_format: "{{artifacts.user_input.chart_config.values.output_format}}"

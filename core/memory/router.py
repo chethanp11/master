@@ -144,6 +144,23 @@ class MemoryRouter(MemoryBackend):
             return None
         return self._observability.write_output_files(product=product, run_id=run_id, files=files)
 
+    def write_user_input_response(
+        self,
+        *,
+        product: str,
+        run_id: str,
+        form_id: str,
+        payload: Dict[str, Any],
+    ) -> Optional[Path]:
+        if self._observability is None:
+            return None
+        return self._observability.write_user_input_response(
+            product=product,
+            run_id=run_id,
+            form_id=form_id,
+            payload=payload,
+        )
+
     @classmethod
     def from_settings(cls, settings: Settings) -> "MemoryRouter":
         """

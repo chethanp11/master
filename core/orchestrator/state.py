@@ -17,6 +17,7 @@ Intended usage:
 # ==============================
 from __future__ import annotations
 
+from enum import Enum
 from typing import FrozenSet
 
 from core.contracts.run_schema import RunStatus as RunStatus  # re-export
@@ -37,6 +38,7 @@ RUN_ACTIVE: FrozenSet[RunStatus] = frozenset(
     {
         RunStatus.RUNNING,
         RunStatus.PENDING_HUMAN,
+        RunStatus.PENDING_USER_INPUT,
     }
 )
 
@@ -52,5 +54,56 @@ STEP_ACTIVE: FrozenSet[StepStatus] = frozenset(
     {
         StepStatus.RUNNING,
         StepStatus.PENDING_HUMAN,
+        StepStatus.PENDING_USER_INPUT,
     }
 )
+
+
+class RunState(str, Enum):
+    """Finite-state machine states for deterministic runs."""
+
+    RUNNING = "RUNNING"
+    PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    FAILED = "FAILED"
+    COMPLETED = "COMPLETED"
+
+
+_RUN_STATUS_TO_STATE = {
+    RunStatus.RUNNING: RunState.RUNNING,
+    RunStatus.PENDING_USER_INPUT: RunState.PENDING_USER_INPUT,
+    RunStatus.PENDING_HUMAN: RunState.PENDING_APPROVAL,
+    RunStatus.FAILED: RunState.FAILED,
+    RunStatus.COMPLETED: RunState.COMPLETED,
+    RunStatus.CANCELLED: RunState.FAILED,
+}
+
+_ALLOWED_TRANSITIONS = {
+    RunState.RUNNING: {RunState.PENDING_USER_INPUT, RunState.PENDING_APPROVAL, RunState.FAILED, RunState.COMPLETED},
+    RunState.PENDING_USER_INPUT: {RunState.RUNNING, RunState.FAILED},
+    RunState.PENDING_APPROVAL: {RunState.RUNNING, RunState.FAILED},
+    RunState.FAILED: set(),
+    RunState.COMPLETED: set(),
+}
+
+
+def to_run_state(status: RunStatus | str) -> RunState:
+    if isinstance(status, RunStatus):
+        return _RUN_STATUS_TO_STATE.get(status, RunState.FAILED)
+    try:
+        return _RUN_STATUS_TO_STATE.get(RunStatus(status), RunState.FAILED)
+    except Exception:
+        return RunState.FAILED
+
+
+def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -> bool:
+    current_state = to_run_state(current)
+    target_state = to_run_state(target)
+    if current_state == target_state:
+        return True
+    return target_state in _ALLOWED_TRANSITIONS.get(current_state, set())
+
+
+def require_valid_transition(current: RunStatus | str, target: RunStatus | str) -> None:
+    if not is_valid_run_transition(current, target):
+        raise ValueError(f"Invalid run state transition: {to_run_state(current).value} -> {to_run_state(target).value}")

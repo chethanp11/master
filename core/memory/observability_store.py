@@ -226,6 +226,22 @@ class ObservabilityStore:
         _clear_dir(staging)
         return stored
 
+    def write_user_input_response(
+        self,
+        *,
+        product: str,
+        run_id: str,
+        form_id: str,
+        payload: Dict[str, Any],
+    ) -> Path:
+        paths = self.ensure_dirs(product=product, run_id=run_id)
+        runtime_dir = paths["runtime"]
+        user_input_dir = runtime_dir / "user_input"
+        user_input_dir.mkdir(parents=True, exist_ok=True)
+        target = user_input_dir / f"{form_id}.json"
+        self._atomic_write_json(target, payload)
+        return target
+
     def _list_output_files(self, output_dir: Path) -> List[Dict[str, Any]]:
         files: List[Dict[str, Any]] = []
         for entry in sorted(output_dir.iterdir()):

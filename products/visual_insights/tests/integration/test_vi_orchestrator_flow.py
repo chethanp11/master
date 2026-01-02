@@ -60,6 +60,19 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         run_id = started.data["run_id"]
         resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
         assert resumed.ok, resumed.error
+        assert resumed.data and resumed.data["status"] == "PENDING_USER_INPUT"
+
+        resumed_input = engine.resume_run(
+            run_id=run_id,
+            user_input_response={
+                "schema_version": "1.0",
+                "form_id": "chart_config",
+                "values": {"chart_type": "bar", "primary_metric": "mean", "output_format": "html"},
+                "comment": "use html output",
+            },
+        )
+        assert resumed_input.ok, resumed_input.error
+        assert resumed_input.data and resumed_input.data["status"] == "PENDING_HUMAN"
 
         resumed_export = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
         assert resumed_export.ok, resumed_export.error
@@ -84,7 +97,6 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         assert "output_files" not in (response.get("result") or {})
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
-        assert "visualization.pdf" in stored_names
         assert "visualization_stub.json" in stored_names
         assert "visualization.html" in stored_names
         stub_entry = next((f for f in files if f.get("stored_name") == "visualization_stub.json"), None)
@@ -96,8 +108,7 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         assert html_entry.get("content_type") == "text/html"
         assert html_entry.get("role") == "interactive"
         pdf_entry = next((f for f in files if f.get("stored_name") == "visualization.pdf"), None)
-        assert pdf_entry is not None
-        assert pdf_entry.get("role") == "primary"
+        assert pdf_entry is None
         assert response.get("response_version") == "1.0"
         assert len(set(stored_names)) == len(stored_names)
 
@@ -109,6 +120,9 @@ def test_visual_insights_overview_flow(tmp_path: Path) -> None:
         events_path = repo_root / "observability" / "visual_insights" / run_id / "runtime" / "events.jsonl"
         events_text = events_path.read_text(encoding="utf-8")
         assert "<html" not in events_text.lower()
+        assert "user_input_requested" in events_text
+        assert "user_input_received" in events_text
+        assert "content_base64" not in events_text
 
         assemble_step = next(s for s in steps if s["step_id"] == "assemble_card")
         narrative = assemble_step["output"]["data"]["card"]["narrative"]

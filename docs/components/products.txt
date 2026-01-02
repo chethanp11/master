@@ -1,0 +1,3124 @@
+# products/__init__.py
+"""Product packs namespace package."""
+
+# products/agentaura/__init__.py
+
+
+# products/agentaura/agents/__init__.py
+
+
+# products/agentaura/agents/critic_agent.py
+
+
+# products/agentaura/agents/executor_agent.py
+
+
+# products/agentaura/agents/planner_agent.py
+
+
+# products/agentaura/config/product.yaml
+
+
+# products/agentaura/flows/master_flow.yaml
+
+
+# products/agentaura/flows/other_flow.yaml
+
+
+# products/agentaura/manifest.yaml
+
+
+# products/agentaura/tests/test_agents.py
+
+
+# products/agentaura/tests/test_flows.py
+
+
+# products/agentaura/tests/test_tools.py
+
+
+# products/agentaura/tools/__init__.py
+
+
+# products/agentaura/tools/domain_tools.py
+
+
+# products/agentaura/tools/repo_tools.py
+
+
+# products/code_checker/__init__.py
+
+
+# products/code_checker/config/product.yaml
+
+
+# products/code_checker/manifest.yaml
+
+
+# products/evidence_scanner/__init__.py
+
+
+# products/evidence_scanner/config/product.yaml
+
+
+# products/evidence_scanner/manifest.yaml
+
+
+# products/hello_world/__init__.py
+
+
+# products/hello_world/agents/__init__.py
+
+
+# products/hello_world/agents/simple_agent.py
+# ==============================
+# Hello World Agent: simple_agent
+# ==============================
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from pydantic import BaseModel, Field
+
+from core.agents.base import BaseAgent
+from core.contracts.agent_schema import AgentResult, AgentError, AgentMeta, AgentErrorCode
+from core.orchestrator.context import StepContext
+
+
+class SimpleAgentParams(BaseModel):
+    template: str = Field(default="Summarize the run.")
+
+
+class SimpleAgent(BaseAgent):
+    """
+    A minimal agent that reads artifacts from the StepContext and produces a summary.
+    No model calls in v1 (keeps the golden path deterministic).
+    """
+
+    name: str = "simple_agent"
+    description: str = "Deterministic summary agent for hello_world golden path."
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        try:
+            params = SimpleAgentParams.model_validate(step_context.step.params or {})
+            payload = step_context.run.payload or {}
+            message = payload.get("keyword") or payload.get("message") or ""
+            approved = payload.get("approved", True)
+            notes = payload.get("notes") or ""
+
+            approval_status = "approved" if approved else "rejected"
+            summary = (
+                f"{params.template}\n\n"
+                f"- Echoed message: {message!r}\n"
+                f"- Approval status: {approval_status}\n"
+                f"- Notes provided: {notes!r}\n"
+            )
+            details = {
+                "message": message,
+                "approved": approved,
+                "notes": notes,
+                "approval_status": approval_status,
+            }
+
+            meta = AgentMeta(agent_name=self.name, tags={"product": step_context.run.product, "flow": step_context.run.flow})
+            return AgentResult(ok=True, data={"summary": summary, "details": details}, error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
+            meta = AgentMeta(agent_name=self.name)
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> SimpleAgent:
+    return SimpleAgent()
+
+# products/hello_world/config/product.yaml
+# ==============================
+# Product Config (Hello World)
+# ==============================
+# Product-local defaults and overrides.
+# NOTE: No secrets. Use configs/*.yaml + secrets/secrets.yaml for that.
+
+name: hello_world
+
+defaults:
+  model_profile: "default"
+  autonomy_level: "suggest_only"
+
+limits:
+  max_steps: 50
+  max_tool_calls: 50
+
+tools:
+  # Product tool exposure is enforced via policies.yaml (authoritative).
+  enabled:
+    - "echo_tool"
+
+agents:
+  enabled:
+    - "simple_agent"
+
+flows:
+  enabled:
+    - "hello_world"
+
+metadata:
+  ui:
+    intent:
+      enabled: true
+      field: "keyword"
+      label: "Message"
+      help: "Plain text input for the hello world flow."
+      default: "Hello"
+
+# products/hello_world/flows/hello_world.yaml
+# ==============================
+# Flow: hello_world
+# ==============================
+# Golden path:
+#   1) Call echo tool
+#   2) Pause for human approval
+#   3) Agent summarizes outcome
+
+name: "hello_world"
+version: "1.0.0"
+description: "Echo -> HITL approval -> agent summary"
+autonomy_level: "suggest_only"
+
+steps:
+  - id: "echo"
+    type: "tool"
+    backend: "local"
+    tool: "echo_tool"
+    params:
+      message: "{{payload.keyword}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+      retry_on: ["TEMPORARY", "timeout"]
+
+  - id: "approval"
+    type: "human_approval"
+    title: "Approve the echoed message"
+    message: "Please approve or reject the echoed output before continuing."
+    # Optional: UI can render these fields generically
+    form:
+      fields:
+        - name: "approved"
+          type: "boolean"
+          required: true
+        - name: "notes"
+          type: "string"
+          required: false
+
+  - id: "summary"
+    type: "agent"
+    backend: "local"
+    agent: "simple_agent"
+    params:
+      template: "Summarize what happened and include whether it was approved."
+
+# products/hello_world/manifest.yaml
+# ==============================
+# Product Manifest (Hello World)
+# ==============================
+name: "hello_world"
+display_name: "Hello World"
+description: "Golden-path demo product for master. Safe tools and simple flows."
+version: "0.1.0"
+
+default_flow: "hello_world"
+
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "hello_world"
+
+ui_enabled: true
+ui:
+  enabled: true
+  nav_label: "Hello World"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
+    - id: "runs"
+      title: "Run History"
+    - id: "approvals"
+      title: "Approvals Queue"
+  icon: "🧪"
+  category: "demo"
+
+flows:
+  - "hello_world"
+
+# products/hello_world/registry.py
+# ==============================
+# Product Registration (Hello World)
+# ==============================
+"""
+Registers hello_world agents/tools into core registries.
+
+This module must remain side-effect safe:
+- No persistence
+- No network calls
+- Only registry registration
+"""
+
+from __future__ import annotations
+
+from products.hello_world.agents.simple_agent import build as build_agent
+from products.hello_world.tools.echo_tool import build as build_tool
+from core.utils.product_loader import ProductRegistries
+
+
+def register(registries: ProductRegistries) -> None:
+    agent = build_agent()
+    tool = build_tool()
+
+    registries.agent_registry.register(agent.name, build_agent)
+    registries.tool_registry.register(tool.name, build_tool)
+
+# products/hello_world/tests/__init__.py
+
+
+# products/hello_world/tests/test_hello_world_flow.py
+# ==============================
+# Hello World Golden Path Test
+# ==============================
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from core.config.loader import load_settings
+from core.utils.product_loader import discover_products, register_enabled_products
+from core.orchestrator.engine import OrchestratorEngine
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+
+
+@pytest.mark.integration
+def test_hello_world_end_to_end(tmp_path: Path) -> None:
+    """
+    Runs:
+      echo -> HITL -> summary
+
+    Uses sqlite backend via secrets override.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    configs_dir = repo_root / "configs"
+    # Create temp secrets to force sqlite path into tmp_path
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    secrets_path = secrets_dir / "secrets.yaml"
+    sqlite_path = tmp_path / "master_test.sqlite"
+
+    secrets_path.write_text(
+        "\n".join(
+            [
+                "# test secrets",
+                "secrets:",
+                "  db:",
+                f"    sqlite_path: '{sqlite_path.as_posix()}'",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    # Load settings with injected paths (loader is expected to support this)
+    settings = load_settings(configs_dir=str(configs_dir), secrets_path=str(secrets_path))
+
+    # Discover + register products
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        catalog = discover_products(settings, repo_root=repo_root)
+        register_enabled_products(catalog, settings=settings)
+
+        engine = OrchestratorEngine.from_settings(settings)
+
+        # Start run (should pause at HITL)
+        start = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
+        assert start.ok, start.error
+        assert start.data and start.data.get("run_id")
+        run_id = start.data["run_id"]
+
+        # Run should be pending human
+        status1 = engine.get_run(run_id=run_id)
+        assert status1.ok, status1.error
+        assert status1.data and status1.data.get("run", {}).get("status") in ("PENDING_HUMAN", "pending_human")
+
+        # Resume with approval
+        resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+        assert resumed.ok, resumed.error
+
+        # Final status should be completed
+        status2 = engine.get_run(run_id=run_id)
+        assert status2.ok, status2.error
+        assert status2.data and status2.data.get("run", {}).get("status") in ("COMPLETED", "completed")
+
+        steps = status2.data["steps"]
+        assert steps, "Expected persisted steps for hello_world run"
+        echo_step = next((s for s in steps if s["step_id"] == "echo"), None)
+        assert echo_step is not None
+        echo_output = echo_step["output"]
+        assert echo_output and echo_output["data"]["echo"] == "hello"
+        assert "timestamp" in echo_output["data"]
+
+        summary_step = next((s for s in steps if s["step_id"] == "summary"), None)
+        assert summary_step is not None
+        summary_output = summary_step["output"]
+        assert summary_output and summary_output.get("ok") is True
+        summary_data = summary_output["data"]
+        assert summary_data["details"]["message"] == "hello"
+        assert summary_data["details"]["approved"] is True
+        assert "summary" in summary_data
+
+        observability_root = repo_root / "observability" / "hello_world" / run_id
+        input_path = observability_root / "input" / "input.json"
+        events_path = observability_root / "runtime" / "events.jsonl"
+        response_path = observability_root / "output" / "response.json"
+        assert input_path.exists()
+        assert events_path.exists()
+        assert response_path.exists()
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        assert response["status"] == "COMPLETED"
+        assert response["result"] is not None
+        events = events_path.read_text(encoding="utf-8").splitlines()
+        assert any('"output_written"' in line for line in events)
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# products/hello_world/tools/__init__.py
+
+
+# products/hello_world/tools/echo_tool.py
+# ==============================
+# Hello World Tool: echo_tool
+# ==============================
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict
+
+from pydantic import BaseModel, Field
+
+from core.tools.base import BaseTool
+from core.contracts.tool_schema import ToolResult, ToolError, ToolMeta, ToolErrorCode
+from core.orchestrator.context import StepContext
+
+
+class EchoParams(BaseModel):
+    message: str = Field(default="")
+
+
+class EchoTool(BaseTool):
+    """
+    Deterministic tool that returns whatever message it receives.
+    """
+
+    name: str = "echo_tool"
+    description: str = "Returns the provided message."
+    risk: str = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            p = EchoParams.model_validate(params or {})
+            timestamp = datetime.now(timezone.utc).isoformat()
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(
+                ok=True,
+                data={
+                    "echo": p.message,
+                    "timestamp": timestamp,
+                },
+                error=None,
+                meta=meta,
+            )
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> EchoTool:
+    return EchoTool()
+
+# products/visual_insights/__init__.py
+"""Visual Insights product package."""
+
+# products/visual_insights/agents/__init__.py
+"""Visual Insights agents package."""
+
+# products/visual_insights/agents/dashboard_agent.py
+# Visual Insights agent
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from pydantic import BaseModel, Field
+
+from core.agents.base import BaseAgent
+from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
+from core.orchestrator.context import StepContext
+
+
+class DashboardAgentParams(BaseModel):
+    template: str = Field(
+        default="Dashboard summary: {summary}",
+        description="Template used to synthesize insights.",
+    )
+
+
+class DashboardAgent(BaseAgent):
+    name = "dashboard_agent"
+    description = "Creates a narrative summary for the visual insights dashboard."
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        try:
+            params = DashboardAgentParams.model_validate(step_context.step.params or {})
+            artifacts = step_context.run.artifacts or {}
+            tool_output = artifacts.get("tool.data_reader.output", {}) or {}
+            summary = tool_output.get("summary", "No insights available.")
+            message = params.template.format(summary=summary)
+            meta = AgentMeta(agent_name=self.name)
+            return AgentResult(ok=True, data={"message": message, "insight": summary}, error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=AgentMeta(agent_name=self.name))
+
+
+def build() -> DashboardAgent:
+    return DashboardAgent()
+
+# products/visual_insights/agents/planning_agent.py
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.agents.base import BaseAgent
+from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
+from core.orchestrator.context import StepContext
+
+
+class PlanningInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment: str = Field(default="")
+    previous_run: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlanningAgent(BaseAgent):
+    name = "planning_agent"
+    description = "Produces a replan note and a suggested restart step based on rejection context."
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        try:
+            payload = step_context.run.payload or {}
+            plan = PlanningInput(
+                comment=payload.get("replan_comment", ""),
+                previous_run=payload.get("previous_run", {}),
+            )
+            comment = (plan.comment or "").strip()
+            note = "Replan requested."
+            if comment:
+                note = f"Replan requested: {comment}"
+
+            start_step_id = None
+            reason = "default_next"
+            comment_lower = comment.lower()
+            if comment_lower:
+                if any(token in comment_lower for token in ("chart", "plot", "bar", "line", "scatter", "stacked", "table", "visual", "visualization")):
+                    start_step_id = "recommend_chart"
+                    reason = "comment_mentions_chart_change"
+                elif any(token in comment_lower for token in ("approval", "approve", "review")):
+                    start_step_id = "approval"
+                    reason = "comment_mentions_approval"
+                elif any(token in comment_lower for token in ("summarize", "summary", "dashboard", "visual")):
+                    start_step_id = "summarize"
+                    reason = "comment_mentions_summary"
+                elif any(token in comment_lower for token in ("read", "re-run", "rerun", "refresh", "reload", "data")):
+                    start_step_id = "read"
+                    reason = "comment_mentions_data"
+
+            if not start_step_id:
+                previous_run = plan.previous_run or {}
+                run_summary = (previous_run.get("run") or {}).get("summary") or {}
+                failed_step = run_summary.get("failed_step_id") or run_summary.get("failed_step")
+                if failed_step:
+                    start_step_id = failed_step
+                    reason = "resume_failed_step"
+                else:
+                    steps = previous_run.get("steps") or []
+                    for step in steps:
+                        if step.get("status") in {"FAILED", "PENDING_HUMAN"}:
+                            start_step_id = step.get("step_id")
+                            reason = "resume_incomplete_step"
+                            break
+
+            meta = AgentMeta(agent_name=self.name)
+            return AgentResult(
+                ok=True,
+                data={
+                    "note": note,
+                    "start_step_id": start_step_id,
+                    "decision_reason": reason,
+                },
+                error=None,
+                meta=meta,
+            )
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=AgentMeta(agent_name=self.name))
+
+
+def build() -> PlanningAgent:
+    return PlanningAgent()
+
+# products/visual_insights/config/product.yaml
+# Product config (tracked in git)
+# Override global defaults for this product only (no secrets here).
+name: "visual_insights"
+
+defaults:
+  autonomy_level: "semi_auto"
+  model: "default"
+
+limits:
+  max_steps: 50
+  max_tool_calls: 50
+
+flags:
+  enable_tools: true
+  enable_knowledge: true
+
+metadata:
+  product_goal:
+    must_produce:
+      - insight_cards
+      - at_least_one_visual
+    allowed_visuals:
+      - line
+      - bar
+      - stacked_bar
+      - scatter
+      - table
+    explainability:
+      citations_required: true
+  ui:
+    inputs:
+      enabled: true
+      allowed_types:
+        - "csv"
+        - "pdf"
+      max_files: 10
+      max_file_size_mb: 25
+      files_field: "files"
+      upload_id_field: "upload_id"
+      dataset_field: "dataset"
+    intent:
+      enabled: true
+      field: "prompt"
+      label: "Instructions"
+      help: "Optional guidance for the analysis."
+      default: "Summarize key trends and highlight anomalies."
+    outputs:
+      enabled: true
+    modes:
+      allowed:
+        - "summarize_dataset"
+        - "answer_question"
+        - "anomalies_and_drivers"
+      default: "summarize_dataset"
+      max_cards:
+        summarize_dataset: 5
+        answer_question: 5
+        anomalies_and_drivers: 7
+    charts:
+      allowed_types:
+        - "line"
+        - "bar"
+        - "stacked_bar"
+        - "scatter"
+        - "table"
+      default_table_max_rows: 50
+    retrieval:
+      top_k: 5
+      chunk_size: 800
+      chunk_overlap: 120
+    export:
+      allowed_types:
+        - "pdf"
+      include_citations_section: true
+      include_run_metadata: true
+    governance:
+      trace_enabled: true
+      citations_required: true
+      pii:
+        enabled: true
+        redact_in_outputs: true
+        redact_in_traces: true
+
+# products/visual_insights/contracts/__init__.py
+"""Visual Insights contract helpers."""
+
+# products/visual_insights/contracts/card.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, ConfigDict
+
+from .citations import CitationRef
+from .slices import DataSlice
+
+
+class KeyMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    value: Union[float, int, str]
+
+
+class InsightCard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_id: str
+    title: str
+    chart_type: Literal["line", "bar", "stacked_bar", "scatter", "table"]
+    chart_spec: Dict[str, Any]
+    key_metrics: List[KeyMetric]
+    narrative: str
+    data_slice: Optional[DataSlice] = None
+    citations: List[CitationRef]
+    assumptions: List[str]
+    anomaly_summary: Optional[str] = None
+    anomalies: Optional[List[Dict[str, Any]]] = None
+
+# products/visual_insights/contracts/citations.py
+from __future__ import annotations
+
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict
+
+from .slices import FilterSpec
+
+
+class CsvCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str
+    columns: List[str]
+    filters: List[FilterSpec]
+
+
+class PdfCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    doc_id: str
+    page: int
+    text_span: str
+
+
+class CitationRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["csv", "pdf"]
+    csv: Optional[CsvCitation] = None
+    pdf: Optional[PdfCitation] = None
+
+# products/visual_insights/contracts/slices.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Literal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class FilterSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    column: str
+    op: Literal["=", "!=", ">", ">=", "<", "<=", "in"]
+    value: Any
+
+
+class GroupBySpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    columns: List[str]
+
+
+class TimeWindow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class DataSlice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filters: List[FilterSpec]
+    group_by: Optional[GroupBySpec] = None
+    time_window: Optional[TimeWindow] = None
+
+# products/visual_insights/flows/__init__.py
+"""Flow helpers for visual insights."""
+
+# products/visual_insights/flows/visualization.yaml
+# ==============================
+# Flow: overview
+# ==============================
+# Golden path:
+#   1) Read dataset summary
+#   2) Agent produces dashboard narrative
+
+id: "visualization"
+version: "1.0.0"
+description: "Data reader -> approval -> dashboard agent summary"
+autonomy_level: "suggest_only"
+
+steps:
+  - id: "plan"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "read"
+    type: "tool"
+    backend: "local"
+    tool: "data_reader"
+    params:
+      dataset: "{{payload.dataset}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+
+  - id: "detect_anomalies"
+    type: "tool"
+    backend: "local"
+    tool: "detect_anomalies"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
+      min_points: 3
+
+  - id: "recommend_chart"
+    type: "tool"
+    backend: "local"
+    tool: "recommend_chart"
+    params:
+      intent: "{{payload.prompt}}"
+      has_time: "{{artifacts.tool.data_reader.output.has_time}}"
+      has_category: "{{artifacts.tool.data_reader.output.has_category}}"
+      has_x_numeric: "{{artifacts.tool.data_reader.output.has_x_numeric}}"
+      has_y_numeric: "{{artifacts.tool.data_reader.output.has_y_numeric}}"
+      wants_composition: false
+
+  - id: "summarize"
+    type: "agent"
+    backend: "local"
+    agent: "dashboard_agent"
+    params:
+      template: "Dashboard summary: {summary}"
+
+  - id: "llm_review"
+    type: "agent"
+    backend: "local"
+    agent: "llm_reasoner"
+    params:
+      purpose: "reasoning"
+      prompt: "Write a concise narrative for the dashboard. Dataset: {{artifacts.tool.data_reader.output.summary}}. Anomalies: {{artifacts.tool.detect_anomalies.output.summary}} (details: {{artifacts.tool.detect_anomalies.output.anomalies}}). Chart: {{artifacts.tool.recommend_chart.output.chart_type}}. Mention at least one concrete pattern if present."
+      max_tokens: 200
+
+  - id: "approval"
+    type: "human_approval"
+    title: "Approve visualization inputs"
+    message: "Approve the dataset summary before generating visuals."
+    params:
+      approval_context:
+        reason: "Approve dataset summary and chart recommendation before building visuals."
+        decision_notes:
+          - "Dataset parsed and summarized."
+          - "Anomaly check completed."
+          - "Chart recommendation computed."
+        recommended_action: "APPROVE"
+    form:
+      fields:
+        - name: "approved"
+          type: "boolean"
+          required: true
+        - name: "notes"
+          type: "string"
+          required: false
+
+  - id: "chart_config"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "chart_config"
+      title: "Select chart options"
+      description: "Choose chart and metric settings before export."
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["auto", "bar", "line", "scatter"]
+          primary_metric:
+            type: "string"
+            enum: ["sum", "mean", "median", "min", "max"]
+          output_format:
+            type: "string"
+            enum: ["html", "pdf", "both"]
+      defaults:
+        chart_type: "auto"
+        primary_metric: "sum"
+        output_format: "both"
+      required: ["chart_type", "primary_metric", "output_format"]
+
+  - id: "build_chart_spec"
+    type: "tool"
+    backend: "local"
+    tool: "build_chart_spec"
+    params:
+      chart_type: "{{artifacts.user_input.chart_config.values.chart_type}}"
+      fallback_chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
+      title: "Visualization for {{payload.dataset}}"
+      x: "{{artifacts.tool.data_reader.output.x_field}}"
+      y: "{{artifacts.tool.data_reader.output.y_field}}"
+      series: "{{artifacts.tool.data_reader.output.category_field}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
+
+  - id: "assemble_card"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_insight_card"
+    params:
+      card_id: "card_1"
+      title: "Visualization for {{payload.dataset}}"
+      chart_type: "{{artifacts.tool.build_chart_spec.output.chart_spec.type}}"
+      chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
+      narrative: "{{artifacts.agent.llm_reasoner.output.content}}"
+      primary_metric: "{{artifacts.user_input.chart_config.values.primary_metric}}"
+      anomaly_summary: "{{artifacts.tool.detect_anomalies.output.summary}}"
+      anomalies: "{{artifacts.tool.detect_anomalies.output.anomalies}}"
+      key_metrics:
+        - name: "row_count"
+          value: "{{artifacts.tool.data_reader.output.row_count}}"
+      citations:
+        - type: "csv"
+          csv:
+            dataset_id: "{{payload.dataset}}"
+            columns: "{{artifacts.tool.data_reader.output.columns}}"
+            filters: []
+      assumptions:
+        - "Chart generated from uploaded dataset."
+
+  - id: "approval_export"
+    type: "human_approval"
+    title: "Approve export"
+    message: "Approve exporting the visualization."
+    params:
+      approval_context:
+        reason: "Approve exporting the visualization output."
+        decision_notes:
+          - "Chart spec built."
+          - "Insight card assembled."
+          - "Export will generate PDF and stub."
+        recommended_action: "APPROVE"
+    form:
+      fields:
+        - name: "approved"
+          type: "boolean"
+          required: true
+        - name: "notes"
+          type: "string"
+          required: false
+
+  - id: "export"
+    type: "tool"
+    backend: "local"
+    tool: "export_pdf"
+    params:
+      cards:
+        - "{{artifacts.tool.assemble_insight_card.output.card}}"
+      export_requested: true
+      output_format: "{{artifacts.user_input.chart_config.values.output_format}}"
+
+# products/visual_insights/manifest.yaml
+# Visual Insights manifest – v1
+name: "visual_insights"
+display_name: "Visual Insights"
+description: "Agentic dashboard for CSV and PDF datasets with citational governance."
+version: "0.1.0"
+
+default_flow: "visualization"
+
+exposed_api:
+  enabled: true
+  allowed_flows:
+    - "visualization"
+
+ui_enabled: true
+ui:
+  enabled: true
+  nav_label: "Visual Insights"
+  panels:
+    - id: "runner"
+      title: "Run a Flow"
+    - id: "runs"
+      title: "Run History"
+    - id: "approvals"
+      title: "Approvals Queue"
+
+flows:
+  - "visualization"
+
+# products/visual_insights/registry.py
+# ==============================
+# Product Registry (Registration Entrypoint)
+# ==============================
+"""
+products/visual_insights/registry.py
+
+This is the canonical registration entrypoint for this product.
+
+Rules:
+- Keep this module side-effect safe:
+  - No persistence
+  - No network calls
+  - No model calls
+- Only register agents/tools with core registries.
+- Product loader will import this module to bind components.
+
+How to use:
+1) Implement agents in products/visual_insights/agents/
+2) Implement tools in products/visual_insights/tools/
+3) Register them in register()
+
+Example (after you create a tool/agent):
+  from core.utils.product_loader import ProductRegistries
+  from products.visual_insights.agents.my_agent import build as build_agent
+  from products.visual_insights.tools.my_tool import build as build_tool
+
+  def register(registries: ProductRegistries) -> None:
+      registries.agent_registry.register(build_agent().name, build_agent)
+      registries.tool_registry.register(build_tool().name, build_tool)
+"""
+
+from __future__ import annotations
+
+
+from core.utils.product_loader import ProductRegistries
+from products.visual_insights.agents.dashboard_agent import build as build_agent
+from products.visual_insights.agents.planning_agent import build as build_planning_agent
+from products.visual_insights.tools.assemble_insight_card import build as build_assemble_insight_card
+from products.visual_insights.tools.build_chart_spec import build as build_chart_spec
+from products.visual_insights.tools.data_reader import build as build_data_reader
+from products.visual_insights.tools.detect_anomalies import build as build_detect_anomalies
+from products.visual_insights.tools.driver_analysis import build as build_driver_analysis
+from products.visual_insights.tools.export_pdf import build as build_export_pdf
+from products.visual_insights.tools.recommend_chart import build as build_recommend_chart
+
+
+def register(registries: ProductRegistries) -> None:
+    registries.agent_registry.register(build_agent().name, build_agent)
+    registries.agent_registry.register(build_planning_agent().name, build_planning_agent)
+    registries.tool_registry.register(build_data_reader().name, build_data_reader)
+    registries.tool_registry.register(build_chart_spec().name, build_chart_spec)
+    registries.tool_registry.register(build_recommend_chart().name, build_recommend_chart)
+    registries.tool_registry.register(build_detect_anomalies().name, build_detect_anomalies)
+    registries.tool_registry.register(build_driver_analysis().name, build_driver_analysis)
+    registries.tool_registry.register(build_assemble_insight_card().name, build_assemble_insight_card)
+    registries.tool_registry.register(build_export_pdf().name, build_export_pdf)
+
+# products/visual_insights/tests/__init__.py
+"""visual insights tests"""
+
+# products/visual_insights/tests/integration/__init__.py
+"""Visual Insights integration tests."""
+
+# products/visual_insights/tests/integration/test_vi_orchestrator_flow.py
+# ==============================
+# Visual Insights Orchestrator Flow Test
+# ==============================
+from __future__ import annotations
+
+import shutil
+import json
+from pathlib import Path
+
+import pytest
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.orchestrator.engine import OrchestratorEngine
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+@pytest.mark.integration
+def test_visual_insights_overview_flow(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "visual_insights.sqlite"
+    upload_id = "test_upload"
+    upload_dir = repo_root / "products" / "visual_insights" / "staging" / "input"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    sample_csv = upload_dir / "sample.csv"
+    sample_csv.write_text("col_a,col_b\n1,2\n3,4\n", encoding="utf-8")
+
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir=str(repo_root / "configs"),
+        env={
+            "MASTER__APP__PATHS__STORAGE_DIR": storage_dir.as_posix(),
+            "MASTER__SECRETS__MEMORY_DB_PATH": sqlite_path.as_posix(),
+        },
+    )
+    if not settings.models.openai.api_key:
+        pytest.skip("OpenAI API key not configured for llm_reasoner integration test.")
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        catalog = discover_products(settings, repo_root=repo_root)
+        register_enabled_products(catalog, settings=settings)
+        engine = OrchestratorEngine.from_settings(settings)
+
+        started = engine.run_flow(
+            product="visual_insights",
+            flow="visualization",
+            payload={
+                "dataset": "sample.csv",
+                "upload_id": upload_id,
+                "files": [{"name": "sample.csv", "file_type": "csv"}],
+            },
+        )
+        assert started.ok, started.error
+        assert started.data and started.data["status"] == "PENDING_HUMAN"
+
+        run_id = started.data["run_id"]
+        resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+        assert resumed.ok, resumed.error
+        assert resumed.data and resumed.data["status"] == "PENDING_USER_INPUT"
+
+        resumed_input = engine.resume_run(
+            run_id=run_id,
+            user_input_response={
+                "schema_version": "1.0",
+                "form_id": "chart_config",
+                "values": {"chart_type": "bar", "primary_metric": "mean", "output_format": "html"},
+                "comment": "use html output",
+            },
+        )
+        assert resumed_input.ok, resumed_input.error
+        assert resumed_input.data and resumed_input.data["status"] == "PENDING_HUMAN"
+
+        resumed_export = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+        assert resumed_export.ok, resumed_export.error
+
+        result = engine.get_run(run_id=run_id)
+        assert result.ok, result.error
+        steps = result.data["steps"]
+        read_step = next(s for s in steps if s["step_id"] == "read")
+        assert read_step["output"]["data"]["summary"].startswith("Insights for sample.csv")
+
+        summarize_step = next(s for s in steps if s["step_id"] == "summarize")
+        message = summarize_step["output"]["data"]["message"]
+        assert "Dashboard summary" in message
+
+        llm_step = next(s for s in steps if s["step_id"] == "llm_review")
+        llm_content = llm_step["output"]["data"]["content"]
+        assert llm_content
+
+        response_path = repo_root / "observability" / "visual_insights" / run_id / "output" / "response.json"
+        assert response_path.exists()
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        assert "output_files" not in (response.get("result") or {})
+        files = response.get("files") or []
+        stored_names = [f.get("stored_name") for f in files]
+        assert "visualization_stub.json" in stored_names
+        assert "visualization.html" in stored_names
+        stub_entry = next((f for f in files if f.get("stored_name") == "visualization_stub.json"), None)
+        assert stub_entry is not None
+        assert stub_entry.get("content_type") == "application/json"
+        assert stub_entry.get("role") == "supporting"
+        html_entry = next((f for f in files if f.get("stored_name") == "visualization.html"), None)
+        assert html_entry is not None
+        assert html_entry.get("content_type") == "text/html"
+        assert html_entry.get("role") == "interactive"
+        pdf_entry = next((f for f in files if f.get("stored_name") == "visualization.pdf"), None)
+        assert pdf_entry is None
+        assert response.get("response_version") == "1.0"
+        assert len(set(stored_names)) == len(stored_names)
+
+        html_path = response_path.parent / "visualization.html"
+        assert html_path.exists()
+        html_body = html_path.read_text(encoding="utf-8")
+        assert "Visualization for sample.csv" in html_body
+
+        events_path = repo_root / "observability" / "visual_insights" / run_id / "runtime" / "events.jsonl"
+        events_text = events_path.read_text(encoding="utf-8")
+        assert "<html" not in events_text.lower()
+        assert "user_input_requested" in events_text
+        assert "user_input_received" in events_text
+        assert "content_base64" not in events_text
+
+        assemble_step = next(s for s in steps if s["step_id"] == "assemble_card")
+        narrative = assemble_step["output"]["data"]["card"]["narrative"]
+        assert narrative == llm_content
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        shutil.rmtree(repo_root / "products" / "visual_insights" / "staging", ignore_errors=True)
+        if "run_id" in locals():
+            shutil.rmtree(repo_root / "observability" / "visual_insights" / run_id, ignore_errors=True)
+
+# products/visual_insights/tests/test_smoke.py
+def test_product_scaffold_smoke():
+    # Basic smoke test to ensure scaffold exists and is importable.
+    assert True
+
+# products/visual_insights/tests/unit/__init__.py
+"""Visual Insights unit tests."""
+
+# products/visual_insights/tests/unit/test_chart_type_guardrails.py
+import pytest
+
+from products.visual_insights.contracts.card import KeyMetric
+from products.visual_insights.contracts.citations import CitationRef, CsvCitation
+from products.visual_insights.contracts.slices import FilterSpec
+from products.visual_insights.tools.assemble_insight_card import (
+    AssembleInsightCardInput,
+    assemble_insight_card,
+)
+from products.visual_insights.tools.build_chart_spec import (
+    BuildChartSpecInput,
+    ChartData,
+    build_chart_spec,
+)
+from products.visual_insights.tools.recommend_chart import (
+    RecommendChartInput,
+    recommend_chart,
+)
+
+
+def test_recommend_chart_returns_allowed_type():
+    payload = RecommendChartInput(
+        intent="overview",
+        has_time=True,
+        has_y_numeric=True,
+        has_x_numeric=False,
+        wants_composition=False,
+    )
+    result = recommend_chart(payload)
+    assert result.chart_type in {"line", "bar", "stacked_bar", "scatter", "table"}
+    assert "time series" in result.rationale
+
+
+def test_build_chart_spec_rejects_missing_fields():
+    data = ChartData(columns=["time", "value"], rows=[[1, 10], [2, 20]])
+    spec_input = BuildChartSpecInput(
+        chart_type="line",
+        title="Missing X",
+        data=data,
+        x="time",
+        y="value2",
+    )
+    with pytest.raises(ValueError):
+        build_chart_spec(spec_input)
+
+
+def test_assemble_insight_card_requires_citations():
+    data = ChartData(columns=["time", "value"], rows=[[1, 10]])
+    chart_spec = build_chart_spec(
+        BuildChartSpecInput(
+            chart_type="line",
+            title="Simple",
+            data=data,
+            x="time",
+            y="value",
+        )
+    ).chart_spec
+    metric = KeyMetric(name="sum", value=10)
+    citation = CitationRef(
+        type="csv",
+        csv=CsvCitation(dataset_id="d1", columns=["value"], filters=[]),
+        pdf=None,
+    )
+    assemble_insight_card(
+        AssembleInsightCardInput(
+            card_id="card1",
+            title="Insight",
+            chart_type="line",
+            chart_spec=chart_spec,
+            narrative="narrative",
+            key_metrics=[metric],
+            citations=[citation],
+        )
+    )
+    with pytest.raises(ValueError):
+        assemble_insight_card(
+            AssembleInsightCardInput(
+                card_id="card2",
+                title="Insight",
+                chart_type="table",
+                chart_spec=chart_spec,
+                narrative="narrative",
+                key_metrics=[metric],
+                citations=[],
+            )
+        )
+
+# products/visual_insights/tests/unit/test_detect_anomalies_rules.py
+from products.visual_insights.tools.detect_anomalies import (
+    DetectAnomaliesInput,
+    Point,
+    detect_anomalies,
+)
+
+
+def test_detect_anomalies_identifies_outlier():
+    series = [
+        Point(ts="t1", value=10.0),
+        Point(ts="t2", value=11.0),
+        Point(ts="t3", value=9.5),
+        Point(ts="t4", value=10.5),
+        Point(ts="t5", value=10.2),
+        Point(ts="t6", value=10.1),
+        Point(ts="t7", value=10.0),
+        Point(ts="t8", value=10.4),
+        Point(ts="t9", value=10.3),
+        Point(ts="t10", value=100.0),
+    ]
+    payload = DetectAnomaliesInput(series=series, min_points=8, z_threshold=2.5)
+    result = detect_anomalies(payload)
+    assert len(result.anomalies) == 1
+    anomaly = result.anomalies[0]
+    assert anomaly.ts == "t10"
+    assert anomaly.zscore >= payload.z_threshold
+    assert "found 1 anomalies" in result.summary
+
+
+def test_detect_anomalies_handles_zero_variance():
+    uniform = [Point(ts=f"t{i}", value=5.0) for i in range(1, 10)]
+    payload = DetectAnomaliesInput(series=uniform, min_points=5)
+    result = detect_anomalies(payload)
+    assert result.anomalies == []
+    assert result.summary == "no variance"
+
+# products/visual_insights/tests/unit/test_driver_analysis.py
+from products.visual_insights.tools.driver_analysis import (
+    DriverAnalysisInput,
+    SegmentRow,
+    driver_analysis,
+)
+
+
+def test_driver_analysis_top_drivers():
+    rows = [
+        SegmentRow(segment="A", before=100.0, after=130.0),
+        SegmentRow(segment="B", before=50.0, after=60.0),
+        SegmentRow(segment="C", before=20.0, after=80.0),
+    ]
+    payload = DriverAnalysisInput(rows=rows, top_k=2)
+    result = driver_analysis(payload)
+    assert result.total_before == 170.0
+    assert result.total_after == 270.0
+    assert result.total_delta == 100.0
+    assert len(result.drivers) == 2
+    assert result.drivers[0].segment == "C"
+    assert result.drivers[1].segment == "A"
+
+
+def test_driver_analysis_min_total_change_skips():
+    rows = [
+        SegmentRow(segment="A", before=10.0, after=10.2),
+        SegmentRow(segment="B", before=5.0, after=5.1),
+    ]
+    payload = DriverAnalysisInput(rows=rows, min_total_change=1.0)
+    result = driver_analysis(payload)
+    assert result.drivers == []
+    assert "no significant change" in result.summary
+
+# products/visual_insights/tests/unit/test_stub_payload.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from products.visual_insights.contracts.card import InsightCard, KeyMetric
+from products.visual_insights.contracts.citations import CitationRef, CsvCitation
+from products.visual_insights.tools.export_pdf import _build_stub_payload
+
+
+def _make_card(rows: List[List[Any]]) -> InsightCard:
+    columns = ["Expense", "H22024", "H2025", "H2026", "H2027", "H2028", "H2029"]
+    chart_spec: Dict[str, Any] = {
+        "type": "bar",
+        "title": "Visualization for visual_insights_input.csv",
+        "data": {"columns": columns, "rows": rows},
+        "encoding": {"x": {"field": "Expense"}, "y": {"field": "H22024"}},
+    }
+    citations = [
+        CitationRef(
+            type="csv",
+            csv=CsvCitation(dataset_id="visual_insights_input.csv", columns=columns, filters=[]),
+        )
+    ]
+    return InsightCard(
+        card_id="card_1",
+        title="Visualization for visual_insights_input.csv",
+        chart_type="bar",
+        chart_spec=chart_spec,
+        key_metrics=[KeyMetric(name="row_count", value=len(rows))],
+        narrative="free-form narrative",
+        data_slice=None,
+        citations=citations,
+        assumptions=["Chart generated from uploaded dataset."],
+        anomaly_summary="series too short",
+        anomalies=[],
+    )
+
+
+def test_stub_payload_grounding_and_guard_small() -> None:
+    rows = [
+        ["A", 20, 320, 352, 387, 426, 469],
+        ["B", 10, 550, 100, 110, 121, 133],
+        ["C", 30, 204, 224, 247, 272, 299],
+        ["D", 120, 120, 120, 120, 120, 120],
+        ["E", 11, 150, 165, 182, 200, 220],
+        ["F", 15, 100, 110, 121, 140, 1500],
+        ["G", 30, 300, 330, 363, 250, 275],
+        ["H", 20, 400, 440, 484, 532, 586],
+        ["I", 20, 100, 110, 121, 133, 146],
+    ]
+    stub = _build_stub_payload([_make_card(rows)])
+    card = stub["cards"][0]
+
+    anomaly_status = card["insights"]["data_quality"]["anomaly_detection"]["status"]
+    assert anomaly_status == "INCONCLUSIVE"
+    assert "no anomalies" not in card["narrative"].lower()
+
+    highlights = card["insights"]["highlights"]
+    assert any(
+        item.get("type") == "outlier_candidate"
+        and item.get("row_id") == "F"
+        and item.get("column") == "H2029"
+        and item.get("value") == 1500
+        for item in highlights
+    )
+
+    assert "rows" in card["chart_spec"]["data"]
+    assert "data_ref" not in card
+
+
+def test_stub_payload_guard_large_dataset() -> None:
+    rows = []
+    for idx in range(60):
+        rows.append([f"row_{idx}", idx, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5])
+    stub = _build_stub_payload([_make_card(rows)])
+    card = stub["cards"][0]
+
+    assert "data_ref" in card
+    assert "rows" not in card["chart_spec"]["data"]
+
+# products/visual_insights/tools/__init__.py
+"""Visual Insights tools package."""
+
+# products/visual_insights/tools/assemble_insight_card.py
+from __future__ import annotations
+
+from statistics import mean, median
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, validator
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.visual_insights.contracts.card import InsightCard, KeyMetric
+from products.visual_insights.contracts.citations import CitationRef
+from products.visual_insights.contracts.slices import DataSlice
+
+ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+
+
+class AssembleInsightCardInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_id: str
+    title: str
+    chart_type: ChartType
+    chart_spec: Dict[str, object]
+    narrative: str
+    key_metrics: List[KeyMetric]
+    data_slice: Optional[DataSlice] = None
+    citations: List[CitationRef]
+    assumptions: List[str] = Field(default_factory=list)
+    anomaly_summary: Optional[str] = None
+    anomalies: Optional[List[Dict[str, Any]]] = None
+    primary_metric: Optional[str] = None
+
+    @validator("citations")
+    def must_have_citations(cls, value: List[CitationRef]) -> List[CitationRef]:
+        if not value:
+            raise ValueError("at least one citation is required")
+        return value
+
+
+class AssembleInsightCardOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card: InsightCard
+
+
+def assemble_insight_card(payload: AssembleInsightCardInput) -> AssembleInsightCardOutput:
+    key_metrics = list(payload.key_metrics)
+    extra_metric = _build_primary_metric(payload.chart_spec, payload.primary_metric)
+    if extra_metric:
+        key_metrics.append(extra_metric)
+    card = InsightCard(
+        card_id=payload.card_id,
+        title=payload.title,
+        chart_type=payload.chart_type,
+        chart_spec=payload.chart_spec,
+        key_metrics=key_metrics,
+        narrative=payload.narrative,
+        data_slice=payload.data_slice,
+        citations=payload.citations,
+        assumptions=payload.assumptions,
+        anomaly_summary=payload.anomaly_summary,
+        anomalies=payload.anomalies,
+    )
+    return AssembleInsightCardOutput(card=card)
+
+
+class AssembleInsightCardTool(BaseTool):
+    name = "assemble_insight_card"
+    description = "Assembles an InsightCard from validated inputs."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = AssembleInsightCardInput.model_validate(params or {})
+            output = assemble_insight_card(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> AssembleInsightCardTool:
+    return AssembleInsightCardTool()
+
+
+def _build_primary_metric(chart_spec: Dict[str, object], metric: Optional[str]) -> Optional[KeyMetric]:
+    if not metric:
+        return None
+    if not isinstance(chart_spec, dict):
+        return None
+    data = chart_spec.get("data")
+    if not isinstance(data, dict):
+        return None
+    columns = data.get("columns")
+    rows = data.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None
+    encoding = chart_spec.get("encoding")
+    y_field = None
+    if isinstance(encoding, dict):
+        y_field = (encoding.get("y") or {}).get("field")
+    if not y_field or y_field not in columns:
+        return None
+    y_idx = columns.index(y_field)
+    values = []
+    for row in rows:
+        if y_idx >= len(row):
+            continue
+        value = _to_float(row[y_idx])
+        if value is None:
+            continue
+        values.append(value)
+    if not values:
+        return None
+    metric_key = metric.lower()
+    if metric_key == "sum":
+        result = sum(values)
+    elif metric_key == "mean":
+        result = mean(values)
+    elif metric_key == "median":
+        result = median(values)
+    elif metric_key == "min":
+        result = min(values)
+    elif metric_key == "max":
+        result = max(values)
+    else:
+        return None
+    name = f"{metric_key}_{y_field}"
+    return KeyMetric(name=name, value=round(result, 4))
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+# products/visual_insights/tools/build_chart_spec.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, validator
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+
+ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+ChartInputType = Literal["auto", "line", "bar", "stacked_bar", "scatter", "table"]
+
+
+class ChartData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    columns: List[str]
+    rows: List[List[Any]]
+
+    @validator("rows", each_item=True)
+    def row_matches_columns(cls, row: List[Any], values: Dict[str, Any]) -> List[Any]:
+        columns = values.get("columns") or []
+        if len(row) != len(columns):
+            raise ValueError("row length must match columns")
+        return row
+
+
+class BuildChartSpecInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chart_type: ChartInputType
+    fallback_chart_type: Optional[ChartType] = None
+    title: str
+    x: Optional[str] = None
+    y: Optional[str] = None
+    series: Optional[str] = None
+    data: ChartData
+
+
+class BuildChartSpecOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chart_spec: Dict[str, Any]
+    summary: str
+
+
+def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
+    columns = payload.data.columns
+    chart_type: ChartType = payload.fallback_chart_type or "bar"
+    if payload.chart_type != "auto":
+        chart_type = payload.chart_type  # type: ignore[assignment]
+    spec: Dict[str, Any] = {
+        "type": chart_type,
+        "title": payload.title,
+        "data": {"columns": columns, "rows": payload.data.rows},
+    }
+    encoding: Dict[str, Dict[str, str]] = {}
+    if chart_type == "table":
+        spec["encoding"] = encoding
+    else:
+        if payload.x is None or payload.x not in columns:
+            raise ValueError("missing or unknown x field")
+        if payload.y is None or payload.y not in columns:
+            raise ValueError("missing or unknown y field")
+        encoding["x"] = {"field": payload.x}
+        encoding["y"] = {"field": payload.y}
+        if chart_type == "stacked_bar":
+            if payload.series is None or payload.series not in columns:
+                raise ValueError("missing or unknown series field")
+            encoding["series"] = {"field": payload.series}
+        spec["encoding"] = encoding
+    summary = f"built spec for {chart_type}"
+    return BuildChartSpecOutput(chart_spec=spec, summary=summary)
+
+
+class BuildChartSpecTool(BaseTool):
+    name = "build_chart_spec"
+    description = "Builds a chart specification from structured inputs."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = BuildChartSpecInput.model_validate(params or {})
+            output = build_chart_spec(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> BuildChartSpecTool:
+    return BuildChartSpecTool()
+
+# products/visual_insights/tools/data_reader.py
+# Visual insights tool: simple data reader
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple
+
+import csv
+import time
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from core.contracts.tool_schema import ToolResult, ToolError, ToolErrorCode, ToolMeta
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+
+
+class ReadParams(BaseModel):
+    dataset: str = Field(..., description="Dataset to read")
+
+
+class DataReaderTool(BaseTool):
+    name = "data_reader"
+    description = "Returns a stubbed summary for a dataset"
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            validated = ReadParams.model_validate(params or {})
+            input_dir = (ctx.run.meta or {}).get("input_dir")
+            if not input_dir:
+                meta = ToolMeta(tool_name=self.name, backend="local")
+                return ToolResult(
+                    ok=False,
+                    data=None,
+                    error=ToolError(
+                        code=ToolErrorCode.INVALID_INPUT,
+                        message="Input directory not available for this run.",
+                    ),
+                    meta=meta,
+                )
+            dataset_path = Path(str(input_dir)) / validated.dataset
+            columns: List[str] = []
+            rows: List[List[Any]] = []
+            row_count = 0
+            file_exists = dataset_path.exists()
+            if not file_exists:
+                meta = ToolMeta(tool_name=self.name, backend="local")
+                return ToolResult(
+                    ok=False,
+                    data=None,
+                    error=ToolError(
+                        code=ToolErrorCode.INVALID_INPUT,
+                        message=f"Dataset not found at {dataset_path}",
+                    ),
+                    meta=meta,
+                )
+            columns, rows, row_count = _read_csv(dataset_path)
+            if not columns and row_count == 0:
+                summary = f"Insights for {validated.dataset}: file empty."
+            else:
+                summary = f"Insights for {validated.dataset}: read {row_count} rows."
+
+            numeric_columns: List[str] = []
+            for col_idx, col in enumerate(columns):
+                values = []
+                for row in rows:
+                    if col_idx >= len(row):
+                        continue
+                    value = row[col_idx]
+                    if value in (None, ""):
+                        continue
+                    values.append(value)
+                if values and all(isinstance(v, (int, float)) or _is_number(v) for v in values):
+                    numeric_columns.append(col)
+
+            date_column = next((c for c in columns if "date" in c.lower() or "time" in c.lower()), None)
+            x_field = date_column or (columns[0] if columns else None)
+            y_field = next((c for c in numeric_columns if c != x_field), None)
+            category_field = next((c for c in columns if c not in numeric_columns and c != date_column), None)
+
+            has_time = date_column is not None
+            has_category = category_field is not None
+            has_x_numeric = x_field in numeric_columns if x_field else False
+            has_y_numeric = y_field in numeric_columns if y_field else False
+
+            series = []
+            if date_column and y_field and columns:
+                date_idx = columns.index(date_column)
+                y_idx = columns.index(y_field)
+                for row in rows:
+                    if date_idx >= len(row) or y_idx >= len(row):
+                        continue
+                    value = row[y_idx]
+                    if value in (None, ""):
+                        continue
+                    series.append({"ts": str(row[date_idx]), "value": float(value)})
+
+            data = {"columns": columns, "rows": rows}
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(
+                ok=True,
+                data={
+                    "summary": summary,
+                    "row_count": row_count,
+                    "columns": columns,
+                    "rows": rows,
+                    "data": data,
+                    "series": series,
+                    "file_exists": file_exists,
+                    "input_path": str(dataset_path),
+                    "x_field": x_field,
+                    "y_field": y_field,
+                    "category_field": category_field,
+                    "has_time": has_time,
+                    "has_category": has_category,
+                    "has_x_numeric": has_x_numeric,
+                    "has_y_numeric": has_y_numeric,
+                },
+                error=None,
+                meta=meta,
+            )
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            return ToolResult(ok=False, data=None, error=err, meta=ToolMeta(tool_name=self.name, backend="local"))
+
+
+def build() -> DataReaderTool:
+    return DataReaderTool()
+
+
+def _is_number(value: str) -> bool:
+    try:
+        float(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _normalize_cell(value: Any) -> Any:
+    if value is None:
+        return None
+    text = str(value).strip().strip('"').strip("'")
+    if text in {"", "-", "—"}:
+        return None
+    numeric = text.replace(",", "")
+    if _is_number(numeric):
+        try:
+            if "." in numeric:
+                return float(numeric)
+            return int(numeric)
+        except (ValueError, TypeError):
+            return numeric
+    return text
+
+
+def _normalize_row(row: List[Any], column_count: int) -> Optional[List[Any]]:
+    if not row:
+        return None
+    normalized = [_normalize_cell(cell) for cell in row]
+    if len(normalized) < column_count:
+        normalized.extend([None] * (column_count - len(normalized)))
+    elif len(normalized) > column_count and column_count > 0:
+        overflow = normalized[column_count - 1 :]
+        head = normalized[: column_count - 1]
+        overflow_text = ",".join("" if v is None else str(v) for v in overflow)
+        head.append(_normalize_cell(overflow_text))
+        normalized = head
+    return normalized
+
+
+def _read_csv(path: Path) -> Tuple[List[str], List[List[Any]], int]:
+    columns: List[str] = []
+    rows: List[List[Any]] = []
+    row_count = 0
+    attempts = 3
+    for attempt in range(attempts):
+        if not path.exists():
+            time.sleep(0.2)
+            continue
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.reader(handle, skipinitialspace=True)
+            try:
+                columns = [str(c).strip() for c in next(reader)]
+                if columns and columns[0].startswith("\ufeff"):
+                    columns[0] = columns[0].lstrip("\ufeff")
+            except StopIteration:
+                columns = []
+            for raw_row in reader:
+                if not columns:
+                    continue
+                row = _normalize_row(raw_row, len(columns))
+                if row is None:
+                    continue
+                row_count += 1
+                if len(rows) < 50:
+                    rows.append(row)
+        if columns:
+            break
+        time.sleep(0.2)
+    return columns, rows, row_count
+
+# products/visual_insights/tools/detect_anomalies.py
+from __future__ import annotations
+
+from statistics import mean, pstdev
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, validator
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+
+
+class Point(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ts: str
+    value: float
+
+
+class DetectAnomaliesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    series: List[Point] = Field(default_factory=list)
+    data: Optional["TableData"] = None
+    method: Literal["zscore"] = "zscore"
+    z_threshold: float = 3.0
+    min_points: int = 8
+
+    @validator("series")
+    def must_have_points(cls, value: List[Point]) -> List[Point]:
+        return value
+
+
+class Anomaly(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ts: str
+    value: float
+    zscore: float
+
+
+class DetectAnomaliesOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    anomalies: List[Anomaly]
+    summary: str
+
+
+class TableData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    columns: List[str]
+    rows: List[List[Any]]
+
+
+def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
+    series = payload.series
+    if not series and payload.data is not None:
+        return _detect_anomalies_from_table(payload.data, payload)
+    if len(series) < payload.min_points:
+        return DetectAnomaliesOutput(anomalies=[], summary="series too short")
+    values = [pt.value for pt in series]
+    stddev = pstdev(values)
+    if stddev == 0:
+        return DetectAnomaliesOutput(anomalies=[], summary="no variance")
+    m = mean(values)
+    anomalies = []
+    for pt in series:
+        z = (pt.value - m) / stddev
+        if abs(z) >= payload.z_threshold:
+            anomalies.append(Anomaly(ts=pt.ts, value=pt.value, zscore=z))
+    anomalies.sort(key=lambda a: (-abs(a.zscore), a.ts))
+    summary = f"found {len(anomalies)} anomalies"
+    return DetectAnomaliesOutput(anomalies=anomalies, summary=summary)
+
+
+class DetectAnomaliesTool(BaseTool):
+    name = "detect_anomalies"
+    description = "Detects anomalies in a time series using z-score heuristics."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = DetectAnomaliesInput.model_validate(params or {})
+            output = detect_anomalies(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> DetectAnomaliesTool:
+    return DetectAnomaliesTool()
+
+
+def _derive_series_from_table(data: TableData) -> List[Point]:
+    numeric_columns: List[int] = []
+    for idx, _ in enumerate(data.columns):
+        values = []
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = row[idx]
+            if value is None:
+                continue
+            values.append(value)
+        if values and all(_to_float(v) is not None for v in values):
+            numeric_columns.append(idx)
+
+    series: List[Point] = []
+    for idx in numeric_columns:
+        total = 0.0
+        count = 0
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            total += value
+            count += 1
+        if count == 0:
+            continue
+        series.append(Point(ts=str(data.columns[idx]), value=total))
+    return series
+
+
+def _detect_anomalies_from_table(data: TableData, payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
+    columns = data.columns
+    if not columns or not data.rows:
+        return DetectAnomaliesOutput(anomalies=[], summary="no data")
+    numeric_cols: List[int] = []
+    for idx in range(len(columns)):
+        col_values = []
+        for row in data.rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            col_values.append(value)
+        if col_values and len(col_values) == sum(1 for _ in col_values if _ is not None):
+            numeric_cols.append(idx)
+
+    label_idx = None
+    if 0 in numeric_cols:
+        numeric_cols = [idx for idx in numeric_cols if idx != 0]
+    elif columns:
+        label_idx = 0
+
+    if not numeric_cols:
+        return DetectAnomaliesOutput(anomalies=[], summary="no numeric columns")
+
+    anomalies: List[Anomaly] = []
+    for row in data.rows:
+        label = None
+        if label_idx is not None and label_idx < len(row):
+            label = str(row[label_idx])
+        points: List[Point] = []
+        for idx in numeric_cols:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            ts = f"{label}:{columns[idx]}" if label is not None else str(columns[idx])
+            points.append(Point(ts=ts, value=value))
+        if len(points) < payload.min_points:
+            continue
+        values = [pt.value for pt in points]
+        stddev = pstdev(values)
+        if stddev == 0:
+            continue
+        m = mean(values)
+        for pt in points:
+            z = (pt.value - m) / stddev
+            if abs(z) >= payload.z_threshold:
+                anomalies.append(Anomaly(ts=pt.ts, value=pt.value, zscore=z))
+
+    anomalies.sort(key=lambda a: (-abs(a.zscore), a.ts))
+    if not anomalies:
+        return DetectAnomaliesOutput(anomalies=[], summary="no anomalies found")
+    top = anomalies[0]
+    summary = f"found {len(anomalies)} anomalies (top: {top.ts}={top.value})"
+    return DetectAnomaliesOutput(anomalies=anomalies, summary=summary)
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+# products/visual_insights/tools/driver_analysis.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+
+
+class SegmentRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segment: str
+    before: float
+    after: float
+
+
+class DriverAnalysisInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rows: List[SegmentRow]
+    top_k: int = Field(default=5, ge=1)
+    min_total_change: float = 0.0
+
+
+class Driver(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segment: str
+    delta: float
+    contribution_pct: float
+
+
+class DriverAnalysisOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total_before: float
+    total_after: float
+    total_delta: float
+    drivers: List[Driver]
+    summary: str
+
+
+def driver_analysis(payload: DriverAnalysisInput) -> DriverAnalysisOutput:
+    total_before = sum(row.before for row in payload.rows)
+    total_after = sum(row.after for row in payload.rows)
+    total_delta = total_after - total_before
+    if abs(total_delta) <= payload.min_total_change or not payload.rows:
+        return DriverAnalysisOutput(
+            total_before=total_before,
+            total_after=total_after,
+            total_delta=total_delta,
+            drivers=[],
+            summary="no significant change",
+        )
+
+    drivers = []
+    for row in payload.rows:
+        delta = row.after - row.before
+        contribution_pct = (
+            round((delta / total_delta) * 100, 2) if total_delta != 0 else 0.0
+        )
+        drivers.append(Driver(segment=row.segment, delta=delta, contribution_pct=contribution_pct))
+
+    drivers.sort(key=lambda d: (-abs(d.delta), d.segment))
+    drivers = drivers[: payload.top_k]
+    summary = f"derived {len(drivers)} drivers"
+    return DriverAnalysisOutput(
+        total_before=total_before,
+        total_after=total_after,
+        total_delta=total_delta,
+        drivers=drivers,
+        summary=summary,
+    )
+
+
+class DriverAnalysisTool(BaseTool):
+    name = "driver_analysis"
+    description = "Computes driver contributions for before/after segments."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = DriverAnalysisInput.model_validate(params or {})
+            output = driver_analysis(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> DriverAnalysisTool:
+    return DriverAnalysisTool()
+
+# products/visual_insights/tools/export_pdf.py
+from __future__ import annotations
+
+from io import BytesIO
+import base64
+import json
+from statistics import median
+from typing import Any, Dict, List, Optional, Tuple
+
+from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel, ConfigDict
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.visual_insights.contracts.card import InsightCard
+
+
+class ExportPdfInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cards: List[InsightCard]
+    export_requested: bool
+    output_format: str = "both"
+
+
+class ExportPdfOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output_files: List[Dict[str, Any]]
+
+
+def _render_cards_pdf(cards: List[InsightCard]) -> bytes:
+    pages: List[Image.Image] = []
+    for card in cards:
+        img = Image.new("RGB", (1240, 1754), "white")
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.load_default()
+        y = 40
+        draw.text((40, y), f"{card.title}", fill="black", font=font)
+        y += 28
+        draw.text((40, y), f"Chart type: {card.chart_type}", fill="black", font=font)
+        y += 28
+        draw.text((40, y), f"Narrative: {card.narrative}", fill="black", font=font)
+        y += 40
+        _render_chart(draw, card.chart_spec, (40, y, 1200, 900), font=font)
+        y = 980
+        if card.key_metrics:
+            draw.text((40, y), "Key metrics:", fill="black", font=font)
+            y += 30
+            for metric in card.key_metrics:
+                draw.text((60, y), f"- {metric.name}: {metric.value}", fill="black", font=font)
+                y += 24
+        pages.append(img)
+
+    if not pages:
+        pages = [Image.new("RGB", (1240, 1754), "white")]
+    buffer = BytesIO()
+    pages[0].save(buffer, format="PDF", save_all=True, append_images=pages[1:])
+    return buffer.getvalue()
+
+
+def _render_chart(
+    draw: ImageDraw.ImageDraw,
+    chart_spec: Dict[str, Any],
+    box: Tuple[int, int, int, int],
+    *,
+    font: ImageFont.ImageFont,
+) -> None:
+    chart_type = chart_spec.get("type") if isinstance(chart_spec, dict) else None
+    data = (chart_spec.get("data") if isinstance(chart_spec, dict) else None) or {}
+    columns = data.get("columns") or []
+    rows = data.get("rows") or []
+    encoding = chart_spec.get("encoding") if isinstance(chart_spec, dict) else {}
+    x_field = (encoding.get("x") or {}).get("field") if isinstance(encoding, dict) else None
+    y_field = (encoding.get("y") or {}).get("field") if isinstance(encoding, dict) else None
+    series_field = (encoding.get("series") or {}).get("field") if isinstance(encoding, dict) else None
+
+    x0, y0, x1, y1 = box
+    draw.rectangle(box, outline="#d0d0d0", width=1)
+    if not columns or not rows:
+        draw.text((x0 + 10, y0 + 10), "No chart data available.", fill="black", font=font)
+        return
+
+    if chart_type == "table" or not x_field or not y_field:
+        _render_table(draw, columns, rows, box, font=font)
+        return
+
+    try:
+        x_index = columns.index(x_field)
+        y_index = columns.index(y_field)
+    except ValueError:
+        _render_table(draw, columns, rows, box, font=font)
+        return
+
+    plot_left = x0 + 50
+    plot_top = y0 + 20
+    plot_right = x1 - 20
+    plot_bottom = y1 - 40
+    draw.line((plot_left, plot_bottom, plot_right, plot_bottom), fill="black", width=1)
+    draw.line((plot_left, plot_top, plot_left, plot_bottom), fill="black", width=1)
+
+    if chart_type == "scatter":
+        points = []
+        for row in rows:
+            if x_index >= len(row) or y_index >= len(row):
+                continue
+            x_val = row[x_index]
+            y_val = row[y_index]
+            if x_val is None or y_val is None:
+                continue
+            try:
+                x_num = float(x_val)
+                y_num = float(y_val)
+            except (TypeError, ValueError):
+                continue
+            points.append((x_num, y_num))
+        if not points:
+            draw.text((x0 + 10, y0 + 10), "No numeric points for scatter.", fill="black", font=font)
+            return
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        _plot_scatter(draw, points, xs, ys, plot_left, plot_top, plot_right, plot_bottom)
+        return
+
+    if chart_type == "stacked_bar" and series_field:
+        _plot_stacked_bar(draw, columns, rows, x_field, y_field, series_field, plot_left, plot_top, plot_right, plot_bottom, font=font)
+        return
+
+    if chart_type in {"bar", "line"}:
+        labels = []
+        values = []
+        for row in rows:
+            if x_index >= len(row) or y_index >= len(row):
+                continue
+            label = row[x_index]
+            value = row[y_index]
+            if value is None:
+                continue
+            try:
+                y_val = float(value)
+            except (TypeError, ValueError):
+                continue
+            labels.append(str(label))
+            values.append(y_val)
+        if not values:
+            draw.text((x0 + 10, y0 + 10), "No numeric values for chart.", fill="black", font=font)
+            return
+        if chart_type == "bar":
+            _plot_bar(draw, labels, values, plot_left, plot_top, plot_right, plot_bottom)
+        else:
+            _plot_line(draw, labels, values, plot_left, plot_top, plot_right, plot_bottom)
+        return
+
+    _render_table(draw, columns, rows, box, font=font)
+
+
+def _plot_bar(draw: ImageDraw.ImageDraw, labels: List[str], values: List[float], x0: int, y0: int, x1: int, y1: int) -> None:
+    max_val = max(values) if values else 1
+    if max_val == 0:
+        max_val = 1
+    width = x1 - x0
+    height = y1 - y0
+    bar_width = max(1, int(width / max(len(values), 1)))
+    for idx, value in enumerate(values):
+        x_left = x0 + idx * bar_width
+        x_right = x_left + bar_width - 2
+        bar_height = int((value / max_val) * height)
+        y_top = y1 - bar_height
+        draw.rectangle((x_left, y_top, x_right, y1), fill="#4a90e2", outline="#2f5d8a")
+
+
+def _plot_line(draw: ImageDraw.ImageDraw, labels: List[str], values: List[float], x0: int, y0: int, x1: int, y1: int) -> None:
+    max_val = max(values) if values else 1
+    min_val = min(values) if values else 0
+    if max_val == min_val:
+        max_val += 1
+    width = x1 - x0
+    height = y1 - y0
+    step = width / max(len(values) - 1, 1)
+    points = []
+    for idx, value in enumerate(values):
+        x = x0 + idx * step
+        y = y1 - ((value - min_val) / (max_val - min_val)) * height
+        points.append((x, y))
+    if len(points) >= 2:
+        draw.line(points, fill="#4a90e2", width=2)
+    for x, y in points:
+        draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill="#2f5d8a")
+
+
+def _plot_scatter(draw: ImageDraw.ImageDraw, points: List[Tuple[float, float]], xs: List[float], ys: List[float], x0: int, y0: int, x1: int, y1: int) -> None:
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    if max_x == min_x:
+        max_x += 1
+    if max_y == min_y:
+        max_y += 1
+    width = x1 - x0
+    height = y1 - y0
+    for x_val, y_val in points:
+        x = x0 + ((x_val - min_x) / (max_x - min_x)) * width
+        y = y1 - ((y_val - min_y) / (max_y - min_y)) * height
+        draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill="#4a90e2")
+
+
+def _plot_stacked_bar(
+    draw: ImageDraw.ImageDraw,
+    columns: List[str],
+    rows: List[List[Any]],
+    x_field: str,
+    y_field: str,
+    series_field: str,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    *,
+    font: ImageFont.ImageFont,
+) -> None:
+    try:
+        x_idx = columns.index(x_field)
+        y_idx = columns.index(y_field)
+        s_idx = columns.index(series_field)
+    except ValueError:
+        _render_table(draw, columns, rows, (x0, y0, x1, y1), font=font)
+        return
+
+    grouped: Dict[str, Dict[str, float]] = {}
+    series_names: List[str] = []
+    for row in rows:
+        if x_idx >= len(row) or y_idx >= len(row) or s_idx >= len(row):
+            continue
+        x_val = row[x_idx]
+        s_val = row[s_idx]
+        y_val = row[y_idx]
+        if x_val is None or s_val is None or y_val is None:
+            continue
+        try:
+            y_num = float(y_val)
+        except (TypeError, ValueError):
+            continue
+        x_key = str(x_val)
+        s_key = str(s_val)
+        if s_key not in series_names:
+            series_names.append(s_key)
+        grouped.setdefault(x_key, {})[s_key] = grouped.get(x_key, {}).get(s_key, 0) + y_num
+
+    categories = list(grouped.keys())
+    if not categories:
+        draw.text((x0 + 10, y0 + 10), "No data for stacked bar.", fill="black", font=font)
+        return
+    totals = [sum(grouped[c].values()) for c in categories]
+    max_total = max(totals) if totals else 1
+    if max_total == 0:
+        max_total = 1
+    width = x1 - x0
+    height = y1 - y0
+    bar_width = max(1, int(width / max(len(categories), 1)))
+    palette = ["#4a90e2", "#50e3c2", "#f5a623", "#9013fe", "#b8e986"]
+    for idx, category in enumerate(categories):
+        x_left = x0 + idx * bar_width
+        x_right = x_left + bar_width - 2
+        y_cursor = y1
+        for s_idx, s_name in enumerate(series_names):
+            value = grouped.get(category, {}).get(s_name, 0)
+            if value == 0:
+                continue
+            segment_height = int((value / max_total) * height)
+            y_top = y_cursor - segment_height
+            color = palette[s_idx % len(palette)]
+            draw.rectangle((x_left, y_top, x_right, y_cursor), fill=color, outline="#2f5d8a")
+            y_cursor = y_top
+
+
+def _render_table(
+    draw: ImageDraw.ImageDraw,
+    columns: List[str],
+    rows: List[List[Any]],
+    box: Tuple[int, int, int, int],
+    *,
+    font: ImageFont.ImageFont,
+) -> None:
+    x0, y0, x1, y1 = box
+    col_count = max(len(columns), 1)
+    col_width = (x1 - x0) / col_count
+    y = y0 + 10
+    for idx, col in enumerate(columns):
+        draw.text((x0 + idx * col_width + 4, y), str(col), fill="black", font=font)
+    y += 20
+    max_rows = min(len(rows), 12)
+    for row_idx in range(max_rows):
+        row = rows[row_idx]
+        for col_idx in range(col_count):
+            value = row[col_idx] if col_idx < len(row) else ""
+            draw.text((x0 + col_idx * col_width + 4, y), str(value), fill="black", font=font)
+        y += 18
+
+
+def _build_stub_payload(cards: List[InsightCard]) -> Dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "format": "visual_insights_stub",
+        "cards": [_build_stub_card(card) for card in cards],
+    }
+
+
+def _build_stub_card(card: InsightCard) -> Dict[str, Any]:
+    card_payload = card.model_dump(mode="json")
+    card_payload.pop("anomaly_summary", None)
+    card_payload.pop("anomalies", None)
+    chart_spec = dict(card_payload.get("chart_spec") or {})
+    columns, rows = _extract_chart_rows(chart_spec)
+    label_idx = _label_index(chart_spec, columns)
+    dataset_id = _dataset_id_from_card(card)
+
+    insights = _build_insights(
+        columns=columns,
+        rows=rows,
+        label_idx=label_idx,
+        anomaly_summary=card.anomaly_summary,
+        anomalies=card.anomalies,
+    )
+    card_payload["insights"] = insights
+    card_payload["narrative"] = _build_narrative(insights)
+
+    if _should_inline_rows(rows):
+        card_payload["chart_spec"] = chart_spec
+        return card_payload
+
+    if rows is not None and columns is not None:
+        chart_spec = dict(chart_spec)
+        chart_spec["data"] = {"columns": columns}
+        chart_spec["data_ref"] = {
+            "dataset_id": dataset_id,
+            "columns": columns,
+            "filters": [],
+        }
+        card_payload["chart_spec"] = chart_spec
+        card_payload["data_ref"] = {
+            "dataset_id": dataset_id,
+            "columns": columns,
+            "filters": [],
+        }
+    return card_payload
+
+
+def _extract_chart_rows(chart_spec: Dict[str, Any]) -> tuple[Optional[List[str]], Optional[List[List[Any]]]]:
+    data = chart_spec.get("data")
+    if not isinstance(data, dict):
+        return None, None
+    columns = data.get("columns")
+    rows = data.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None, None
+    return [str(col) for col in columns], rows
+
+
+def _label_index(chart_spec: Dict[str, Any], columns: Optional[List[str]]) -> Optional[int]:
+    if not columns:
+        return None
+    encoding = chart_spec.get("encoding")
+    if isinstance(encoding, dict):
+        for key in ("x", "series"):
+            field = (encoding.get(key) or {}).get("field")
+            if field in columns:
+                return columns.index(field)
+    return 0 if columns else None
+
+
+def _dataset_id_from_card(card: InsightCard) -> str:
+    for citation in card.citations:
+        if citation.type == "csv" and citation.csv is not None:
+            return citation.csv.dataset_id
+    return card.title
+
+
+def _should_inline_rows(rows: Optional[List[List[Any]]]) -> bool:
+    if rows is None:
+        return True
+    if len(rows) > 50:
+        return False
+    try:
+        payload = json.dumps(rows, ensure_ascii=True).encode("utf-8")
+        return len(payload) <= 64 * 1024
+    except Exception:
+        return False
+
+
+def _build_insights(
+    *,
+    columns: Optional[List[str]],
+    rows: Optional[List[List[Any]]],
+    label_idx: Optional[int],
+    anomaly_summary: Optional[str],
+    anomalies: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    anomaly_detection = _anomaly_detection_summary(anomaly_summary, anomalies)
+    highlights: List[Dict[str, Any]] = []
+    if columns and rows:
+        highlights = _highlight_outliers(columns, rows, label_idx=label_idx)
+    trend = {"majority_monotonic_increase": False}
+    if columns and rows:
+        trend["majority_monotonic_increase"] = _majority_monotonic_increase(columns, rows, label_idx=label_idx)
+    return {
+        "data_quality": {"anomaly_detection": anomaly_detection},
+        "highlights": highlights,
+        "trend": trend,
+    }
+
+
+def _anomaly_detection_summary(
+    summary: Optional[str],
+    anomalies: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    normalized = (summary or "").strip().lower()
+    anomalies_list = anomalies or []
+
+    if normalized in {"series too short"}:
+        return {
+            "status": "INCONCLUSIVE",
+            "reason": "series too short",
+            "anomalies_count": None,
+        }
+    if normalized in {"no data", "no numeric columns"}:
+        return {
+            "status": "SKIPPED",
+            "reason": summary or "no data",
+            "anomalies_count": None,
+        }
+    if normalized == "":
+        return {
+            "status": "ERROR",
+            "reason": "missing anomaly summary",
+            "anomalies_count": None,
+        }
+
+    if normalized.startswith("found"):
+        return {
+            "status": "OK",
+            "reason": summary or "ok",
+            "anomalies_count": len(anomalies_list),
+        }
+    if normalized in {"no anomalies found", "no variance"}:
+        return {
+            "status": "OK",
+            "reason": summary or "ok",
+            "anomalies_count": 0,
+        }
+
+    return {
+        "status": "OK",
+        "reason": summary or "ok",
+        "anomalies_count": len(anomalies_list),
+    }
+
+
+def _highlight_outliers(
+    columns: List[str],
+    rows: List[List[Any]],
+    *,
+    label_idx: Optional[int],
+) -> List[Dict[str, Any]]:
+    numeric_idxs: List[int] = []
+    for idx in range(len(columns)):
+        values = [_to_float(row[idx]) for row in rows if idx < len(row)]
+        cleaned = [v for v in values if v is not None]
+        if cleaned and len(cleaned) == len(values):
+            numeric_idxs.append(idx)
+
+    if label_idx is not None and label_idx in numeric_idxs:
+        numeric_idxs = [idx for idx in numeric_idxs if idx != label_idx]
+
+    highlights: List[Dict[str, Any]] = []
+    for idx in numeric_idxs:
+        col_name = columns[idx]
+        values = []
+        for row in rows:
+            if idx >= len(row):
+                continue
+            value = _to_float(row[idx])
+            if value is None:
+                continue
+            values.append(value)
+        if not values:
+            continue
+        med = median(values)
+        max_value = max(values)
+        if max_value > med * 3:
+            row_id = None
+            for row in rows:
+                if idx >= len(row):
+                    continue
+                value = _to_float(row[idx])
+                if value == max_value:
+                    if label_idx is not None and label_idx < len(row):
+                        row_id = str(row[label_idx])
+                    break
+            highlights.append(
+                {
+                    "type": "outlier_candidate",
+                    "column": col_name,
+                    "value": max_value,
+                    "row_id": row_id,
+                    "median": med,
+                }
+            )
+    return highlights
+
+
+def _build_narrative(insights: Dict[str, Any]) -> str:
+    data_quality = insights.get("data_quality") or {}
+    anomaly = data_quality.get("anomaly_detection") or {}
+    status = anomaly.get("status")
+    reason = anomaly.get("reason")
+    anomalies_count = anomaly.get("anomalies_count")
+
+    parts: List[str] = []
+    if status in {"INCONCLUSIVE", "SKIPPED"}:
+        parts.append(f"Anomaly detection is {status.lower()} ({reason}).")
+    elif status == "ERROR":
+        parts.append(f"Anomaly detection failed ({reason}).")
+    elif status == "OK":
+        if anomalies_count == 0:
+            parts.append("No anomalies were detected by the anomaly check.")
+        elif isinstance(anomalies_count, int):
+            parts.append(f"Anomaly check detected {anomalies_count} anomalies.")
+    else:
+        parts.append("Anomaly detection status is unavailable.")
+
+    trend = insights.get("trend") or {}
+    if trend.get("majority_monotonic_increase"):
+        parts.append("Most series show a monotonic increase across numeric columns.")
+
+    highlights = insights.get("highlights") or []
+    if highlights:
+        outlier_lines = []
+        for highlight in highlights:
+            if highlight.get("type") != "outlier_candidate":
+                continue
+            row_id = highlight.get("row_id")
+            column = highlight.get("column")
+            value = highlight.get("value")
+            if row_id:
+                outlier_lines.append(f"{row_id} has {column}={value}")
+            else:
+                outlier_lines.append(f"{column} has {value}")
+        if outlier_lines:
+            parts.append("Outlier candidates: " + "; ".join(outlier_lines) + ".")
+    return " ".join(parts).strip()
+
+
+def _majority_monotonic_increase(
+    columns: List[str],
+    rows: List[List[Any]],
+    *,
+    label_idx: Optional[int],
+) -> bool:
+    numeric_idxs: List[int] = []
+    for idx in range(len(columns)):
+        if label_idx is not None and idx == label_idx:
+            continue
+        values = [_to_float(row[idx]) for row in rows if idx < len(row)]
+        cleaned = [v for v in values if v is not None]
+        if cleaned and len(cleaned) == len(values):
+            numeric_idxs.append(idx)
+    if len(numeric_idxs) < 2:
+        return False
+    monotonic_rows = 0
+    eligible_rows = 0
+    for row in rows:
+        series = []
+        for idx in numeric_idxs:
+            if idx >= len(row):
+                break
+            value = _to_float(row[idx])
+            if value is None:
+                series = []
+                break
+            series.append(value)
+        if len(series) < 2:
+            continue
+        eligible_rows += 1
+        if all(series[i] <= series[i + 1] for i in range(len(series) - 1)):
+            monotonic_rows += 1
+    if eligible_rows == 0:
+        return False
+    return monotonic_rows >= (eligible_rows / 2)
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
+    if not payload.export_requested:
+        return ExportPdfOutput(output_files=[])
+
+    stub_payload = _build_stub_payload(payload.cards)
+    stub_bytes = json.dumps(stub_payload, indent=2, ensure_ascii=False).encode("utf-8")
+    output_files = [
+        {
+            "name": "visualization_stub.json",
+            "content_type": "application/json",
+            "content_base64": base64.b64encode(stub_bytes).decode("ascii"),
+        },
+    ]
+    format_value = (payload.output_format or "both").strip().lower()
+    if format_value in {"html", "both"}:
+        html_bytes = _build_html_bytes(stub_payload)
+        output_files.append(
+            {
+                "name": "visualization.html",
+                "content_type": "text/html",
+                "role": "interactive",
+                "content_base64": base64.b64encode(html_bytes).decode("ascii"),
+            }
+        )
+    if format_value in {"pdf", "both"}:
+        pdf_bytes = _render_cards_pdf(payload.cards)
+        output_files.append(
+            {
+                "name": "visualization.pdf",
+                "content_type": "application/pdf",
+                "content_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+            }
+        )
+    return ExportPdfOutput(
+        output_files=output_files,
+    )
+
+
+class ExportPdfTool(BaseTool):
+    name = "export_pdf"
+    description = "Exports insight cards to a PDF artifact."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = ExportPdfInput.model_validate(params or {})
+            output = export_pdf(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> ExportPdfTool:
+    return ExportPdfTool()
+
+
+def _build_html_bytes(stub_payload: Dict[str, Any]) -> bytes:
+    stub_json = json.dumps(stub_payload, ensure_ascii=False)
+    stub_json = stub_json.replace("</", "<\\/")
+    html = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visual Insights</title>
+  <style>
+    body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 24px; color: #222; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+    .card h2 { margin: 0 0 8px; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 12px; }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .chart { border: 1px solid #eee; padding: 8px; border-radius: 6px; }
+    .metrics { display: flex; flex-wrap: wrap; gap: 12px; }
+    .metric { background: #f7f7f7; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+    details { margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; }
+    th { cursor: pointer; background: #fafafa; position: sticky; top: 0; }
+    .table-wrap { max-height: 240px; overflow: auto; border: 1px solid #eee; border-radius: 6px; }
+    #tooltip { position: absolute; background: #333; color: #fff; padding: 6px 8px; border-radius: 4px; font-size: 0.8rem; pointer-events: none; opacity: 0; }
+  </style>
+</head>
+<body>
+  <h1>Visual Insights</h1>
+  <div id="cards"></div>
+  <div id="tooltip"></div>
+  <script id="stub-data" type="application/json">__STUB_JSON__</script>
+  <script>
+    const stub = JSON.parse(document.getElementById('stub-data').textContent);
+    const cards = Array.isArray(stub.cards) ? stub.cards : [];
+    const container = document.getElementById('cards');
+    const tooltip = document.getElementById('tooltip');
+
+    function showTooltip(text, x, y) {
+      tooltip.textContent = text;
+      tooltip.style.left = (x + 12) + 'px';
+      tooltip.style.top = (y + 12) + 'px';
+      tooltip.style.opacity = 1;
+    }
+    function hideTooltip() {
+      tooltip.style.opacity = 0;
+    }
+
+    function buildMetric(metric) {
+      const el = document.createElement('div');
+      el.className = 'metric';
+      el.textContent = metric.name + ': ' + metric.value;
+      return el;
+    }
+
+    function buildNarrative(card) {
+      const details = document.createElement('details');
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = 'Narrative';
+      details.appendChild(summary);
+      const p = document.createElement('p');
+      p.textContent = card.narrative || '';
+      details.appendChild(p);
+      return details;
+    }
+
+    function buildCitations(card) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Citations';
+      details.appendChild(summary);
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(card.citations || [], null, 2);
+      details.appendChild(pre);
+      return details;
+    }
+
+    function buildAssumptions(card) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'Assumptions';
+      details.appendChild(summary);
+      const ul = document.createElement('ul');
+      (card.assumptions || []).forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+      details.appendChild(ul);
+      return details;
+    }
+
+    function buildTable(card) {
+      const data = card.chart_spec && card.chart_spec.data ? card.chart_spec.data : null;
+      const columns = data && Array.isArray(data.columns) ? data.columns : [];
+      const rows = data && Array.isArray(data.rows) ? data.rows.slice() : [];
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      if (!columns.length || !rows.length) {
+        const note = document.createElement('div');
+        note.textContent = 'Table data not inlined.';
+        wrap.appendChild(note);
+        return wrap;
+      }
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tr = document.createElement('tr');
+      columns.forEach((col, idx) => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        th.addEventListener('click', () => {
+          const numeric = rows.every(r => !isNaN(parseFloat(r[idx])));
+          rows.sort((a, b) => {
+            const av = a[idx];
+            const bv = b[idx];
+            if (numeric) {
+              return parseFloat(av) - parseFloat(bv);
+            }
+            return String(av).localeCompare(String(bv));
+          });
+          renderBody();
+        });
+        tr.appendChild(th);
+      });
+      thead.appendChild(tr);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      table.appendChild(tbody);
+      function renderBody() {
+        tbody.innerHTML = '';
+        rows.forEach(row => {
+          const tr = document.createElement('tr');
+          columns.forEach((_, idx) => {
+            const td = document.createElement('td');
+            td.textContent = row[idx];
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+      renderBody();
+      wrap.appendChild(table);
+      return wrap;
+    }
+
+    function buildChart(card) {
+      const data = card.chart_spec && card.chart_spec.data ? card.chart_spec.data : null;
+      const columns = data && Array.isArray(data.columns) ? data.columns : [];
+      const rows = data && Array.isArray(data.rows) ? data.rows : [];
+      const encoding = card.chart_spec && card.chart_spec.encoding ? card.chart_spec.encoding : {};
+      if (!columns.length || !rows.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Chart data not inlined.';
+        return empty;
+      }
+      let xField = encoding.x && encoding.x.field ? encoding.x.field : columns[0];
+      let yField = encoding.y && encoding.y.field ? encoding.y.field : columns.find(c => c !== xField) || columns[1];
+      const xIdx = columns.indexOf(xField);
+      const yIdx = columns.indexOf(yField);
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '640');
+      svg.setAttribute('height', '260');
+      const maxVal = Math.max(...rows.map(r => parseFloat(r[yIdx]) || 0), 1);
+      const barWidth = 640 / Math.max(rows.length, 1);
+      rows.forEach((row, idx) => {
+        const value = parseFloat(row[yIdx]) || 0;
+        const height = (value / maxVal) * 220;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(idx * barWidth + 2));
+        rect.setAttribute('y', String(240 - height));
+        rect.setAttribute('width', String(barWidth - 4));
+        rect.setAttribute('height', String(height));
+        rect.setAttribute('fill', '#4a90e2');
+        rect.addEventListener('mousemove', (evt) => {
+          const label = row[xIdx];
+          showTooltip(label + ': ' + value, evt.clientX, evt.clientY);
+        });
+        rect.addEventListener('mouseleave', hideTooltip);
+        svg.appendChild(rect);
+      });
+      return svg;
+    }
+
+    cards.forEach(card => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card';
+      const title = document.createElement('h2');
+      title.textContent = card.title || 'Insight';
+      wrapper.appendChild(title);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = 'Chart type: ' + (card.chart_type || 'unknown');
+      wrapper.appendChild(meta);
+
+      const metrics = document.createElement('div');
+      metrics.className = 'metrics';
+      (card.key_metrics || []).forEach(metric => metrics.appendChild(buildMetric(metric)));
+      wrapper.appendChild(metrics);
+
+      const layout = document.createElement('div');
+      layout.className = 'layout';
+      const chartWrap = document.createElement('div');
+      chartWrap.className = 'chart';
+      chartWrap.appendChild(buildChart(card));
+      layout.appendChild(chartWrap);
+      layout.appendChild(buildTable(card));
+      wrapper.appendChild(layout);
+      wrapper.appendChild(buildNarrative(card));
+      wrapper.appendChild(buildCitations(card));
+      wrapper.appendChild(buildAssumptions(card));
+      container.appendChild(wrapper);
+    });
+  </script>
+</body>
+</html>
+"""
+    html = html.replace("__STUB_JSON__", stub_json)
+    return html.encode("utf-8")
+
+# products/visual_insights/tools/recommend_chart.py
+from __future__ import annotations
+
+from typing import Any, Dict, Literal
+
+from pydantic import BaseModel, ConfigDict
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+
+
+class RecommendChartInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent: str
+    has_time: bool = False
+    has_category: bool = False
+    has_x_numeric: bool = False
+    has_y_numeric: bool = True
+    wants_composition: bool = False
+
+
+class RecommendChartOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chart_type: ChartType
+    rationale: str
+
+
+def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
+    if payload.has_time and payload.has_y_numeric:
+        chart_type: ChartType = "line"
+        rationale = "time series + numeric target -> line chart"
+    elif payload.has_x_numeric and payload.has_y_numeric:
+        chart_type = "scatter"
+        rationale = "numeric x and y -> scatter"
+    elif payload.wants_composition and payload.has_category:
+        chart_type = "stacked_bar"
+        rationale = "composition request with category -> stacked bar"
+    elif payload.has_category and payload.has_y_numeric:
+        chart_type = "bar"
+        rationale = "categorical breakdown with numeric measure -> bar"
+    else:
+        chart_type = "table"
+        rationale = "fallback to table when chart heuristics do not match"
+
+    return RecommendChartOutput(chart_type=chart_type, rationale=rationale)
+
+
+class RecommendChartTool(BaseTool):
+    name = "recommend_chart"
+    description = "Recommends a chart type based on basic data heuristics."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = RecommendChartInput.model_validate(params or {})
+            output = recommend_chart(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> RecommendChartTool:
+    return RecommendChartTool()

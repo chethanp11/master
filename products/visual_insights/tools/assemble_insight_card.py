@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from statistics import mean, median
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, validator
@@ -28,6 +29,7 @@ class AssembleInsightCardInput(BaseModel):
     assumptions: List[str] = Field(default_factory=list)
     anomaly_summary: Optional[str] = None
     anomalies: Optional[List[Dict[str, Any]]] = None
+    primary_metric: Optional[str] = None
 
     @validator("citations")
     def must_have_citations(cls, value: List[CitationRef]) -> List[CitationRef]:
@@ -43,12 +45,16 @@ class AssembleInsightCardOutput(BaseModel):
 
 
 def assemble_insight_card(payload: AssembleInsightCardInput) -> AssembleInsightCardOutput:
+    key_metrics = list(payload.key_metrics)
+    extra_metric = _build_primary_metric(payload.chart_spec, payload.primary_metric)
+    if extra_metric:
+        key_metrics.append(extra_metric)
     card = InsightCard(
         card_id=payload.card_id,
         title=payload.title,
         chart_type=payload.chart_type,
         chart_spec=payload.chart_spec,
-        key_metrics=payload.key_metrics,
+        key_metrics=key_metrics,
         narrative=payload.narrative,
         data_slice=payload.data_slice,
         citations=payload.citations,
@@ -78,3 +84,58 @@ class AssembleInsightCardTool(BaseTool):
 
 def build() -> AssembleInsightCardTool:
     return AssembleInsightCardTool()
+
+
+def _build_primary_metric(chart_spec: Dict[str, object], metric: Optional[str]) -> Optional[KeyMetric]:
+    if not metric:
+        return None
+    if not isinstance(chart_spec, dict):
+        return None
+    data = chart_spec.get("data")
+    if not isinstance(data, dict):
+        return None
+    columns = data.get("columns")
+    rows = data.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None
+    encoding = chart_spec.get("encoding")
+    y_field = None
+    if isinstance(encoding, dict):
+        y_field = (encoding.get("y") or {}).get("field")
+    if not y_field or y_field not in columns:
+        return None
+    y_idx = columns.index(y_field)
+    values = []
+    for row in rows:
+        if y_idx >= len(row):
+            continue
+        value = _to_float(row[y_idx])
+        if value is None:
+            continue
+        values.append(value)
+    if not values:
+        return None
+    metric_key = metric.lower()
+    if metric_key == "sum":
+        result = sum(values)
+    elif metric_key == "mean":
+        result = mean(values)
+    elif metric_key == "median":
+        result = median(values)
+    elif metric_key == "min":
+        result = min(values)
+    elif metric_key == "max":
+        result = max(values)
+    else:
+        return None
+    name = f"{metric_key}_{y_field}"
+    return KeyMetric(name=name, value=round(result, 4))
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None

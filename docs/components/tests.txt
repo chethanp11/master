@@ -1,0 +1,2001 @@
+# tests/conftest.py
+# ==============================
+# Testing Fixtures
+# ==============================
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+import pytest
+from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from core.config.schema import Settings
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.governance.hooks import GovernanceHooks
+from core.governance.security import SecurityRedactor
+from core.memory.tracing import Tracer
+from core.memory.in_memory import InMemoryBackend
+from core.memory.router import MemoryRouter
+from core.models.providers.openai_provider import OpenAIRequest, OpenAIResponse
+from core.orchestrator.engine import OrchestratorEngine
+from gateway.api.http_app import create_app
+from gateway.api import deps as gateway_deps
+
+
+@pytest.fixture
+def trace_sink() -> List[Dict[str, Any]]:
+    """Collects emitted trace events without touching production logging."""
+    return []
+
+
+class _CollectingTracer(Tracer):
+    def __init__(self, *, sink: List[Dict[str, Any]], **kwargs: Any) -> None:
+        self._sink = sink
+        super().__init__(**kwargs)
+
+    def emit(self, event: Any) -> None:  # type: ignore[override]
+        super().emit(event)
+        payload = event.model_dump()
+        if "event_type" not in payload:
+            payload["event_type"] = payload.get("kind")
+        self._sink.append(payload)
+
+
+@pytest.fixture
+def memory_backend() -> InMemoryBackend:
+    """In-memory memory backend for deterministic persistence during tests."""
+    return InMemoryBackend()
+
+
+@pytest.fixture
+def fake_model_provider() -> Callable[[OpenAIRequest], OpenAIResponse]:
+    """Deterministic stub matching the OpenAI provider interface."""
+
+    def _provider(request: OpenAIRequest) -> OpenAIResponse:
+        return OpenAIResponse(
+            ok=True,
+            model=request.model,
+            content=f"stub response for {request.model}",
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            meta={"stub": True},
+        )
+
+    return _provider
+
+
+class FakeToolBackend:
+    def __init__(self, *, behavior: str = "success") -> None:
+        self.behavior = behavior
+        self.calls = 0
+
+    def run(self, tool: Any, params: Dict[str, Any], ctx: Any) -> ToolResult:
+        self.calls += 1
+        meta = ToolMeta(tool_name=getattr(tool, "name", tool.__class__.__name__), backend="fake")
+        if self.behavior == "always_timeout":
+            err = ToolError(
+                code=ToolErrorCode.TIMEOUT,
+                message="timeout",
+                details={"params": params},
+            )
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+        if self.behavior == "fail_once_then_success" and self.calls == 1:
+            err = ToolError(
+                code=ToolErrorCode.BACKEND_ERROR,
+                message="simulated transient failure",
+                details={"params": params},
+            )
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+        return ToolResult.ok(data={"result": "ok"}, meta=meta)
+
+
+@pytest.fixture
+def fake_tool_backend() -> FakeToolBackend:
+    return FakeToolBackend()
+
+
+@pytest.fixture
+def orchestrator(memory_backend: InMemoryBackend, trace_sink: List[Dict[str, Any]]) -> OrchestratorEngine:
+    """Engine wired to deterministic in-memory helpers."""
+    settings = Settings()
+    memory_router = MemoryRouter(backend=memory_backend)
+    tracer = _CollectingTracer(memory=memory_backend, redactor=SecurityRedactor(), sink=trace_sink)
+    engine = OrchestratorEngine.from_settings(
+        settings=settings,
+        memory=memory_router,
+        tracer=tracer,
+        sleep_fn=lambda _: None,
+    )
+    return engine
+
+
+@pytest.fixture
+def app_client(orchestrator: OrchestratorEngine) -> TestClient:
+    """FastAPI test client wired to the provided orchestrator."""
+    gateway_deps.get_engine.cache_clear()
+    gateway_deps.get_settings.cache_clear()
+    gateway_deps.get_memory_router.cache_clear()
+    gateway_deps.get_tracer.cache_clear()
+    gateway_deps.get_product_catalog.cache_clear()
+    app = create_app()
+    app.dependency_overrides[gateway_deps.get_engine] = lambda: orchestrator
+    client = TestClient(app)
+    return client
+
+# tests/core/test_agents_core.py
+# ==============================
+# Tests: Agents (Base + Registry + Minimal Agent Run)
+# ==============================
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
+from core.agents.base import BaseAgent
+from core.agents.registry import AgentRegistry
+from core.contracts.agent_schema import AgentMeta, AgentResult
+from core.orchestrator.context import RunContext
+from core.orchestrator.state import RunStatus
+from core.contracts.flow_schema import AutonomyLevel
+
+
+class _EchoAgent(BaseAgent):
+    def __init__(self, name: str = "echo_agent") -> None:
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def run(self, step_ctx: Any) -> AgentResult:
+        # Minimal agent that echoes payload + prior artifacts
+        message = None
+        try:
+            message = step_ctx.run.payload.get("keyword")  # type: ignore[attr-defined]
+        except Exception:
+            message = None
+
+        data = {
+            "echo": message,
+            "artifact_keys": sorted(list(getattr(step_ctx.run, "artifacts", {}).keys())),
+        }
+        return AgentResult(ok=True, data=data, error=None, meta=AgentMeta(agent_name=self.name))
+
+
+def test_agent_registry_register_and_resolve() -> None:
+    AgentRegistry.clear()
+    a = _EchoAgent()
+    AgentRegistry.register(a.name, a)
+    resolved = AgentRegistry.resolve(a.name)
+    assert resolved is not None
+    assert resolved.name == "echo_agent"
+
+
+def test_agent_registry_duplicate_registration_raises() -> None:
+    AgentRegistry.clear()
+    a = _EchoAgent("dup_agent")
+    AgentRegistry.register(a.name, a)
+    try:
+        AgentRegistry.register(a.name, a)
+        assert False, "Expected duplicate registration to raise"
+    except ValueError:
+        assert True
+
+
+def test_agent_run_returns_agent_result() -> None:
+    AgentRegistry.clear()
+    a = _EchoAgent()
+    AgentRegistry.register(a.name, a)
+
+    run = RunContext(
+        run_id="r1",
+        product="hello_world",
+        flow="hello_world",
+        status=RunStatus.RUNNING,
+        payload={"keyword": "hi"},
+        artifacts={"k1": {"v": 1}},
+        meta={},
+    )
+    step = run.new_step(step_id="s_agent", step_type="agent", backend="local", target=a.name)
+
+    resolved = AgentRegistry.resolve("echo_agent")
+    assert resolved is not None
+
+    res = resolved.run(step)
+    assert res.ok is True
+    assert res.data is not None
+    assert res.data["echo"] == "hi"
+    assert "k1" in res.data["artifact_keys"]
+
+# tests/core/test_config_precedence_extended.py
+# ==============================
+# Config Precedence Tests
+# ==============================
+from __future__ import annotations
+
+import textwrap
+
+import pytest
+
+from core.config.loader import load_settings
+
+
+def _write_yaml(path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(body), encoding="utf-8")
+
+
+def _base_configs(root):
+    _write_yaml(root / "configs" / "app.yaml", """\
+    app:
+      host: config-host
+      port: 1111
+      paths:
+        storage_dir: storage
+    """)
+    _write_yaml(root / "configs" / "models.yaml", """\
+    models:
+      openai:
+        timeout_seconds: 5.0
+    """)
+    _write_yaml(root / "configs" / "policies.yaml", "policies: {}\n")
+    _write_yaml(root / "configs" / "logging.yaml", "logging: {}\n")
+    _write_yaml(root / "configs" / "products.yaml", "products: {}\n")
+
+
+def test_config_precedence(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _base_configs(repo_root)
+
+    secrets_dir = repo_root / "secrets"
+    secrets_dir.mkdir()
+    secrets_path = secrets_dir / "secrets.yaml"
+    _write_yaml(secrets_path, """\
+    secrets:
+      openai_api_key: secret-key
+    """)
+
+    env = {"MASTER__APP__PORT": "3333"}
+
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir="configs",
+        secrets_path=str(secrets_path),
+        env=env,
+    )
+
+    assert settings.app.port == 3333
+    assert settings.models.openai.api_key == "secret-key"
+
+    # Negative case: invalid products config should raise early
+    _write_yaml(repo_root / "bad_configs" / "app.yaml", """\
+    app:
+      env: local
+      paths:
+        repo_root: .
+      port: not-a-number
+    """)
+    with pytest.raises(ValueError) as excinfo:
+        load_settings(
+            repo_root=str(repo_root),
+            configs_dir="bad_configs",
+            secrets_path=str(secrets_path),
+        )
+    assert "Invalid configuration" in str(excinfo.value)
+
+# tests/core/test_contracts.py
+# ==============================
+# Tests: Core Contracts
+# ==============================
+from __future__ import annotations
+
+from typing import Any, Dict
+
+import pytest
+from pydantic import ValidationError
+
+from core.contracts.agent_schema import AgentError, AgentMeta, AgentResult
+from core.contracts.flow_schema import AutonomyLevel, FlowDef, StepDef, StepType
+from core.contracts.run_schema import ArtifactRef, RunRecord, StepRecord, TraceEvent
+from core.contracts.tool_schema import ToolError, ToolMeta, ToolResult
+
+
+def test_tool_result_envelope_ok() -> None:
+    r = ToolResult(ok=True, data={"x": 1}, error=None, meta=ToolMeta(tool_name="t", backend="local"))
+    assert r.ok is True
+    assert r.data == {"x": 1}
+    assert r.error is None
+    assert r.meta.tool_name == "t"
+
+
+def test_tool_result_requires_error_when_not_ok() -> None:
+    with pytest.raises(ValidationError):
+        ToolResult(ok=False, data=None, error=None, meta=ToolMeta(tool_name="t", backend="local"))
+
+
+def test_agent_result_envelope_ok() -> None:
+    r = AgentResult(ok=True, data={"y": 2}, error=None, meta=AgentMeta(agent_name="a"))
+    assert r.ok is True
+    assert r.data == {"y": 2}
+    assert r.error is None
+
+
+def test_agent_result_requires_error_when_not_ok() -> None:
+    with pytest.raises(ValidationError):
+        AgentResult(ok=False, data=None, error=None, meta=AgentMeta(agent_name="a"))
+
+
+def test_flow_def_and_steps_validate() -> None:
+    f = FlowDef(
+        name="hello",
+        version="1.0.0",
+        autonomy_level=AutonomyLevel.suggest_only,
+        steps=[
+            StepDef(id="s1", type=StepType.tool, tool="echo_tool", backend="local"),
+            StepDef(id="s2", type=StepType.human_approval, title="Approve", message="ok?"),
+            StepDef(id="s3", type=StepType.agent, agent="simple_agent", backend="local"),
+        ],
+    )
+    assert f.name == "hello"
+    assert f.steps[0].type == StepType.tool
+
+
+def test_step_def_requires_tool_or_agent() -> None:
+    with pytest.raises(ValidationError):
+        StepDef(id="bad", type=StepType.tool, backend="local")
+
+    with pytest.raises(ValidationError):
+        StepDef(id="bad2", type=StepType.agent, backend="local")
+
+
+def test_run_models_validate_minimal() -> None:
+    run = RunRecord(run_id="r1", product="hello_world", flow="hello_world", status="RUNNING")
+    step = StepRecord(run_id="r1", step_id="s1", status="RUNNING")
+    event = TraceEvent(run_id="r1", step_id="s1", product="hello_world", flow="hello_world", event_type="test", payload={"a": 1})
+    art = ArtifactRef(key="k", kind="json", uri="memory://k")
+    assert run.run_id == "r1"
+    assert step.step_id == "s1"
+    assert event.payload["a"] == 1
+    assert art.key == "k"
+
+# tests/core/test_dotenv_loading.py
+# ==============================
+# .env Loading Tests
+# ==============================
+from __future__ import annotations
+
+import textwrap
+
+from core.config.loader import load_settings
+
+
+def _write_yaml(path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(body), encoding="utf-8")
+
+
+def _base_configs(root) -> None:
+    _write_yaml(root / "configs" / "app.yaml", """\
+    app:
+      env: local
+      paths:
+        storage_dir: storage
+    """)
+    _write_yaml(root / "configs" / "models.yaml", "models: {}\n")
+    _write_yaml(root / "configs" / "policies.yaml", "policies: {}\n")
+    _write_yaml(root / "configs" / "logging.yaml", "logging: {}\n")
+    _write_yaml(root / "configs" / "products.yaml", "products: {}\n")
+
+
+def test_loads_dotenv_and_resolves_secrets(monkeypatch, tmp_path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _base_configs(repo_root)
+
+    secrets_dir = repo_root / "secrets"
+    secrets_dir.mkdir()
+    _write_yaml(secrets_dir / "secrets.yaml", """\
+    secrets:
+      openai:
+        api_key: test-openai-key
+    """)
+
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(
+        "APP_BASE_PATH=repo\nOPENAI_API_KEY_REF=openai.api_key\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    settings = load_settings(env={})
+
+    assert settings.models.openai.api_key == "test-openai-key"
+
+# tests/core/test_governance_core.py
+from __future__ import annotations
+
+from typing import Dict, List
+
+from core.config.schema import Settings
+from core.contracts.flow_schema import AutonomyLevel, FlowDef, StepDef, StepType
+from core.contracts.run_schema import RunRecord, RunStatus
+from core.governance.policies import PolicyEngine
+from core.governance.security import SecurityRedactor
+from core.orchestrator.context import RunContext, StepContext
+
+
+def _settings() -> Settings:
+    return Settings()
+
+
+def _step_ctx(product: str = "hello_world") -> StepContext:
+    run_record = RunRecord(run_id="run_test", product=product, flow_id="hello", status=RunStatus.RUNNING)
+    flow = FlowDef(
+        id="hello",
+        steps=[StepDef(id="s1", type=StepType.TOOL, tool="echo_tool", backend=None)],
+    )
+    run_ctx = RunContext(run_id=run_record.run_id, product=run_record.product, flow=flow.id)
+    return run_ctx.new_step(step_def=flow.steps[0])
+
+
+def test_redactor_scrubs_tokens_and_pii() -> None:
+    redactor = SecurityRedactor()
+    payload = {
+        "api_key": "sk-12345678901234567890ABCDE",
+        "nested": {"Authorization": "Bearer sk-AAAAAAAAAAAAAAAAAAAAAAAAAA"},
+        "contact": "user@example.com",
+    }
+    sanitized = redactor.sanitize(payload)
+    assert sanitized["api_key"] == SecurityRedactor().mask
+    assert "sk-" not in str(sanitized["nested"]["Authorization"])
+    assert "user@example.com" not in sanitized["contact"]
+
+
+def test_policy_engine_allows_tool_by_default() -> None:
+    settings = _settings()
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is True
+
+
+def test_policy_engine_blocks_tool_via_blocklist() -> None:
+    settings = _settings()
+    settings.policies.blocked_tools = ["echo_tool"]
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is False
+    assert decision.reason == "tool_blocked"
+
+
+def test_policy_engine_applies_per_product_override() -> None:
+    settings = _settings()
+    settings.policies.blocked_tools = ["echo_tool"]
+    settings.policies.by_product = {"hello_world": {"blocked_tools": []}}
+    engine = PolicyEngine(settings)
+    decision = engine.evaluate_tool_call(tool_name="echo_tool", step_ctx=_step_ctx())
+    assert decision.allow is True
+
+
+def test_policy_engine_enforces_model_allowlist() -> None:
+    settings = _settings()
+    settings.policies.allowed_models = ["gpt-4o-mini"]
+    engine = PolicyEngine(settings)
+    allowed = engine.evaluate_model_selection(product="hello_world", model_name="gpt-4o-mini")
+    denied = engine.evaluate_model_selection(product="hello_world", model_name="other-model")
+    assert allowed.allow is True
+    assert denied.allow is False
+
+# tests/core/test_guardrails_repo_scan.py
+# ==============================
+# Guardrail Validations
+# ==============================
+from __future__ import annotations
+
+import pathlib
+import re
+from typing import List
+
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "storage", "secrets", "tests", "scripts"}
+
+
+def _iter_python_files() -> List[pathlib.Path]:
+    files: List[pathlib.Path] = []
+    for path in REPO_ROOT.rglob("*.py"):
+        if any(part in EXCLUDED_DIRS for part in path.parts):
+            continue
+        files.append(path)
+    return files
+
+
+def _read(path: pathlib.Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _find_offenses(pattern: str, files: List[pathlib.Path], *, allow: List[pathlib.Path]) -> List[pathlib.Path]:
+    offenders: List[pathlib.Path] = []
+    for path in files:
+        if any(path == allowed or allowed in path.parents for allowed in allow):
+            continue
+        if re.search(pattern, _read(path)):
+            offenders.append(path)
+    return offenders
+
+
+def test_no_os_environ_outside_loader() -> None:
+    files = _iter_python_files()
+    permitted = [REPO_ROOT / "core" / "config" / "loader.py"]
+    pattern = r"os\.environ"
+    offenders = _find_offenses(pattern, files, allow=permitted)
+    assert not offenders, f"os.environ reads only allowed in core/config/loader.py, found in: {offenders}"
+
+
+def test_model_router_is_only_provider_entrypoint() -> None:
+    files = _iter_python_files()
+    permitted = [
+        REPO_ROOT / "core" / "models" / "router.py",
+        REPO_ROOT / "core" / "models" / "providers",
+    ]
+    pattern = r"\bcore\.models\b"
+    offenders = _find_offenses(pattern, files, allow=permitted)
+    assert not offenders, (
+        "Direct model/provider imports are only permitted under core/models/router.py "
+        f"or core/models/providers/*, found in: {offenders}"
+    )
+
+
+def test_tool_executor_is_centralized() -> None:
+    files = _iter_python_files()
+    allowed = {
+        REPO_ROOT / "core" / "orchestrator" / "engine.py",
+        REPO_ROOT / "core" / "orchestrator" / "step_executor.py",
+        REPO_ROOT / "tests" / "core" / "test_tools_core.py",
+        REPO_ROOT / "core" / "tools" / "executor.py",
+    }
+    pattern = r"ToolExecutor"
+    offenders = _find_offenses(pattern, files, allow=list(allowed))
+    assert not offenders, (
+        "Only orchestrator/engine, orchestrator/step_executor, and test_tools_core should reference ToolExecutor directly. "
+        f"Offenders: {offenders}"
+    )
+
+
+def test_sqlite_imports_constrained_to_persistence_modules() -> None:
+    files = _iter_python_files()
+    allowed = {
+        REPO_ROOT / "core" / "memory" / "sqlite_backend.py",
+        REPO_ROOT / "core" / "knowledge" / "vector_store.py",
+    }
+    pattern = r"\bsqlite3\b"
+    offenders = _find_offenses(pattern, files, allow=list(allowed))
+    assert not offenders, (
+        "Direct sqlite3 usage must be contained within persistence helpers. Offending files: {offenders}"
+    )
+
+# tests/core/test_hitl_idempotency.py
+# ==============================
+# HITL Idempotency Tests
+# ==============================
+from __future__ import annotations
+
+from typing import List
+
+import pytest
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.contracts.run_schema import RunStatus
+from core.memory.router import MemoryRouter
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products():
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+    return settings
+
+
+def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
+    settings = _register_products()
+    trace_sink.clear()
+
+    # RunA -> Approve, double approve should fail
+    start = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "idempotent"})
+    assert start.ok
+    run_id = start.data["run_id"]
+    bundle = orchestrator.memory.get_run(run_id)
+    assert bundle and bundle.run.status == RunStatus.PENDING_HUMAN
+
+    # Persisted state accessible through new router
+    router = MemoryRouter(backend=orchestrator.memory.backend)
+    fresh = router.get_run(run_id)
+    assert fresh and fresh.run.status == RunStatus.PENDING_HUMAN
+
+    ok = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
+    assert ok.ok
+    result = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
+    assert not result.ok
+    assert result.error and result.error.code == "invalid_state"
+
+    trace_types = [event["kind"] for event in trace_sink]
+    assert "pending_human" in trace_types
+    assert "run_resumed" in trace_types
+    assert "run_completed" in trace_types
+
+    trace_sink.clear()
+
+    # RunB -> Reject, double reject and approve-after-reject should fail
+    start_b = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "idempotent"})
+    assert start_b.ok
+    run_b = start_b.data["run_id"]
+    reject_ok = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": False}, decision="REJECTED")
+    assert reject_ok.ok
+
+    second_reject = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": False}, decision="REJECTED")
+    assert not second_reject.ok
+    assert second_reject.error and second_reject.error.code == "invalid_state"
+
+    approve_after_reject = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": True}, decision="APPROVED")
+    assert not approve_after_reject.ok
+    assert approve_after_reject.error and approve_after_reject.error.code == "invalid_state"
+
+# tests/core/test_knowledge_core.py
+# ==============================
+# Tests: Knowledge Core
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.knowledge.base import IngestChunk, Query
+from core.knowledge.vector_store import SqliteVectorStore
+
+
+def _chunk(collection: str, doc: str, idx: int, text: str, **metadata) -> IngestChunk:
+    return IngestChunk(
+        collection=collection,
+        doc_id=doc,
+        chunk_id=f"{doc}:::{idx}",
+        text=text,
+        source=f"file://{doc}",
+        metadata=metadata,
+    )
+
+
+def test_vector_store_upsert_query_delete(tmp_path: Path) -> None:
+    store = SqliteVectorStore(str(tmp_path / "knowledge.sqlite"))
+    items = [
+        _chunk("hello_world", "doc_a", 0, "Alpha beta gamma", topic="guide", product="hello_world"),
+        _chunk("hello_world", "doc_a", 1, "Beta delta epsilon"),
+        _chunk("hello_world", "doc_b", 0, "Gamma only text", topic="notes"),
+    ]
+
+    res = store.upsert(items)
+    assert res.ok
+    assert res.inserted == len(items)
+
+    q = Query(collection="hello_world", text="beta", top_k=5)
+    matches = store.query(q)
+    assert matches
+    assert matches[0].source.endswith("doc_a")
+
+    filtered = store.query(Query(collection="hello_world", text="gamma", filters={"topic": "notes"}))
+    assert len(filtered) == 1
+    assert filtered[0].metadata["topic"] == "notes"
+
+    # Upsert same chunk with new text -> counts as update
+    updated_chunk = items[0].model_copy(update={"text": "Alpha refreshed"})
+    res2 = store.upsert([updated_chunk])
+    assert res2.updated == 1
+    stats = store.stats(collection="hello_world")
+    assert stats.total_chunks == len(items)
+
+    # Delete by doc_id
+    removed = store.delete(collection="hello_world", doc_ids=["doc_b"])
+    assert removed == 1
+    stats2 = store.stats(collection="hello_world")
+    assert stats2.total_chunks == len(items) - 1
+
+    store.clear()
+    assert store.stats().total_chunks == 0
+
+# tests/core/test_log_redaction.py
+# ==============================
+# Log Redaction Tests
+# ==============================
+from __future__ import annotations
+
+import logging
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.governance.security import DEFAULT_MASK
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products() -> None:
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+
+
+def test_log_redaction(orchestrator, trace_sink, caplog) -> None:
+    _register_products()
+    secret_value = "sk-very-secret TOKEN=pa55word"
+    caplog.set_level(logging.INFO, logger="master.trace")
+
+    orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": secret_value})
+
+    assert secret_value not in caplog.text
+    for record in caplog.records:
+        message = record.getMessage()
+        assert secret_value not in message
+        assert secret_value not in str(record.__dict__)
+
+    assert trace_sink, "Expected traces recorded"
+    for event in trace_sink:
+        payload_repr = str(event.get("payload", {}))
+        assert secret_value not in payload_repr
+
+# tests/core/test_openai_provider_headers.py
+# ==============================
+# OpenAI Provider Header Tests
+# ==============================
+from __future__ import annotations
+
+from core.models.providers.openai_provider import _should_send_org_header
+
+
+def test_org_header_skips_placeholder() -> None:
+    assert _should_send_org_header("PUT_OPENAI_ORG_ID_HERE") is False
+    assert _should_send_org_header("placeholder") is False
+    assert _should_send_org_header("YOUR_ORG_ID") is False
+    assert _should_send_org_header("  ") is False
+
+
+def test_org_header_allows_realistic_value() -> None:
+    assert _should_send_org_header("org_1234567890") is True
+
+# tests/core/test_orchestrator.py
+# ==============================
+# Tests: Orchestrator (Engine Basic + HITL Pause/Resume)
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from core.config.loader import load_settings
+from core.utils.product_loader import discover_products, register_enabled_products
+from core.orchestrator.engine import OrchestratorEngine
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+
+
+@pytest.mark.integration
+def test_engine_runs_and_pauses_on_hitl(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    configs_dir = repo_root / "configs"
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    secrets_path = secrets_dir / "secrets.yaml"
+    sqlite_path = tmp_path / "engine_test.sqlite"
+
+    secrets_path.write_text(
+        "\n".join(
+            [
+                "secrets:",
+                "  db:",
+                f"    sqlite_path: '{sqlite_path.as_posix()}'",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(configs_dir=str(configs_dir), secrets_path=str(secrets_path))
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        catalog = discover_products(settings, repo_root=repo_root)
+        register_enabled_products(catalog, settings=settings)
+
+        engine = OrchestratorEngine.from_settings(settings)
+
+        started = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "test"})
+        assert started.ok, started.error
+        run_id = started.data["run_id"]  # type: ignore[index]
+
+        status = engine.get_run(run_id=run_id)
+        assert status.ok, status.error
+        assert status.data and status.data["run"]["status"] in ("PENDING_HUMAN", "pending_human")
+
+        resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+        assert resumed.ok, resumed.error
+
+        status2 = engine.get_run(run_id=run_id)
+        assert status2.ok, status2.error
+        assert status2.data and status2.data["run"]["status"] in ("COMPLETED", "completed")
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# tests/core/test_orchestrator_state.py
+# ==============================
+# Tests: Orchestrator State Enums + Transitions
+# ==============================
+from __future__ import annotations
+
+from core.orchestrator.state import RunStatus, StepStatus
+
+
+def test_run_status_has_pending_human() -> None:
+    assert hasattr(RunStatus, "PENDING_HUMAN")
+    assert RunStatus.PENDING_HUMAN.value == "PENDING_HUMAN"
+    assert hasattr(RunStatus, "PENDING_USER_INPUT")
+    assert RunStatus.PENDING_USER_INPUT.value == "PENDING_USER_INPUT"
+
+
+def test_step_status_has_pending_human() -> None:
+    assert hasattr(StepStatus, "PENDING_HUMAN")
+    assert StepStatus.PENDING_HUMAN.value == "PENDING_HUMAN"
+    assert hasattr(StepStatus, "PENDING_USER_INPUT")
+    assert StepStatus.PENDING_USER_INPUT.value == "PENDING_USER_INPUT"
+
+
+def test_status_string_roundtrip() -> None:
+    # Ensure enum values are stable strings (used in DB/status API).
+    assert str(RunStatus.RUNNING.value) == "RUNNING"
+    assert str(StepStatus.COMPLETED.value) == "COMPLETED"
+
+# tests/core/test_product_loader.py
+# ==============================
+# Tests: Product Loader
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import List
+
+import textwrap
+
+from core.config.schema import Settings
+from core.utils.product_loader import (
+    ProductCatalog,
+    ProductLoadError,
+    discover_products,
+    register_enabled_products,
+)
+
+
+def _make_settings(repo_root: Path, *, enabled: List[str] | None = None, auto_enable: bool = True) -> Settings:
+    data = {
+        "app": {"paths": {"repo_root": str(repo_root)}},
+        "products": {
+            "products_dir": "products",
+            "enabled": enabled or [],
+            "auto_enable": auto_enable,
+        },
+    }
+    return Settings.model_validate(data)
+
+
+def _write_product(root: Path, name: str, *, with_registry: bool = True) -> None:
+    prod_dir = root / "products" / name
+    (prod_dir / "flows").mkdir(parents=True, exist_ok=True)
+    (prod_dir / "config").mkdir(parents=True, exist_ok=True)
+    (prod_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    (prod_dir / "flows" / "flow_one.yaml").write_text("id: flow_one", encoding="utf-8")
+
+    manifest = textwrap.dedent(
+        f"""
+        name: "{name}"
+        display_name: "{name.title()}"
+        description: "Test {name}"
+        version: "0.1.0"
+        default_flow: "flow_one"
+        exposed_api:
+          enabled: true
+        ui_enabled: true
+        ui:
+          enabled: true
+        """
+    ).strip()
+    (prod_dir / "manifest.yaml").write_text(manifest, encoding="utf-8")
+
+    config = textwrap.dedent(
+        f"""
+        name: "{name}"
+        defaults:
+          autonomy_level: "semi_auto"
+        """
+    ).strip()
+    (prod_dir / "config" / "product.yaml").write_text(config, encoding="utf-8")
+
+    if with_registry:
+        registry = textwrap.dedent(
+            """
+            from core.utils.product_loader import ProductRegistries
+
+            def register(registries: ProductRegistries) -> None:
+                registries.agent_registry.register("test_agent", lambda: None)
+                registries.tool_registry.register("test_tool", lambda: None)
+            """
+        ).strip()
+        (prod_dir / "registry.py").write_text(registry, encoding="utf-8")
+
+
+class DummyRegistry:
+    def __init__(self) -> None:
+        self.names: List[str] = []
+
+    def register(self, name: str, factory) -> None:  # pragma: no cover - simple helper
+        self.names.append(name)
+
+
+def test_discovery_and_registration(tmp_path: Path) -> None:
+    _write_product(tmp_path, "alpha")
+    settings = _make_settings(tmp_path)
+
+    catalog = discover_products(settings, repo_root=tmp_path)
+    assert "alpha" in catalog.products
+    assert catalog.flows["alpha"] == ["flow_one"]
+
+    agent_reg = DummyRegistry()
+    tool_reg = DummyRegistry()
+    errors = register_enabled_products(
+        catalog,
+        settings=settings,
+        agent_registry=agent_reg,
+        tool_registry=tool_reg,
+    )
+    assert not errors
+    assert agent_reg.names == ["test_agent"]
+    assert tool_reg.names == ["test_tool"]
+
+
+def test_missing_registry_records_error(tmp_path: Path) -> None:
+    _write_product(tmp_path, "bravo", with_registry=False)
+    settings = _make_settings(tmp_path)
+
+    catalog = discover_products(settings, repo_root=tmp_path)
+    assert "bravo" not in catalog.products
+    assert any("registry.py" in err.path for err in catalog.errors)
+
+
+def test_enabled_filtering(tmp_path: Path) -> None:
+    _write_product(tmp_path, "alpha")
+    _write_product(tmp_path, "beta")
+    settings = _make_settings(tmp_path, enabled=["beta"], auto_enable=False)
+
+    catalog = discover_products(settings, repo_root=tmp_path)
+    assert catalog.products["alpha"].enabled is False
+    assert catalog.products["beta"].enabled is True
+
+# tests/core/test_tools_core.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable, List, Tuple
+
+from core.config.schema import Settings
+from core.contracts.flow_schema import FlowDef, StepDef, StepType
+from core.contracts.run_schema import RunRecord, RunStatus
+from core.governance.hooks import GovernanceHooks
+from core.governance.security import SecurityRedactor
+from core.orchestrator.context import RunContext, StepContext
+from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
+
+from products.hello_world.tools.echo_tool import EchoTool
+
+
+@dataclass
+class RecordingTool(EchoTool):
+    calls: int = 0
+
+    def run(self, params, ctx):
+        self.calls += 1
+        return super().run(params, ctx)
+
+
+def _build_step_ctx(*, product: str = "hello_world", events: List[Tuple[str, dict]] | None = None) -> StepContext:
+    run_record = RunRecord(run_id="run-tools", product=product, flow_id="hello", status=RunStatus.RUNNING)
+    flow = FlowDef(id="hello", steps=[StepDef(id="s1", type=StepType.TOOL, tool="echo_tool")])
+    trace: Callable[[str, dict], None] | None = None
+    if events is not None:
+        trace = lambda event_type, payload: events.append((event_type, payload))
+    run_ctx = RunContext(run_id=run_record.run_id, product=run_record.product, flow=flow.id, trace=trace)
+    return run_ctx.new_step(step_def=flow.steps[0])
+
+
+def _executor(settings: Settings, registry: ToolRegistry) -> ToolExecutor:
+    return ToolExecutor(registry=registry, hooks=GovernanceHooks(settings=settings), redactor=SecurityRedactor())
+
+
+def test_tool_registry_registers_and_resolves() -> None:
+    ToolRegistry.clear()
+    registry = ToolRegistry()
+    tool = RecordingTool()
+    registry.register(name="echo_tool", factory=lambda: tool)
+    resolved = registry.resolve("echo_tool")
+    assert isinstance(resolved, EchoTool)
+
+
+def test_tool_executor_runs_tool_and_redacts_traces() -> None:
+    ToolRegistry.clear()
+    settings = Settings()
+    registry = ToolRegistry()
+    tool = RecordingTool()
+    registry.register(name="echo_tool", factory=lambda: tool)
+    events: List[Tuple[str, dict]] = []
+    ctx = _build_step_ctx(events=events)
+
+    executor = _executor(settings, registry)
+    result = executor.execute(tool_name="echo_tool", params={"message": "secret sk-abc"}, ctx=ctx)
+
+    assert result.ok is True
+    assert tool.calls == 1
+    assert result.data and "secret" in result.data["echo"]
+    payloads = [payload for event, payload in events if event == "tool.executed"]
+    assert payloads
+    serialized = str(payloads[0])
+    assert "sk-" not in serialized  # redacted
+    assert "step_id" in payloads[0]
+
+
+def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
+    ToolRegistry.clear()
+    settings = Settings()
+    settings.policies.blocked_tools = ["echo_tool"]
+    registry = ToolRegistry()
+    tool = RecordingTool()
+    registry.register(name="echo_tool", factory=lambda: tool)
+    events: List[Tuple[str, dict]] = []
+    ctx = _build_step_ctx(events=events)
+
+    executor = _executor(settings, registry)
+    result = executor.execute(tool_name="echo_tool", params={"message": "hi"}, ctx=ctx)
+
+    assert result.ok is False
+    assert tool.calls == 0
+    assert any(event == "governance.decision" for event, _ in events)
+
+# tests/core/test_trace_contract.py
+# ==============================
+# Trace Contract Tests
+# ==============================
+from __future__ import annotations
+
+from typing import List
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products() -> None:
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+
+
+def test_trace_contract(orchestrator, trace_sink: List[dict]) -> None:
+    _register_products()
+    started = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "trace secret"})
+    assert started.ok
+    run_id = started.data["run_id"]
+    resumed = orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True})
+    assert resumed.ok
+
+    kinds = [event["kind"] for event in trace_sink]
+    assert "run_started" in kinds
+    assert "step_started" in kinds
+    assert "step_completed" in kinds
+    assert "run_completed" in kinds
+    assert kinds.index("step_started") < kinds.index("step_completed")
+
+    for event in trace_sink:
+        assert event.get("run_id") == run_id
+        assert event.get("product") == "hello_world"
+        assert event.get("flow") == "hello_world"
+        assert event.get("ts") and isinstance(event["ts"], int)
+        assert event.get("event_type")
+
+# tests/generate_component_txt.py
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Iterable, List
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = REPO_ROOT / "docs" / "components"
+EXTENSIONS = {".py", ".yaml", ".yml"}
+
+
+def _iter_components(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() in EXTENSIONS:
+            yield path
+
+
+def _top_level_dir(path: Path) -> str:
+    rel = path.relative_to(REPO_ROOT)
+    parts = rel.parts
+    return parts[0] if parts else ""
+
+
+def _write_bundle(name: str, files: List[Path]) -> None:
+    if not files:
+        return
+    output_path = OUTPUT_DIR / f"{name}.txt"
+    lines: List[str] = []
+    for file_path in sorted(files):
+        rel = file_path.relative_to(REPO_ROOT)
+        lines.append(f"# {rel}")
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        lines.append(content.rstrip())
+        lines.append("")
+    output_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    bundles: dict[str, List[Path]] = {}
+    for component in _iter_components(REPO_ROOT):
+        top = _top_level_dir(component)
+        if not top or top.startswith("."):
+            continue
+        bundles.setdefault(top, []).append(component)
+    for name, files in sorted(bundles.items()):
+        _write_bundle(name, files)
+    print(f"Wrote {len(bundles)} component bundle(s) to {OUTPUT_DIR}")
+
+
+if __name__ == "__main__":
+    main()
+
+# tests/integration/conftest.py
+# ==============================
+# Integration fixtures
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def hello_world_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """
+    Shared env fixture for integration tests that rely on sqlite-backed memory.
+
+    This fixture ensures we use deterministic sqlite paths (for runs, approvals, and
+    knowledge ingestion) without duplicating environment overrides in every test.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "integration.sqlite"
+
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    return sqlite_path
+
+# tests/integration/test_api_runs.py
+# ==============================
+# Integration: Gateway API Runs
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+import json
+from typing import Any, Dict, Optional
+
+import pytest
+from fastapi.testclient import TestClient
+
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+from gateway.api.http_app import create_app
+import gateway.api.deps as deps
+
+
+def _reset_deps() -> None:
+    deps.get_engine.cache_clear()
+    deps.get_settings.cache_clear()
+    deps.get_memory_router.cache_clear()
+    deps.get_tracer.cache_clear()
+    deps.get_product_catalog.cache_clear()
+
+
+@pytest.fixture()
+def api_client(tmp_path, monkeypatch):
+    repo_root = Path(__file__).resolve().parents[2]
+    sqlite_path = tmp_path / "api.sqlite"
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    _reset_deps()
+    client = TestClient(create_app())
+    yield client
+    client.close()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    _reset_deps()
+
+
+def _start_hello_world_run(api_client: TestClient, payload: Optional[Dict[str, Any]] = None) -> str:
+    req_payload = payload or {"keyword": "API"}
+    started = api_client.post("/api/run/hello_world/hello_world", json={"payload": req_payload}).json()
+    assert started["ok"] is True
+    assert started["data"]["status"] == "PENDING_HUMAN"
+    return started["data"]["run_id"]
+
+
+@pytest.mark.integration
+def test_gateway_api_run_resume_flow(api_client: TestClient) -> None:
+    products = api_client.get("/api/products").json()
+    assert products["ok"] is True
+    hello_world = next((p for p in products["data"]["products"] if p["name"] == "hello_world"), None)
+    assert hello_world is not None
+    assert "hello_world" in hello_world["flows"]
+
+    flows = api_client.get("/api/products/hello_world/flows").json()
+    assert flows["ok"] is True
+    assert "hello_world" in flows["data"]["flows"]
+
+    run_id = _start_hello_world_run(api_client)
+
+    pending = api_client.get(f"/api/run/{run_id}").json()
+    assert pending["ok"] is True
+    assert pending["data"]["run"]["status"] == "PENDING_HUMAN"
+
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": True, "notes": "ok"}},
+    ).json()
+    assert resumed["ok"] is True
+    assert resumed["data"]["status"] == "COMPLETED"
+
+    final = api_client.get(f"/api/run/{run_id}").json()
+    assert final["ok"] is True
+    assert final["data"]["run"]["status"] == "COMPLETED"
+
+
+@pytest.mark.integration
+def test_gateway_api_resume_rejection_marks_failed(api_client: TestClient) -> None:
+    run_id = _start_hello_world_run(api_client)
+
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": False, "notes": "reject"}},
+    ).json()
+    assert resumed["ok"] is True
+    assert resumed["data"]["status"] == "FAILED"
+
+    final = api_client.get(f"/api/run/{run_id}").json()
+    assert final["ok"] is True
+    assert final["data"]["run"]["status"] == "FAILED"
+
+
+@pytest.mark.integration
+def test_gateway_api_missing_approval_field_is_rejected(api_client: TestClient) -> None:
+    run_id = _start_hello_world_run(api_client)
+    resp = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"notes": "missing approved flag"}},
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["detail"]["error"]["code"] == "missing_approval_field"
+
+
+@pytest.mark.integration
+def test_gateway_api_trace_cleanliness(api_client: TestClient) -> None:
+    run_id = _start_hello_world_run(api_client, payload={"keyword": "safe", "api_key": "sk-secret"})
+    resumed = api_client.post(
+        f"/api/resume_run/{run_id}",
+        json={"decision": "APPROVED", "approval_payload": {"approved": True}},
+    ).json()
+    assert resumed["ok"] is True
+    final = api_client.get(f"/api/run/{run_id}").json()
+    serialized_steps = json.dumps(final["data"].get("steps", []))
+    assert "api_key" not in serialized_steps
+
+# tests/integration/test_cli_runs.py
+# ==============================
+# Integration: CLI Runs
+# ==============================
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import List, Tuple
+
+import pytest
+
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+from gateway.cli import main as cli_main
+
+
+def _run_cli(args: List[str], capsys) -> Tuple[int, dict]:
+    code = cli_main.main(args)
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+    data = json.loads(output) if output else {}
+    return code, data
+
+
+@pytest.mark.integration
+def test_cli_run_resume_flow(tmp_path, monkeypatch, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "cli.sqlite"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        code, products = _run_cli(["list-products"], capsys)
+        assert code == 0
+        assert "hello_world" in products["products"]
+
+        code, flows = _run_cli(["list-flows", "--product", "hello_world"], capsys)
+        assert code == 0
+        assert "hello_world" in flows["flows"]
+
+        code, started = _run_cli(
+            [
+                "run",
+                "--product",
+                "hello_world",
+                "--flow",
+                "hello_world",
+                "--payload",
+                '{"keyword":"CLI"}',
+            ],
+            capsys,
+        )
+        assert code == 0
+        assert started["ok"] is True
+        run_id = started["data"]["run_id"]
+        assert started["data"]["status"] == "PENDING_HUMAN"
+
+        code, pending = _run_cli(["status", "--run-id", run_id], capsys)
+        assert code == 0
+        assert pending["ok"] is True
+        assert pending["data"]["run"]["status"] == "PENDING_HUMAN"
+
+        code, approvals = _run_cli(["approvals"], capsys)
+        assert code == 0
+        assert approvals["approvals"], "Expected at least one pending approval"
+
+        code, resumed = _run_cli(
+            [
+                "resume",
+                "--run-id",
+                run_id,
+                "--approve",
+                "--payload",
+                '{"approved": true}',
+            ],
+            capsys,
+        )
+        assert code == 0
+        assert resumed["ok"] is True
+
+        code, final = _run_cli(["status", "--run-id", run_id], capsys)
+        assert code == 0
+        assert final["data"]["run"]["status"] == "COMPLETED"
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+@pytest.mark.integration
+def test_cli_resume_rejection_marks_failed(tmp_path, monkeypatch, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "cli.sqlite"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        _, _ = _run_cli(["list-products"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "hello_world"], capsys)
+
+        _, started = _run_cli(
+            [
+                "run",
+                "--product",
+                "hello_world",
+                "--flow",
+                "hello_world",
+                "--payload",
+                '{"keyword":"CLI"}',
+            ],
+            capsys,
+        )
+        run_id = started["data"]["run_id"]
+
+        _, rejection = _run_cli(
+            [
+                "resume",
+                "--run-id",
+                run_id,
+                "--reject",
+                "--payload",
+                '{"approved": false}',
+            ],
+            capsys,
+        )
+        assert rejection["ok"] is True
+        assert rejection["data"]["status"] == "FAILED"
+
+        _, final = _run_cli(["status", "--run-id", run_id], capsys)
+        assert final["data"]["run"]["status"] == "FAILED"
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+@pytest.mark.integration
+def test_cli_resume_missing_payload_fails(tmp_path, monkeypatch, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+    sqlite_path = tmp_path / "cli.sqlite"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        _, _ = _run_cli(["list-products"], capsys)
+        _, _ = _run_cli(["list-flows", "--product", "hello_world"], capsys)
+
+        _, started = _run_cli(
+            [
+                "run",
+                "--product",
+                "hello_world",
+                "--flow",
+                "hello_world",
+                "--payload",
+                '{"keyword":"CLI"}',
+            ],
+            capsys,
+        )
+        run_id = started["data"]["run_id"]
+
+        code, failure = _run_cli(
+            [
+                "resume",
+                "--run-id",
+                run_id,
+                "--approve",
+            ],
+            capsys,
+        )
+        assert code != 0
+        assert failure["ok"] is False
+        assert failure["error"]["code"] == "missing_approval_field"
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# tests/integration/test_concurrency_isolation.py
+# ==============================
+# Concurrency Isolation Tests
+# ==============================
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, List
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.memory.router import MemoryRouter
+from core.tools.registry import ToolRegistry
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products():
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+    return settings
+
+
+def _run_and_finish(orchestrator, trace_sink) -> str:
+    res = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
+    assert res.ok
+    run_id = res.data["run_id"]
+    orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True})
+    return run_id
+
+
+def test_concurrent_runs_isolated(orchestrator, trace_sink) -> None:
+    _register_products()
+    executor = ThreadPoolExecutor(max_workers=3)
+    futures = [executor.submit(_run_and_finish, orchestrator, trace_sink) for _ in range(3)]
+    run_ids = [f.result() for f in futures]
+    executor.shutdown()
+
+    memory = orchestrator.memory  # type: ignore[assignment]
+    for run_id in run_ids:
+        bundle = memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.run_id == run_id
+        assert bundle.run.status == "COMPLETED"
+
+    trace_runs = {event["run_id"] for event in trace_sink}
+    assert set(run_ids) == trace_runs
+    assert all(run_id in trace_runs for run_id in run_ids)
+
+    # Shared fixture sanity: each run_id has its own entries, no cross-run leaks
+    run_steps = {run_id: [e for e in trace_sink if e["run_id"] == run_id] for run_id in run_ids}
+    for run_id, events in run_steps.items():
+        assert all(event["run_id"] == run_id for event in events)
+        assert events, "Expected trace events per run"
+
+# tests/integration/test_parallel_failure_isolation.py
+# ==============================
+# Parallel Failure Isolation
+# ==============================
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, List
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.memory.router import MemoryRouter
+from core.tools.base import BaseTool
+from core.tools.registry import ToolRegistry, ToolRegistration
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products():
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+    return settings
+
+
+class PayloadDrivenTool(BaseTool):
+    name: str = "echo_tool"
+
+    def run(self, params, ctx):
+        fail = bool(ctx.run.payload.get("fail_run"))
+        meta = ToolMeta(tool_name=self.name, backend="parallel")
+        if fail:
+            err = ToolError(
+                code=ToolErrorCode.BACKEND_ERROR,
+                message="forced failure",
+                details={"run_id": ctx.run_id},
+            )
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+        return ToolResult(ok=True, data={"echo": params.get("message", "")}, error=None, meta=meta)
+
+
+def _override_echo(tool_cls) -> ToolRegistration | None:
+    original = ToolRegistry._tools.get("echo_tool")
+    ToolRegistry.register("echo_tool", tool_cls, overwrite=True)
+    return original
+
+
+def _restore_echo(registration: ToolRegistration | None) -> None:
+    if registration:
+        ToolRegistry._tools["echo_tool"] = registration
+    else:
+        ToolRegistry._tools.pop("echo_tool", None)
+
+
+def test_parallel_failure_isolation(orchestrator, trace_sink: List[Dict[str, str]]) -> None:
+    _register_products()
+    original = _override_echo(lambda: PayloadDrivenTool())
+    try:
+        def run_task(marker: str, fail: bool):
+            payload = {"keyword": f"run-{marker}", "fail_run": fail}
+            res = orchestrator.run_flow(product="hello_world", flow="hello_world", payload=payload)
+            return res.data["run_id"], fail
+
+        results = []
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [
+                executor.submit(run_task, "a", False),
+                executor.submit(run_task, "b", False),
+                executor.submit(run_task, "c", True),
+            ]
+            for future in futures:
+                results.append(future.result())
+
+        memory = orchestrator.memory  # type: ignore[assignment]
+        failed_runs = []
+        success_runs = []
+        for run_id, is_failed in results:
+            bundle = memory.get_run(run_id)
+            assert bundle
+            if is_failed:
+                failed_runs.append(run_id)
+                assert bundle.run.status != "COMPLETED"
+            else:
+                success_runs.append(run_id)
+                orchestrator.resume_run(run_id=run_id, approval_payload={"approved": True})
+                bundle = memory.get_run(run_id)
+                assert bundle.run.status == "COMPLETED"
+
+        assert len(failed_runs) == 1
+        assert len(success_runs) == 2
+
+        failure_events = [event for event in trace_sink if event["run_id"] in failed_runs]
+        assert failure_events, f"No trace events for failed runs: {failed_runs}"
+        assert any(event["kind"] == "tool_call_attempt_failed" for event in failure_events), f"Events: {[e['kind'] for e in failure_events]}"
+        assert all(
+            event["run_id"] in failed_runs
+            for event in failure_events
+            if event["kind"] == "tool_call_attempt_failed"
+        )
+
+        success_events = [event for event in trace_sink if event["run_id"] in success_runs]
+        assert all(event["kind"] != "step_failed" for event in success_events)
+        assert success_events
+    finally:
+        _restore_echo(original)
+
+# tests/integration/test_product_discovery.py
+# ==============================
+# Integration: Product Discovery
+# ==============================
+from __future__ import annotations
+
+from core.config.loader import load_settings
+from core.utils.product_loader import discover_products
+
+
+def test_catalog_contains_hello_world() -> None:
+    settings = load_settings()
+    catalog = discover_products(settings)
+    assert "hello_world" in catalog.products
+    assert "hello_world" in catalog.flows.get("hello_world", [])
+
+# tests/integration/test_resilience_retries_timeouts.py
+# ==============================
+# Resilience: Retries & Timeouts
+# ==============================
+from __future__ import annotations
+
+from typing import Dict, List, Type
+
+from core.agents.registry import AgentRegistry
+from core.config.loader import load_settings
+from core.contracts.run_schema import RunStatus
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.tools.base import BaseTool
+from core.tools.registry import ToolRegistry, ToolRegistration
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def _register_products():
+    settings = load_settings()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    catalog = discover_products(settings)
+    register_enabled_products(catalog, settings=settings)
+    return settings
+
+
+def _override_echo_tool(factory_cls: Type[BaseTool]) -> ToolRegistration | None:
+    reg = ToolRegistry._tools.get("echo_tool")
+    ToolRegistry.register("echo_tool", lambda: factory_cls(), overwrite=True)
+    return reg
+
+
+def _restore_echo_tool(registration: ToolRegistration | None) -> None:
+    if registration:
+        ToolRegistry._tools["echo_tool"] = registration
+    else:
+        ToolRegistry._tools.pop("echo_tool", None)
+
+
+class BackendBehaviorTool(BaseTool):
+    """Tool wrapper that delegates to a backend function defined by tests."""
+
+    name: str = "echo_tool"
+
+    def __init__(self, *, behavior: str, state: Dict[str, int]) -> None:
+        self.behavior = behavior
+        self.state = state
+        super().__init__()
+
+    def run(self, params, ctx):
+        key = (ctx.run_id, ctx.step_id)
+        self.state[key] = self.state.get(key, 0) + 1
+        meta = ToolMeta(tool_name=self.name, backend="test")
+        if self.behavior == "fail_once_then_success" and self.state[key] == 1:
+            err = ToolError(
+                code=ToolErrorCode.TEMPORARY,
+                message="simulated failure",
+                details={"phase": "first"},
+            )
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+        if self.behavior == "always_timeout":
+            err = ToolError(
+                code=ToolErrorCode.TIMEOUT,
+                message="simulated timeout",
+                details={"phase": "timeout"},
+            )
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+        return ToolResult(ok=True, data={"result": "ok"}, error=None, meta=meta)
+
+
+def test_retry_success(orchestrator, trace_sink: List[Dict[str, Any]]) -> None:
+    _register_products()
+    state: Dict = {}
+    original = _override_echo_tool(lambda: BackendBehaviorTool(behavior="fail_once_then_success", state=state))
+    try:
+        result = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "retry"})
+        assert result.ok, result.error
+        assert state, "Tool attempts recorded"
+        tool_event_kinds = [e["kind"] for e in trace_sink if e["kind"].startswith("tool_call")]
+        assert tool_event_kinds == [
+            "tool_call_attempt_started",
+            "tool_call_attempt_failed",
+            "tool_call_retry_scheduled",
+            "tool_call_attempt_started",
+            "tool_call_succeeded",
+        ]
+        resumed = orchestrator.resume_run(run_id=result.data["run_id"], approval_payload={"approved": True})
+        assert resumed.ok
+        run = orchestrator.get_run(run_id=result.data["run_id"])
+        assert run.ok
+        assert run.data["run"]["status"] == RunStatus.COMPLETED.value
+    finally:
+        _restore_echo_tool(original)
+
+
+def test_timeout_exhaustion(orchestrator, trace_sink: List[Dict[str, Any]]) -> None:
+    _register_products()
+    state: Dict = {}
+    original = _override_echo_tool(lambda: BackendBehaviorTool(behavior="always_timeout", state=state))
+    try:
+        result = orchestrator.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "timeout"})
+        assert result.ok
+        assert state, "Timeout attempts recorded"
+        tool_event_kinds = [e["kind"] for e in trace_sink if e["kind"].startswith("tool_call")]
+        assert tool_event_kinds == [
+            "tool_call_attempt_started",
+            "tool_call_attempt_failed",
+            "tool_call_retry_scheduled",
+            "tool_call_attempt_started",
+            "tool_call_attempt_failed",
+        ]
+        run = orchestrator.get_run(run_id=result.data["run_id"])
+        assert run.ok
+        assert run.data["run"]["status"] == RunStatus.FAILED.value
+    finally:
+        _restore_echo_tool(original)
+
+# tests/integration/test_sample_flows.py
+# ==============================
+# Integration Tests: Golden Path (Core + Hello World Product)
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from core.config.loader import load_settings
+from core.utils.product_loader import discover_products, register_enabled_products
+from core.orchestrator.engine import OrchestratorEngine
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+
+
+@pytest.mark.integration
+def test_sample_flow_hello_world(tmp_path: Path, hello_world_test_env: Path) -> None:
+    """
+    Runs:
+      echo -> HITL -> summary
+
+    The hello_world_test_env fixture handles sqlite/secrets overrides so other integration suites can reuse the same storage location.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    configs_dir = repo_root / "configs"
+    settings = load_settings(configs_dir=str(configs_dir))
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        catalog = discover_products(settings, repo_root=repo_root)
+        register_enabled_products(catalog, settings=settings)
+
+        engine = OrchestratorEngine.from_settings(settings)
+
+        started = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
+        assert started.ok, started.error
+        run_id = started.data["run_id"]  # type: ignore[index]
+
+        # Approve
+        resumed = engine.resume_run(run_id=run_id, approval_payload={"approved": True, "notes": "ok"})
+        assert resumed.ok, resumed.error
+
+        final = engine.get_run(run_id=run_id)
+        assert final.ok, final.error
+        assert final.data and final.data["run"]["status"] in ("COMPLETED", "completed")
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# tests/integration/test_ui_smoke.py
+from typing import Any
+
+# ==============================
+# UI Smoke Test
+# ==============================
+import json
+from types import SimpleNamespace
+
+
+class _FakeResponse:
+    def __init__(self, body: dict, ok: bool = True) -> None:
+        self._body = body
+        self.ok = ok
+
+    def json(self) -> dict:
+        return self._body
+
+
+class _FakeStreamlit:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self.session_state: dict[str, Any] = {}
+
+    def subheader(self, value: str) -> None:
+        self.calls.append(("subheader", value))
+
+    def info(self, message: str) -> None:
+        self.calls.append(("info", message))
+
+    def write(self, value: Any) -> None:
+        self.calls.append(("write", str(value)))
+
+    def markdown(self, value: str) -> None:
+        self.calls.append(("markdown", value))
+
+    def expander(self, label: str, *, expanded: bool = False):
+        self.calls.append(("expander_open", label))
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.calls.append(("expander_close", ""))
+
+    def table(self, value: Any) -> None:
+        self.calls.append(("table", json.dumps(value)))
+
+    def columns(self, count: int):
+        return (self, self)
+
+
+def test_ui_imports_without_errors(monkeypatch):
+    import importlib
+    import sys
+
+    evt = SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "streamlit", evt)
+    module = importlib.import_module("gateway.ui.platform_app")
+    assert hasattr(module, "main")
+
+
+def test_api_client_list_products(monkeypatch):
+    import gateway.ui.platform_app as platform_app
+
+    stub_body = {"ok": True, "data": {"products": [{"name": "hello_world", "display_name": "Hello World", "flows": ["hello_world"]}]}}
+    monkeypatch.setattr(platform_app.requests, "get", lambda *args, **kwargs: _FakeResponse(stub_body))
+    client = platform_app.ApiClient("https://api.example.com")
+    resp = client.list_products()
+    assert resp.ok
+    assert resp.body["data"]["products"][0]["name"] == "hello_world"
+
+
+def test_product_summary_render(monkeypatch):
+    import gateway.ui.platform_app as platform_app
+
+    stub_st = _FakeStreamlit()
+    monkeypatch.setattr(platform_app, "st", stub_st)
+    products = [{"name": "hello_world", "display_name": "Hello World", "description": "Demo", "flows": ["hello_world"]}]
+    platform_app._render_product_summary(products)
+    assert any(call[0] == "subheader" for call in stub_st.calls)
+    assert any("Hello World" in call[1] for call in stub_st.calls if call[0] == "expander_open")
+
+# tests/unit/test_prompt_renderer.py
+# ==============================
+# Prompt Renderer Tests
+# ==============================
+from __future__ import annotations
+
+import pytest
+
+from core.agents.renderer import render_messages, render_template
+
+
+def test_render_template_resolves_artifacts() -> None:
+    context = {
+        "artifacts": {
+            "tool.data_reader.output": {"summary": "read 2 rows"},
+        },
+        "payload": {},
+    }
+    rendered = render_template(
+        "Dataset: {{artifacts.tool.data_reader.output.summary}}",
+        context,
+    )
+    assert rendered == "Dataset: read 2 rows"
+
+
+def test_render_template_missing_placeholder_raises() -> None:
+    context = {"artifacts": {}, "payload": {}}
+    with pytest.raises(KeyError):
+        render_template("Value: {{artifacts.tool.unknown.output}}", context)
+
+
+def test_render_messages_handles_list() -> None:
+    context = {
+        "artifacts": {
+            "tool.data_reader.output": {"summary": "ok"},
+        },
+        "payload": {"prompt": "hi"},
+    }
+    messages = [
+        {"role": "system", "content": "System {{payload.prompt}}"},
+        {"role": "user", "content": "Dataset {{artifacts.tool.data_reader.output.summary}}"},
+    ]
+    rendered = render_messages(messages, context)
+    assert rendered[0]["content"] == "System hi"
+    assert rendered[1]["content"] == "Dataset ok"

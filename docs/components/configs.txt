@@ -1,0 +1,101 @@
+# configs/app.yaml
+app:
+  env: local
+  debug: false
+  host: 0.0.0.0
+  port: 8000
+  default_product: hello_world
+  default_flow: hello_world
+  api_base_url: "http://localhost:8000"
+  paths:
+    repo_root: .
+    configs_dir: configs
+    secrets_dir: secrets
+    storage_dir: storage
+
+# configs/logging.yaml
+# ==============================
+# Logging & Tracing
+# ==============================
+level: INFO
+console: true
+trace_to_memory: true
+
+redact: true
+redact_patterns:
+  - "sk-[A-Za-z0-9]{20,}"          # common API key shape
+  - "(?i)api[_-]?key\\s*[:=]\\s*\\S+"
+  # Example: email addresses
+  # - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+
+# configs/models.yaml
+# ==============================
+# Model Routing Defaults
+# ==============================
+routing:
+  default_provider: openai
+  default_model: gpt-4o-mini
+
+  # Optional overrides per product.
+  # by_product:
+  #   hello_world:
+  #     model: gpt-4o-mini
+  by_product: {}
+  by_purpose:
+    # Purpose is a routing hint passed by agents/tools.
+    reasoning:
+      model: gpt-4o
+    cheap:
+      model: gpt-4o-mini
+
+openai:
+  # Use api_base only for custom gateways/proxies.
+  api_base: null
+  api_key: null
+  timeout_seconds: 30.0
+
+# configs/policies.yaml
+# ==============================
+# Governance Policies
+# ==============================
+# This file defines the default governance behaviour. Settings follow the schema in
+# core.config.schema.PoliciesConfig and are merged with any per-product overrides.
+
+enforce: true
+allow_full_autonomy: false
+
+# If allowed_tools is empty the policy deems every registered tool allowed
+# unless it is explicitly listed in blocked_tools.
+allowed_tools: []
+blocked_tools: []
+
+# Model routing works the same way — declare global allow/block lists.
+allowed_models: []
+blocked_models: []
+model_max_tokens: 512
+#
+# Example: enforce a tighter max token budget
+# model_max_tokens: 256
+
+# Per-product overrides let you tailor behaviour for a single product.
+# Example below keeps `hello_world` limited to echo_tool and a single model.
+by_product:
+  hello_world:
+    allowed_tools:
+      - echo_tool
+    allowed_models:
+      - gpt-4o-mini
+
+# configs/products.yaml
+# ==============================
+# Product Discovery
+# ==============================
+products_dir: products
+
+# If empty: enable products listed in `enabled` unless auto_enable=true
+enabled: []
+auto_enable: true
+#
+# Example: allowlist specific products
+# enabled:
+#   - hello_world

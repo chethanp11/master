@@ -28,6 +28,7 @@ class ResumeRequest(BaseModel):
     resolved_by: Optional[str] = Field(default=None, description="Optional reviewer identifier.")
     comment: Optional[str] = Field(default=None, description="Optional reviewer comment.")
     approval_payload: Dict[str, Any] = Field(default_factory=dict)
+    user_input_response: Dict[str, Any] = Field(default_factory=dict)
 
 
 def _ok(data: Dict[str, Any], *, meta: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -234,6 +235,7 @@ def resume_run(
     res = engine.resume_run(
         run_id=run_id,
         approval_payload=req.approval_payload,
+        user_input_response=req.user_input_response,
         decision=req.decision,
         resolved_by=req.resolved_by,
         comment=req.comment,

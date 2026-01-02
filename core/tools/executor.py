@@ -162,7 +162,6 @@ def _strip_large_fields(value: Any) -> Any:
         cleaned: Dict[str, Any] = {}
         for key, val in value.items():
             if key in {"content_base64", "file_bytes", "bytes"}:
-                cleaned[key] = {"truncated": True}
                 continue
             if isinstance(val, dict) and key == "output_files":
                 cleaned[key] = _strip_large_fields(val)

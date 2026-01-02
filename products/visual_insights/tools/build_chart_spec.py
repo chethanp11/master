@@ -9,6 +9,7 @@ from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
 ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+ChartInputType = Literal["auto", "line", "bar", "stacked_bar", "scatter", "table"]
 
 
 class ChartData(BaseModel):
@@ -28,7 +29,8 @@ class ChartData(BaseModel):
 class BuildChartSpecInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    chart_type: ChartType
+    chart_type: ChartInputType
+    fallback_chart_type: Optional[ChartType] = None
     title: str
     x: Optional[str] = None
     y: Optional[str] = None
@@ -45,13 +47,16 @@ class BuildChartSpecOutput(BaseModel):
 
 def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
     columns = payload.data.columns
+    chart_type: ChartType = payload.fallback_chart_type or "bar"
+    if payload.chart_type != "auto":
+        chart_type = payload.chart_type  # type: ignore[assignment]
     spec: Dict[str, Any] = {
-        "type": payload.chart_type,
+        "type": chart_type,
         "title": payload.title,
         "data": {"columns": columns, "rows": payload.data.rows},
     }
     encoding: Dict[str, Dict[str, str]] = {}
-    if payload.chart_type == "table":
+    if chart_type == "table":
         spec["encoding"] = encoding
     else:
         if payload.x is None or payload.x not in columns:
@@ -60,12 +65,12 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
             raise ValueError("missing or unknown y field")
         encoding["x"] = {"field": payload.x}
         encoding["y"] = {"field": payload.y}
-        if payload.chart_type == "stacked_bar":
+        if chart_type == "stacked_bar":
             if payload.series is None or payload.series not in columns:
                 raise ValueError("missing or unknown series field")
             encoding["series"] = {"field": payload.series}
         spec["encoding"] = encoding
-    summary = f"built spec for {payload.chart_type}"
+    summary = f"built spec for {chart_type}"
     return BuildChartSpecOutput(chart_spec=spec, summary=summary)
 
 
