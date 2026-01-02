@@ -54,7 +54,7 @@ flowchart TB
     MEM[memory]
     MOD[models]
     KNO[knowledge]
-    LOG[logging/observability]
+    LOG[observability]
   end
   subgraph Gateway
     API[API]
@@ -144,7 +144,7 @@ core/orchestrator/
 - Execute steps in order, honoring retry policies & backoff.
 - Pause execution for HITL approvals and persist approvals.
 - Resume execution deterministically using stored run/step snapshots.
-- Emit trace events for every transition (run, step, tool, approval).
+- Emit trace events for every transition (run, step, tool, approval, user_input, plan proposals).
 
 ### What It Does NOT Do
 - Call models directly.
@@ -185,7 +185,10 @@ sequenceDiagram
     else human approval
       Engine->>Memory: create_approval
       Engine->>Tracer: pending_human
-      Engine-->>Gateway: PENDING_HUMAN
+      Engine-->>Gateway: PENDING_APPROVAL (PENDING_HUMAN)
+    else user input
+      Engine->>Tracer: user_input_requested
+      Engine-->>Gateway: PENDING_USER_INPUT
     end
     Engine->>Memory: update_step
     Engine->>Tracer: step_completed
@@ -209,7 +212,7 @@ Missing values render as `null` for full-token values and as empty strings for i
 **Source of truth:** `core/contracts/flow_schema.py`.
 
 - `FlowDef` is the canonical flow structure.
-- Step types: `agent`, `tool`, `human_approval`, `subflow` (subflow is not implemented in v1).
+- Step types: `agent`, `tool`, `human_approval`, `user_input`, `plan_proposal`, `subflow` (subflow is not implemented in v1).
 - Retry policy is declarative (`max_attempts`, `backoff_seconds`, `retry_on_codes`).
 
 ---
@@ -426,9 +429,11 @@ The CLI calls the orchestrator directly; the UI talks only to the API.
 ```mermaid
 stateDiagram-v2
   [*] --> RUNNING
-  RUNNING --> PENDING_HUMAN: approval needed
-  PENDING_HUMAN --> RUNNING: approved
-  PENDING_HUMAN --> FAILED: rejected
+  RUNNING --> PENDING_APPROVAL: approval needed
+  RUNNING --> PENDING_USER_INPUT: user input needed
+  PENDING_APPROVAL --> RUNNING: approved
+  PENDING_APPROVAL --> FAILED: rejected
+  PENDING_USER_INPUT --> RUNNING: input received
   RUNNING --> COMPLETED: success
   RUNNING --> FAILED: error
   RUNNING --> CANCELLED

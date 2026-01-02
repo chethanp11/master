@@ -160,9 +160,49 @@ Notes:
 Behavior:
 - Pauses execution
 - Persists run and step state
-- Sets run status to PENDING_HUMAN
+- Sets run status to PENDING_APPROVAL (PENDING_HUMAN in storage)
 - Requires explicit resume action
 - Approval context can be supplied in `params` (reason, decision notes, recommended action)
+
+---
+
+### 4.4 User Input Step
+
+- id: collect_input
+  type: user_input
+  params:
+    schema_version: "1.0"
+    form_id: "chart_config"
+    title: "Select chart options"
+    mode: choice_input
+    schema:
+      type: object
+      properties:
+        chart_type:
+          type: string
+          enum: [bar, line]
+    defaults:
+      chart_type: bar
+    required: [chart_type]
+
+Behavior:
+- Pauses execution
+- Sets run status to PENDING_USER_INPUT
+- Requires resume with `user_input_response` payload
+
+---
+
+### 4.5 Plan Proposal Step
+
+- id: propose_plan
+  type: plan_proposal
+  agent: product.plan_agent
+
+Behavior:
+- Invokes a planner agent that returns a structured PlanProposal (JSON)
+- Validates proposal against schema
+- Emits plan proposal trace events
+- Does not execute the plan automatically
 
 ---
 

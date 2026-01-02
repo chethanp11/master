@@ -54,7 +54,7 @@ There is no scaffolding script; create the product layout manually following thi
 
 ## 4. Flow Definitions
 
-Flows live under `flows/*.yaml`. Each flow defines a linear/graphical sequence of steps referencing registered agents/tools or the built-in `human_approval`. Example snippet:
+Flows live under `flows/*.yaml`. Each flow defines a linear/graphical sequence of steps referencing registered agents/tools, `human_approval`, or `user_input`. Example snippet:
 
 ```yaml
 id: hello_world
@@ -118,6 +118,7 @@ Once registered, the gateway exposes:
 - `GET /api/products` + `/api/products/{product}/flows` (driven by manifests + discovery)
 - `POST /api/run/{product}/{flow}` to start flows
 - `POST /api/resume_run/{run_id}` to resolve HITL approvals
+- `POST /api/resume_run/{run_id}` with `user_input_response` to resume `user_input` steps
 - CLI commands (`master list-products`, `master run`, `master resume`, `master approvals`)
 - Streamlit control center (`gateway/ui/platform_app.py`) that lists products, flows, run history, and approvals
 

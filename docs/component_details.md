@@ -45,6 +45,8 @@ flowchart LR
 | `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML/JSON. | Validates and normalizes step ids; no execution or persistence. |
 | `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
+| `core/contracts/user_input_schema.py` | User input contracts | Typed request/response for `user_input` steps. | Supports choice and free-text modes. |
+| `core/contracts/plan_schema.py` | Plan proposal contracts | Structured plan proposal schema. | Used by `plan_proposal` steps. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
 
 ```mermaid
@@ -230,7 +232,7 @@ flowchart TB
 | `gateway/api/http_app.py` | FastAPI factory | Builds API router and app. | `/api` routes wired in `routes_run.py`. |
 | `gateway/api/routes_run.py` | Run routes | Starts/resumes flows and reads runs. | Uses orchestrator + product catalog. |
 | `gateway/cli/main.py` | CLI entry | Argparse CLI for local runs. | Directly calls orchestrator. |
-| `gateway/ui/platform_app.py` | Streamlit UI | Control center for products, runs, approvals. | Talks to API only. |
+| `gateway/ui/platform_app.py` | Streamlit UI | Control center for products, runs, approvals, user inputs. | Talks to API only. |
 
 ---
 

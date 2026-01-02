@@ -87,8 +87,11 @@ sequenceDiagram
   Tool-->>ToolExec: ToolResult
   ToolExec-->>Orchestrator: ToolResult
   Orchestrator->>Observability: append step/tool events
+  Orchestrator-->>Gateway: PENDING_USER_INPUT
+  User->>Gateway: submit input
+  Gateway->>Orchestrator: resume_run (user_input_response)
   Orchestrator->>HITL: create approval
-  Orchestrator-->>Gateway: PENDING_HUMAN
+  Orchestrator-->>Gateway: PENDING_APPROVAL (PENDING_HUMAN)
   User->>Gateway: approve
   Gateway->>Orchestrator: resume_run
   Orchestrator->>Agent: run(step)
@@ -106,6 +109,7 @@ sequenceDiagram
 - Autonomy is checked at run start.
 - Tool calls are checked before execution.
 - Payloads are redacted before persistence/logging.
+- Runs pause only for `user_input` or `human_approval` steps; every state transition is traced.
 
 ```mermaid
 flowchart LR

@@ -126,11 +126,24 @@ HITL is not optional when required.
 
 When HITL is triggered:
 	•	Execution pauses immediately
-	•	Run status transitions to PENDING_HUMAN
+	•	Run status transitions to PENDING_APPROVAL (PENDING_HUMAN in storage)
 	•	Run and step context are persisted
 	•	An approval request is created and tracked
 
 No further execution occurs until resolution.
+
+---
+
+## 4.4 User Input Pause
+
+User input pauses are triggered when:
+- A step type is user_input
+
+Behavior:
+	•	Execution pauses immediately
+	•	Run status transitions to PENDING_USER_INPUT
+	•	Run and step context are persisted
+	•	Resume requires validated `user_input_response`
 
 ---
 
@@ -141,7 +154,7 @@ Flow resumption occurs via:
 POST /api/resume_run/{run_id}
 
 Rules:
-	•	Run must be in PENDING_HUMAN
+	•	Run must be in PENDING_APPROVAL (PENDING_HUMAN in storage)
 	•	Approval decision must exist
 	•	Resume action is fully audited
 
