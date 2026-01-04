@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Run & Product Routes
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 import json
@@ -13,6 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from core.contracts.run_schema import RunOperationResult
+from core.contracts.user_input_schema import UserInputAnswer
 from core.orchestrator.engine import OrchestratorEngine
 from core.utils.product_loader import ProductCatalog, ProductLoadError, ProductMeta
 from gateway.api.deps import get_engine, get_product_catalog, get_memory_router, get_settings
@@ -44,7 +46,7 @@ class ResumeRequest(BaseModel):
     user_input_response: Dict[str, Any] = Field(default_factory=dict)
 
 
-def _ok(data: Dict[str, Any], *, meta: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _ok(data: Dict[str, Any], *, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {"ok": True, "data": data, "error": None, "meta": meta or {}}
 
 
@@ -53,8 +55,8 @@ def _error(
     http_status: int,
     code: str,
     message: str,
-    details: Dict[str, Any] | None = None,
-    meta: Dict[str, Any] | None = None,
+    details: Optional[Dict[str, Any]] = None,
+    meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     payload = {
         "ok": False,
@@ -131,7 +133,7 @@ def _ensure_flow(meta: ProductMeta, flows: List[str], flow: str) -> None:
         )
 
 
-def _respond(result: RunOperationResult, *, meta: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _respond(result: RunOperationResult, *, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if result.ok:
         return _ok(result.data or {}, meta=meta)
     error = result.error
@@ -245,6 +247,33 @@ async def get_run(
     engine: OrchestratorEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
     res = await run_in_threadpool(engine.get_run, run_id=run_id)
+    return _respond(res, meta={"run_id": run_id})
+
+
+@router.get("/runs/{run_id}/pending_input")
+async def get_pending_input(
+    run_id: str,
+    engine: OrchestratorEngine = Depends(get_engine),
+) -> Dict[str, Any]:
+    res = await run_in_threadpool(engine.get_pending_user_input, run_id=run_id)
+    return _respond(res, meta={"run_id": run_id})
+
+
+@router.post("/runs/{run_id}/user_input")
+async def submit_user_input(
+    run_id: str,
+    req: UserInputAnswer,
+    engine: OrchestratorEngine = Depends(get_engine),
+) -> Dict[str, Any]:
+    res = await run_in_threadpool(
+        engine.resume_run,
+        run_id=run_id,
+        approval_payload={},
+        user_input_response=req.model_dump(mode="json"),
+        decision="APPROVED",
+        resolved_by=None,
+        comment=None,
+    )
     return _respond(res, meta={"run_id": run_id})
 
 

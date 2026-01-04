@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Disallow subflow steps in v1
 # ==============================
-from __future__ import annotations
 
 import pytest
 

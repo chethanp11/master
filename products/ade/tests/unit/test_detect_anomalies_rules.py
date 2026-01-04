@@ -1,4 +1,4 @@
-from products.visual_insights.tools.detect_anomalies import (
+from products.ade.tools.detect_anomalies import (
     DetectAnomaliesInput,
     Point,
     detect_anomalies,

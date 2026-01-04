@@ -14,10 +14,12 @@ Intended usage:
 - Orchestrator uses backoff_seconds(...) to sleep externally (if desired)
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Sequence

@@ -1,5 +1,6 @@
-# Visual Insights agent
 from __future__ import annotations
+
+# Analytical Decision Engine agent
 
 from typing import Any, Dict
 

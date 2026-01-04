@@ -1,3 +1,4 @@
+
 # ==============================
 # Template Rendering
 # ==============================
@@ -7,10 +8,11 @@ Shared template rendering helpers for orchestrator/agents.
 Supports strict rendering for message templates and lenient rendering for tool params.
 """
 
+from __future__ import annotations
+
+
 # Public surface; keep deterministic and minimal.
 __all__ = ["render_template", "render_messages", "render_params"]
-
-from __future__ import annotations
 
 import json
 import re

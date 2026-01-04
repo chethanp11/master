@@ -1,10 +1,10 @@
-# Visual Insights v1
+# Analytical Decision Engine (ADE) v1
 
-Visual Insights v1 converts a CSV dataset into a single insight card with a chart, narrative, and export artifacts. The flow is governed end-to-end by the core runtime and includes approvals plus user input for chart configuration.
+Analytical Decision Engine (ADE) v1 converts a CSV dataset into a single insight card with a chart, narrative, and export artifacts. The flow is governed end-to-end by the core runtime and includes approvals plus user input for chart configuration.
 
 ## v1 Constraints
 - Inputs: CSV files only.  
-- Flow: `visualization` (fixed step order).  
+- Flow: `ade_v1` (fixed step order).  
 - Chart types: `line`, `bar`, `stacked_bar`, `scatter`, `table`.  
 - Exports: JSON stub plus optional HTML/PDF based on user input.  
 - Governance: trace events, citations, and redaction enforced by core hooks.
@@ -16,11 +16,11 @@ Visual Insights v1 converts a CSV dataset into a single insight card with a char
 - `agents/` → stateless decision makers used by YAML flows (planning + dashboard).  
 - `tools/` → deterministic helpers (anomaly, driver, chart spec, assembly, export).  
 - `tests/` → unit + integration coverage for the YAML flow.  
-- `docs/` → architecture and requirements for Visual Insights v1.
+- `docs/` → architecture and requirements for ADE v1.
 
 ## Running Tests
-- Unit tests: `pytest products/visual_insights/tests/unit/`  
-- Integration smoke: `pytest products/visual_insights/tests/integration/test_vi_orchestrator_flow.py`
+- Unit tests: `pytest products/ade/tests/unit/`  
+- Integration smoke: `pytest products/ade/tests/integration/test_ade_orchestrator_flow.py`
 
 ## Configuration
-Edit `products/visual_insights/config/product.yaml` to adjust inputs, max cards, mode defaults, and governance toggles.
+Edit `products/ade/config/product.yaml` to adjust inputs, max cards, mode defaults, and governance toggles.

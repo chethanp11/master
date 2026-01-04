@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Concurrency Smoke
 # ==============================
-from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

@@ -1,3 +1,4 @@
+
 # ==============================
 # Observability Store (Memory Layer)
 # ==============================
@@ -12,9 +13,10 @@ Layout per run:
 - observability/<product>/<run_id>/output/*
 """
 
-__all__ = ["ObservabilityStore"]
-
 from __future__ import annotations
+
+
+__all__ = ["ObservabilityStore"]
 
 import base64
 import hashlib
@@ -42,6 +44,9 @@ class ObservabilityStore:
         for path in paths.values():
             path.mkdir(parents=True, exist_ok=True)
         return paths
+
+    def ensure_run_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
+        return self.ensure_dirs(product=product, run_id=run_id)
 
     def ensure_staging_dirs(self, *, product: str) -> Dict[str, Path]:
         base = self.products_root / product / "staging"
@@ -188,7 +193,9 @@ class ObservabilityStore:
         paths = self.ensure_dirs(product=product, run_id=run_id)
         runtime_path = paths["runtime"] / "events.jsonl"
         line = json.dumps(payload, ensure_ascii=False)
-        runtime_path.open("a", encoding="utf-8").write(line + "\n")
+        with runtime_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+            handle.flush()
         return runtime_path
 
     def write_output_files(self, *, product: str, run_id: str, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

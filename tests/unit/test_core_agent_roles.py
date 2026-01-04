@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Core role agents
 # ==============================
-from __future__ import annotations
 
 import json
 

@@ -12,13 +12,15 @@ Intended usage:
 - Gateway/UI reads these statuses for run tracking and approvals
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from enum import Enum
-from typing import FrozenSet
+from typing import FrozenSet, Union
 
 from core.contracts.run_schema import RunStatus as RunStatus  # re-export
 from core.contracts.run_schema import StepStatus as StepStatus  # re-export
@@ -39,6 +41,7 @@ RUN_ACTIVE: FrozenSet[RunStatus] = frozenset(
         RunStatus.RUNNING,
         RunStatus.PENDING_HUMAN,
         RunStatus.PENDING_USER_INPUT,
+        RunStatus.PAUSED_WAITING_FOR_USER,
     }
 )
 
@@ -55,6 +58,7 @@ STEP_ACTIVE: FrozenSet[StepStatus] = frozenset(
         StepStatus.RUNNING,
         StepStatus.PENDING_HUMAN,
         StepStatus.PENDING_USER_INPUT,
+        StepStatus.PAUSED_WAITING_FOR_USER,
     }
 )
 
@@ -72,6 +76,7 @@ class RunState(str, Enum):
 _RUN_STATUS_TO_STATE = {
     RunStatus.RUNNING: RunState.RUNNING,
     RunStatus.PENDING_USER_INPUT: RunState.PENDING_USER_INPUT,
+    RunStatus.PAUSED_WAITING_FOR_USER: RunState.PENDING_USER_INPUT,
     RunStatus.PENDING_HUMAN: RunState.PENDING_APPROVAL,
     RunStatus.FAILED: RunState.FAILED,
     RunStatus.COMPLETED: RunState.COMPLETED,
@@ -87,7 +92,7 @@ _ALLOWED_TRANSITIONS = {
 }
 
 
-def to_run_state(status: RunStatus | str) -> RunState:
+def to_run_state(status: Union[RunStatus, str]) -> RunState:
     if isinstance(status, RunStatus):
         return _RUN_STATUS_TO_STATE.get(status, RunState.FAILED)
     try:
@@ -96,7 +101,7 @@ def to_run_state(status: RunStatus | str) -> RunState:
         return RunState.FAILED
 
 
-def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -> bool:
+def is_valid_run_transition(current: Union[RunStatus, str], target: Union[RunStatus, str]) -> bool:
     current_state = to_run_state(current)
     target_state = to_run_state(target)
     if current_state == target_state:
@@ -104,6 +109,6 @@ def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -
     return target_state in _ALLOWED_TRANSITIONS.get(current_state, set())
 
 
-def require_valid_transition(current: RunStatus | str, target: RunStatus | str) -> None:
+def require_valid_transition(current: Union[RunStatus, str], target: Union[RunStatus, str]) -> None:
     if not is_valid_run_transition(current, target):
         raise ValueError(f"Invalid run state transition: {to_run_state(current).value} -> {to_run_state(target).value}")

@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Flow schema user_input steps
 # ==============================
-from __future__ import annotations
 
 import pytest
 

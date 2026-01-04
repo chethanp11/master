@@ -1,29 +1,30 @@
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from products.visual_insights.contracts.card import InsightCard, KeyMetric
-from products.visual_insights.contracts.citations import CitationRef, CsvCitation
-from products.visual_insights.tools.export_pdf import _build_stub_payload
+from products.ade.contracts.card import InsightCard, KeyMetric
+from products.ade.contracts.citations import CitationRef, CsvCitation
+from products.ade.tools.export_rendering import _build_stub_payload
 
 
 def _make_card(rows: List[List[Any]]) -> InsightCard:
     columns = ["Expense", "H22024", "H2025", "H2026", "H2027", "H2028", "H2029"]
     chart_spec: Dict[str, Any] = {
         "type": "bar",
-        "title": "Visualization for visual_insights_input.csv",
+        "title": "Visualization for ade_input.csv",
         "data": {"columns": columns, "rows": rows},
         "encoding": {"x": {"field": "Expense"}, "y": {"field": "H22024"}},
     }
     citations = [
         CitationRef(
             type="csv",
-            csv=CsvCitation(dataset_id="visual_insights_input.csv", columns=columns, filters=[]),
+            csv=CsvCitation(dataset_id="ade_input.csv", columns=columns, filters=[]),
         )
     ]
     return InsightCard(
         card_id="card_1",
-        title="Visualization for visual_insights_input.csv",
+        title="Visualization for ade_input.csv",
         chart_type="bar",
         chart_spec=chart_spec,
         key_metrics=[KeyMetric(name="row_count", value=len(rows))],

@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from statistics import mean, pstdev
@@ -188,6 +189,7 @@ def _detect_anomalies_from_table(data: TableData, payload: DetectAnomaliesInput)
 
 
 def _to_float(value: Any) -> Optional[float]:
+    # TODO: Keep local conversion to avoid cross-tool coupling; consolidate if a shared util is introduced.
     if isinstance(value, (int, float)):
         return float(value)
     try:

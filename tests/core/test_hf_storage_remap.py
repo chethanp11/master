@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Hugging Face Storage Remap Tests
 # ==============================
-from __future__ import annotations
 
 import textwrap
 

@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T13:00:37.955367+00:00
+# captured_at: 2026-01-04T15:55:09.055965+00:00
 
 # core/__init__.py
 
@@ -2374,6 +2374,581 @@ class Redactor(SecurityRedactor):
     """Compatibility alias used by older modules/tests."""
 
     pass
+
+# core/knowledge/__init__.py
+
+
+# core/knowledge/base.py
+# ==============================
+# Knowledge Layer Contracts
+# ==============================
+"""
+Core knowledge abstractions (product-agnostic).
+
+Design goals (v1):
+- Keep minimal and stable.
+- Avoid vendor/LLM calls here.
+- Provide a small, typed interface for:
+  - Ingestion (text + metadata)
+  - Retrieval (query -> ranked chunks with source metadata)
+
+Embedding is optional in v1. If embeddings are absent, retrieval can degrade to lexical scoring.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class Chunk(BaseModel):
+    """
+    Retrieval result chunk.
+
+    Fields mirror ingestion metadata so callers can trace provenance.
+    """
+
+    chunk_id: str
+    text: str
+    source: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    score: float = 0.0
+
+
+class IngestChunk(BaseModel):
+    """
+    Input payload for upserting chunks into the store.
+    """
+
+    collection: str = Field(default="default", min_length=1)
+    doc_id: str = Field(..., min_length=1)
+    chunk_id: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1)
+    source: str = Field(..., min_length=1)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class IngestResult(BaseModel):
+    ok: bool
+    inserted: int = 0
+    updated: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+    @property
+    def count(self) -> int:
+        return self.inserted + self.updated
+
+
+class Query(BaseModel):
+    collection: str = Field(default="default", min_length=1)
+    text: str = Field(..., min_length=1)
+    top_k: int = Field(default=5, ge=1, le=100)
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    use_embeddings: bool = False  # placeholder for future hybrid routing
+
+
+class VectorStoreStats(BaseModel):
+    total_chunks: int
+    store_path: str
+    collections: Dict[str, int] = Field(default_factory=dict)
+
+
+class VectorStore:
+    """
+    Interface-like base for vector stores.
+    Concrete backends should implement the abstract operations below.
+    """
+
+    def upsert(self, items: List[IngestChunk]) -> IngestResult:  # pragma: no cover
+        raise NotImplementedError
+
+    def query(self, q: Query) -> List[Chunk]:  # pragma: no cover
+        raise NotImplementedError
+
+    def delete(
+        self,
+        *,
+        collection: str,
+        doc_ids: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> int:  # pragma: no cover
+        raise NotImplementedError
+
+    def stats(self, collection: Optional[str] = None) -> VectorStoreStats:  # pragma: no cover
+        raise NotImplementedError
+
+    def clear(self) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+# core/knowledge/retriever.py
+# ==============================
+# Retriever
+# ==============================
+"""
+High-level retrieval orchestration.
+
+v1:
+- Thin wrapper over VectorStore.
+- Adds minor conveniences (defaults, safe handling).
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from core.knowledge.base import Chunk, Query, VectorStore
+
+
+class Retriever:
+    def __init__(self, store: VectorStore) -> None:
+        self.store = store
+
+    def retrieve(
+        self,
+        *,
+        query: str,
+        collection: str = "default",
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        use_embeddings: bool = False,
+    ) -> List[Chunk]:
+        q = Query(
+            collection=collection,
+            text=query,
+            top_k=top_k,
+            filters=filters or {},
+            use_embeddings=use_embeddings,
+        )
+        return self.store.query(q)
+
+# core/knowledge/structured.py
+# ==============================
+# Structured Data Access (v1)
+# ==============================
+"""
+Structured access is intentionally minimal in v1.
+
+Supported (v1):
+- Load CSV into Pandas DataFrame (optional dependency).
+- Basic filtering and column selection.
+
+Not supported (v1):
+- Live SQL connectors (planned later).
+- Text-to-SQL (planned later).
+
+Keep this module side-effect free (no persistence).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+
+@dataclass(frozen=True)
+class StructuredQuery:
+    path: str
+    where: Optional[Dict[str, Any]] = None  # exact match filters
+    select: Optional[List[str]] = None
+    limit: int = 100
+
+
+def _load_with_pandas(path: str) -> List[Dict[str, Any]]:
+    import pandas as pd  # type: ignore
+
+    df = pd.read_csv(path)
+    return df.to_dict(orient="records")
+
+
+def _load_with_csv_module(path: str) -> List[Dict[str, Any]]:
+    import csv
+
+    with open(path, "r", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        return [dict(row) for row in reader]
+
+
+def load_table(path: str) -> List[Dict[str, Any]]:
+    """
+    Load a CSV file into a list of dict rows.
+
+    Prefers pandas for speed, but falls back to the csv module if unavailable.
+    """
+    try:
+        return _load_with_pandas(path)
+    except Exception:
+        return _load_with_csv_module(path)
+
+
+def filter_rows(rows: List[Dict[str, Any]], filters: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not filters:
+        return rows
+    filtered: List[Dict[str, Any]] = []
+    for row in rows:
+        ok = True
+        for key, expected in filters.items():
+            if key not in row or row[key] != expected:
+                ok = False
+                break
+        if ok:
+            filtered.append(row)
+    return filtered
+
+
+def summarize_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "row_count": len(rows),
+        "columns": {},
+    }
+    if not rows:
+        return summary
+    columns = rows[0].keys()
+    for col in columns:
+        values = [row.get(col) for row in rows]
+        non_null = [v for v in values if v not in (None, "")]
+        summary["columns"][col] = {
+            "non_null": len(non_null),
+            "unique": len(set(non_null)),
+        }
+    return summary
+
+
+class StructuredAccessor:
+    def query_csv(self, q: StructuredQuery) -> List[Dict[str, Any]]:
+        rows = load_table(q.path)
+        rows = filter_rows(rows, q.where)
+
+        if q.select:
+            missing = [col for col in q.select if rows and col not in rows[0]]
+            if missing:
+                raise ValueError(f"Select columns not found: {missing}")
+            rows = [{col: row.get(col) for col in q.select} for row in rows]
+
+        if q.limit and q.limit > 0:
+            rows = rows[: int(q.limit)]
+        return rows
+
+    def summarize(self, path: str) -> Dict[str, Any]:
+        rows = load_table(path)
+        return summarize_rows(rows)
+
+# core/knowledge/vector_store.py
+# ==============================
+# Minimal Local Vector Store (SQLite)
+# ==============================
+"""
+A minimal SQLite-backed store for text chunks + metadata.
+
+v1 choices:
+- Store chunks in SQLite at a configurable path (default under storage/vectors/).
+- Support lexical retrieval (token overlap / Jaccard) by default.
+- Optional embeddings support: store embedding JSON if provided by caller (future).
+  Retrieval can still be lexical unless embeddings are wired in.
+
+No LLM calls here. No external vector DB dependencies.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import time
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.knowledge.base import Chunk, IngestChunk, IngestResult, Query, VectorStore, VectorStoreStats
+
+
+def _now_ts() -> int:
+    return int(time.time())
+
+
+def _new_chunk_id() -> str:
+    return f"chk_{uuid.uuid4().hex}"
+
+
+def _tokenize(text: str) -> List[str]:
+    # Simple tokenizer for v1 lexical scoring.
+    # Lowercase, split on whitespace, strip punctuation-ish edges.
+    out: List[str] = []
+    for raw in text.lower().split():
+        tok = raw.strip(".,;:!?()[]{}\"'`")
+        if tok:
+            out.append(tok)
+    return out
+
+
+def _jaccard(a: List[str], b: List[str]) -> float:
+    sa, sb = set(a), set(b)
+    if not sa or not sb:
+        return 0.0
+    inter = len(sa.intersection(sb))
+    union = len(sa.union(sb))
+    return float(inter) / float(union) if union else 0.0
+
+
+class SqliteVectorStore(VectorStore):
+    """
+    SQLite-backed chunk store.
+
+    Table schema (v1):
+      knowledge_chunks(
+        collection TEXT NOT NULL,
+        doc_id TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        source TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        embedding_json TEXT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (collection, doc_id, chunk_id)
+      )
+    """
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+        self._ensure_dir()
+        self._ensure_schema()
+
+    def _ensure_dir(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        return conn
+
+    def _ensure_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS knowledge_chunks (
+                    collection TEXT NOT NULL,
+                    doc_id TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    embedding_json TEXT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    PRIMARY KEY (collection, doc_id, chunk_id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chunks_collection ON knowledge_chunks(collection)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chunks_doc ON knowledge_chunks(collection, doc_id)"
+            )
+            conn.commit()
+
+    def upsert(self, items: List[IngestChunk]) -> IngestResult:
+        if not items:
+            return IngestResult(ok=True, inserted=0, updated=0)
+
+        errors: List[str] = []
+        inserted = 0
+        updated = 0
+        now = _now_ts()
+
+        with self._connect() as conn:
+            for it in items:
+                try:
+                    meta = dict(it.metadata or {})
+                    meta.setdefault("doc_id", it.doc_id)
+                    meta.setdefault("chunk_id", it.chunk_id)
+                    meta.setdefault("source", it.source)
+                    meta.setdefault("collection", it.collection)
+                    payload = (
+                        it.collection,
+                        it.doc_id,
+                        it.chunk_id,
+                        it.text,
+                        it.source,
+                        json.dumps(meta, ensure_ascii=False),
+                        None,
+                        now,
+                        now,
+                    )
+                    exists = conn.execute(
+                        """
+                        SELECT 1 FROM knowledge_chunks
+                        WHERE collection=? AND doc_id=? AND chunk_id=?
+                        """,
+                        (it.collection, it.doc_id, it.chunk_id),
+                    ).fetchone()
+                    conn.execute(
+                        """
+                        INSERT INTO knowledge_chunks(
+                            collection, doc_id, chunk_id, text, source,
+                            metadata_json, embedding_json, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(collection, doc_id, chunk_id)
+                        DO UPDATE SET
+                            text=excluded.text,
+                            source=excluded.source,
+                            metadata_json=excluded.metadata_json,
+                            updated_at=excluded.updated_at
+                        """,
+                        payload,
+                    )
+                    if exists:
+                        updated += 1
+                    else:
+                        inserted += 1
+                except Exception as e:  # pragma: no cover - error path
+                    errors.append(str(e))
+            conn.commit()
+        # ensure counts sum even if items empty
+        remainder = len(items) - (inserted + updated)
+        if remainder > 0 and errors:
+            # errors already captured; keep counts as-is
+            pass
+        elif remainder > 0:
+            inserted += remainder
+
+        ok = len(errors) == 0
+        return IngestResult(ok=ok, inserted=inserted, updated=updated, errors=errors)
+
+    def query(self, q: Query) -> List[Chunk]:
+        top_k = max(1, int(q.top_k or 5))
+        q_tokens = _tokenize(q.text)
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT doc_id, chunk_id, text, source, metadata_json
+                FROM knowledge_chunks
+                WHERE collection=?
+                """,
+                (q.collection,),
+            ).fetchall()
+
+        scored: List[Chunk] = []
+        for row in rows:
+            try:
+                meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+            except Exception:
+                meta = {}
+
+            if q.filters and not self._passes_filters(row, meta, q.filters):
+                continue
+
+            score = _jaccard(q_tokens, _tokenize(row["text"]))
+            if score <= 0.0:
+                continue
+
+            scored.append(
+                Chunk(
+                    chunk_id=row["chunk_id"],
+                    text=row["text"],
+                    source=row["source"],
+                    metadata=meta,
+                    score=score,
+                )
+            )
+
+        scored.sort(key=lambda c: c.score, reverse=True)
+        return scored[:top_k]
+
+    def delete(
+        self,
+        *,
+        collection: str,
+        doc_ids: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        removed = 0
+        with self._connect() as conn:
+            if doc_ids:
+                placeholders = ",".join("?" for _ in doc_ids)
+                cur = conn.execute(
+                    f"DELETE FROM knowledge_chunks WHERE collection=? AND doc_id IN ({placeholders})",
+                    (collection, *doc_ids),
+                )
+                removed += cur.rowcount
+            elif filters:
+                rows = conn.execute(
+                    """
+                    SELECT doc_id, chunk_id, metadata_json
+                    FROM knowledge_chunks
+                    WHERE collection=?
+                    """,
+                    (collection,),
+                ).fetchall()
+                targets: List[Tuple[str, str]] = []
+                for row in rows:
+                    try:
+                        meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+                    except Exception:
+                        meta = {}
+                    if self._passes_filters(row, meta, filters):
+                        targets.append((row["doc_id"], row["chunk_id"]))
+                for doc_id, chunk_id in targets:
+                    cur = conn.execute(
+                        """
+                        DELETE FROM knowledge_chunks
+                        WHERE collection=? AND doc_id=? AND chunk_id=?
+                        """,
+                        (collection, doc_id, chunk_id),
+                    )
+                    removed += cur.rowcount
+            else:
+                cur = conn.execute(
+                    "DELETE FROM knowledge_chunks WHERE collection=?",
+                    (collection,),
+                )
+                removed += cur.rowcount
+            conn.commit()
+        return removed
+
+    def stats(self, collection: Optional[str] = None) -> VectorStoreStats:
+        collections: Dict[str, int] = {}
+        total = 0
+        with self._connect() as conn:
+            if collection:
+                cur = conn.execute(
+                    "SELECT COUNT(1) FROM knowledge_chunks WHERE collection=?",
+                    (collection,),
+                )
+                total = int(cur.fetchone()[0])
+                collections[collection] = total
+            else:
+                cur = conn.execute(
+                    "SELECT collection, COUNT(1) FROM knowledge_chunks GROUP BY collection"
+                )
+                rows = cur.fetchall()
+                for coll, cnt in rows:
+                    collections[coll] = int(cnt)
+                    total += int(cnt)
+        return VectorStoreStats(total_chunks=total, store_path=self.db_path, collections=collections)
+
+    def clear(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM knowledge_chunks")
+            conn.commit()
+
+    def _passes_filters(self, row: sqlite3.Row, meta: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        for key, expected in filters.items():
+            if key == "doc_id":
+                if row["doc_id"] != expected:
+                    return False
+                continue
+            if key == "source":
+                if row["source"] != expected:
+                    return False
+                continue
+            if meta.get(key) != expected:
+                return False
+        return True
 
 # core/memory/__init__.py
 
@@ -5102,17 +5677,17 @@ class OrchestratorEngine:
                             "error": {"message": str(exc), "type": type(exc).__name__},
                         },
                     )
-                self._transition_run_status(
-                    run_id=run_ctx.run_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    current_status=current_status,
-                    target_status=RunStatus.FAILED,
-                    step_id=step_id,
-                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
-                    reason="user_input_invalid_request",
-                )
-                current_status = RunStatus.FAILED
+                    self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.FAILED,
+                        step_id=step_id,
+                        summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                        reason="user_input_invalid_request",
+                    )
+                    current_status = RunStatus.FAILED
                     self._emit_event(
                         kind="step_failed",
                         run_id=run_ctx.run_id,
@@ -5250,16 +5825,16 @@ class OrchestratorEngine:
             idx = next_index
 
         if last_result_data is None:
-        self._transition_run_status(
-            run_id=run_ctx.run_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            current_status=current_status,
-            target_status=RunStatus.FAILED,
-            step_id="output",
-            summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
-            reason="missing_run_output",
-        )
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=current_status,
+                target_status=RunStatus.FAILED,
+                step_id="output",
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
+                reason="missing_run_output",
+            )
             self._emit_event(
                 kind="run_failed",
                 run_id=run_ctx.run_id,

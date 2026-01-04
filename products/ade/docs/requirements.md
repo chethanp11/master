@@ -1,7 +1,7 @@
-# Visual Insights — Requirements (v1)
+# Analytical Decision Engine — Requirements (v1)
 
 ## Objective
-Visual Insights turns a CSV dataset into a single, traceable insight card with a chart, narrative, and exportable artifacts. The workflow is deterministic for tools and governed end-to-end by the core runtime.
+Analytical Decision Engine turns a CSV dataset into a single, traceable insight card with a chart, narrative, and exportable artifacts. The workflow is deterministic for tools and governed end-to-end by the core runtime.
 
 ---
 
@@ -12,7 +12,7 @@ Visual Insights turns a CSV dataset into a single, traceable insight card with a
 - Optional `prompt` text used for chart recommendation and narrative context.
 
 ### Flow Behavior
-- One flow: `visualization`.
+- One flow: `ade_v1`.
 - Step order is fixed by the YAML flow definition.
 - Two approval gates: one before chart configuration and one before export.
 - One user-input form (`chart_config`) to capture chart options and output format.
@@ -20,9 +20,9 @@ Visual Insights turns a CSV dataset into a single, traceable insight card with a
 ### Outputs
 - `InsightCard` object from `assemble_insight_card`.
 - Export artifacts:
-  - JSON stub (`visualization_stub.json`)
-  - Optional HTML (`visualization.html`)
-  - Optional PDF (`visualization.pdf`)
+  - JSON stub (`ade_stub.json`)
+  - Optional HTML (`ade.html`)
+  - Optional PDF (`ade.pdf`)
 
 ### Allowed Chart Types
 `line`, `bar`, `stacked_bar`, `scatter`, `table`.

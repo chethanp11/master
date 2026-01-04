@@ -1,13 +1,14 @@
+
 from __future__ import annotations
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+from products.ade.tools.build_chart_spec import ChartType
 
 
 class RecommendChartInput(BaseModel):
@@ -26,9 +27,13 @@ class RecommendChartOutput(BaseModel):
 
     chart_type: ChartType
     rationale: str
+    purpose: str = "evidence_rendering"
+    caveats: List[str] = []
+    optional: bool = True
 
 
 def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
+    caveats: List[str] = ["heuristic_only", "does_not_influence_analysis"]
     if payload.has_time and payload.has_y_numeric:
         chart_type: ChartType = "line"
         rationale = "time series + numeric target -> line chart"
@@ -45,7 +50,11 @@ def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
         chart_type = "table"
         rationale = "fallback to table when chart heuristics do not match"
 
-    return RecommendChartOutput(chart_type=chart_type, rationale=rationale)
+    return RecommendChartOutput(
+        chart_type=chart_type,
+        rationale=rationale,
+        caveats=caveats,
+    )
 
 
 class RecommendChartTool(BaseTool):

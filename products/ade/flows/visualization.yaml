@@ -1,17 +1,19 @@
 # ==============================
-# Flow: overview
+# Flow: visualization
 # ==============================
 # Golden path:
-#   1) Read dataset summary
-#   2) Agent produces dashboard narrative
+#   1) Interpret intent and plan
+#   2) Read dataset evidence
+#   3) Evaluate sufficiency and run hypothesis tests
+#   4) Assemble decision packet and render HTML
 
 id: "visualization"
 version: "1.0.0"
-description: "Data reader -> approval -> dashboard agent summary"
+description: "Deterministic ADE decision packet generation"
 autonomy_level: "suggest_only"
 
 steps:
-  - id: "plan"
+  - id: "intent_interpretation"
     type: "agent"
     backend: "local"
     agent: "planning_agent"
@@ -27,7 +29,76 @@ steps:
       max_attempts: 2
       backoff_seconds: 1
 
-  - id: "detect_anomalies"
+  - id: "sufficiency_eval"
+    type: "agent"
+    backend: "local"
+    agent: "sufficiency_evaluator"
+    params: {}
+
+  - id: "select_focus_metric"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "select_focus_metric"
+      title: "Select focus metric"
+      prompt: "Which metric should the analysis focus on?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "mean"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["mean", "median", "growth", "outliers"]
+
+  - id: "select_chart_type"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "select_chart_type"
+      title: "Select chart type"
+      prompt: "Which chart type should be used for evidence?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "bar"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["bar", "line", "stacked"]
+
+  - id: "confirm_time_axis"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "confirm_time_axis"
+      title: "Confirm time axis"
+      prompt: "Treat H22024..H2029 as time buckets?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "yes"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["yes", "no"]
+
+  - id: "planning"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "compute_anomalies"
     type: "tool"
     backend: "local"
     tool: "detect_anomalies"
@@ -36,145 +107,75 @@ steps:
       data: "{{artifacts.tool.data_reader.output.data}}"
       min_points: 3
 
-  - id: "recommend_chart"
+  - id: "hypothesis_data_outage"
     type: "tool"
     backend: "local"
-    tool: "recommend_chart"
+    tool: "hypothesis_test_data_outage"
     params:
-      intent: "{{payload.prompt}}"
-      has_time: "{{artifacts.tool.data_reader.output.has_time}}"
-      has_category: "{{artifacts.tool.data_reader.output.has_category}}"
-      has_x_numeric: "{{artifacts.tool.data_reader.output.has_x_numeric}}"
-      has_y_numeric: "{{artifacts.tool.data_reader.output.has_y_numeric}}"
-      wants_composition: false
+      series: "{{artifacts.tool.data_reader.output.series}}"
 
-  - id: "summarize"
-    type: "agent"
-    backend: "local"
-    agent: "dashboard_agent"
-    params:
-      template: "Dashboard summary: {summary}"
-
-  - id: "llm_review"
-    type: "agent"
-    backend: "local"
-    agent: "llm_reasoner"
-    params:
-      purpose: "INSIGHT"
-      prompt: "Write a concise narrative for the dashboard. Dataset: {{artifacts.tool.data_reader.output.summary}}. Anomalies: {{artifacts.tool.detect_anomalies.output.summary}} (details: {{artifacts.tool.detect_anomalies.output.anomalies}}). Chart: {{artifacts.tool.recommend_chart.output.chart_type}}. Mention at least one concrete pattern if present."
-      max_tokens: 200
-
-  - id: "approval"
-    type: "human_approval"
-    title: "Approve visualization inputs"
-    message: "Approve the dataset summary before generating visuals."
-    params:
-      approval_context:
-        reason: "Approve dataset summary and chart recommendation before building visuals."
-        decision_notes:
-          - "Dataset parsed and summarized."
-          - "Anomaly check completed."
-          - "Chart recommendation computed."
-        recommended_action: "APPROVE"
-    form:
-      fields:
-        - name: "approved"
-          type: "boolean"
-          required: true
-        - name: "notes"
-          type: "string"
-          required: false
-
-  - id: "chart_config"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "chart_config"
-      title: "Select chart options"
-      description: "Choose chart and metric settings before export."
-      schema:
-        type: "object"
-        properties:
-          chart_type:
-            type: "string"
-            enum: ["auto", "bar", "line", "scatter"]
-          primary_metric:
-            type: "string"
-            enum: ["sum", "mean", "median", "min", "max"]
-          output_format:
-            type: "string"
-            enum: ["html", "pdf", "both"]
-      defaults:
-        chart_type: "auto"
-        primary_metric: "sum"
-        output_format: "both"
-      required: ["chart_type", "primary_metric", "output_format"]
-
-  - id: "build_chart_spec"
+  - id: "hypothesis_seasonality"
     type: "tool"
     backend: "local"
-    tool: "build_chart_spec"
+    tool: "hypothesis_test_seasonality"
     params:
-      chart_type: "{{artifacts.user_input.chart_config.values.chart_type}}"
-      fallback_chart_type: "{{artifacts.tool.recommend_chart.output.chart_type}}"
-      title: "Visualization for {{payload.dataset}}"
-      x: "{{artifacts.tool.data_reader.output.x_field}}"
-      y: "{{artifacts.tool.data_reader.output.y_field}}"
-      series: "{{artifacts.tool.data_reader.output.category_field}}"
-      data: "{{artifacts.tool.data_reader.output.data}}"
+      series: "{{artifacts.tool.data_reader.output.series}}"
 
-  - id: "assemble_card"
+  - id: "assemble_decision_packet"
     type: "tool"
     backend: "local"
-    tool: "assemble_insight_card"
+    tool: "assemble_decision_packet"
     params:
-      card_id: "card_1"
-      title: "Visualization for {{payload.dataset}}"
-      chart_type: "{{artifacts.tool.build_chart_spec.output.chart_spec.type}}"
-      chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
-      narrative: "{{artifacts.agent.llm_reasoner.output.content}}"
-      primary_metric: "{{artifacts.user_input.chart_config.values.primary_metric}}"
-      anomaly_summary: "{{artifacts.tool.detect_anomalies.output.summary}}"
-      anomalies: "{{artifacts.tool.detect_anomalies.output.anomalies}}"
-      key_metrics:
-        - name: "row_count"
-          value: "{{artifacts.tool.data_reader.output.row_count}}"
-      citations:
-        - type: "csv"
-          csv:
-            dataset_id: "{{payload.dataset}}"
-            columns: "{{artifacts.tool.data_reader.output.columns}}"
-            filters: []
+      question: "{{payload.prompt}}"
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.select_focus_metric.values.selection}}. Chart: {{artifacts.user_input.select_chart_type.values.selection}}. Time axis: {{artifacts.user_input.confirm_time_axis.values.selection}}."
+      confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
       assumptions:
-        - "Chart generated from uploaded dataset."
+        - "Inputs reflect the provided dataset."
+        - "No external data sources are used."
+      limitations:
+        - "Hypothesis checks are heuristic."
+        - "Evidence tables are limited to uploaded rows."
+      trace_refs:
+        - step_id: "read"
+        - step_id: "compute_anomalies"
+        - step_id: "hypothesis_data_outage"
+        - step_id: "hypothesis_seasonality"
+        - user_inputs:
+            focus_metric: "{{artifacts.user_input.select_focus_metric.values.selection}}"
+            chart_type: "{{artifacts.user_input.select_chart_type.values.selection}}"
+            time_axis: "{{artifacts.user_input.confirm_time_axis.values.selection}}"
+        - user_inputs:
+            focus_metric: "{{artifacts.user_input.select_focus_metric.values.selection}}"
+            chart_type: "{{artifacts.user_input.select_chart_type.values.selection}}"
+            time_axis: "{{artifacts.user_input.confirm_time_axis.values.selection}}"
+      sections:
+        - section_id: "sufficiency"
+          title: "Data sufficiency"
+          intent: "{{payload.prompt}}"
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}."
+          claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
+          visuals:
+            - table:
+                columns: "{{artifacts.tool.data_reader.output.columns}}"
+                rows: "{{artifacts.tool.data_reader.output.rows}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
+        - section_id: "hypotheses"
+          title: "Hypothesis checks"
+          intent: "Evaluate alternative explanations"
+          narrative: "Data outage: {{artifacts.tool.hypothesis_test_data_outage.output.status}} ({{artifacts.tool.hypothesis_test_data_outage.output.reasoning}}). Seasonality: {{artifacts.tool.hypothesis_test_seasonality.output.status}} ({{artifacts.tool.hypothesis_test_seasonality.output.reasoning}})."
+          claim_strength: "medium"
+          rejected_alternatives:
+            - "data_outage={{artifacts.tool.hypothesis_test_data_outage.output.status}}"
+            - "seasonality={{artifacts.tool.hypothesis_test_seasonality.output.status}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
 
-  - id: "approval_export"
-    type: "human_approval"
-    title: "Approve export"
-    message: "Approve exporting the visualization."
-    params:
-      approval_context:
-        reason: "Approve exporting the visualization output."
-        decision_notes:
-          - "Chart spec built."
-          - "Insight card assembled."
-          - "Export will generate PDF and stub."
-        recommended_action: "APPROVE"
-    form:
-      fields:
-        - name: "approved"
-          type: "boolean"
-          required: true
-        - name: "notes"
-          type: "string"
-          required: false
-
-  - id: "export"
+  - id: "render_decision_packet_html"
     type: "tool"
     backend: "local"
-    tool: "export_pdf"
+    tool: "render_decision_packet_html"
     params:
-      cards:
-        - "{{artifacts.tool.assemble_insight_card.output.card}}"
-      export_requested: true
-      output_format: "{{artifacts.user_input.chart_config.values.output_format}}"
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"

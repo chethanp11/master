@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Core Contracts
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict
 

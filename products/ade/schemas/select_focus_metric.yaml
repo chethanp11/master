@@ -1,0 +1,20 @@
+schema_version: "1.0"
+form_id: "select_focus_metric"
+title: "Select focus metric"
+prompt: "Which metric should the analysis focus on?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "mean"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "mean"
+        - "median"
+        - "growth"
+        - "outliers"

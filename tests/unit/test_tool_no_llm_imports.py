@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Tools must not import LLM providers
 # ==============================
-from __future__ import annotations
 
 import ast
 from pathlib import Path

@@ -1,1 +1,1 @@
-"""Visual Insights integration tests."""
+"""Analytical Decision Engine integration tests."""

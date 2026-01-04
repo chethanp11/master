@@ -13,10 +13,12 @@ Intended usage:
 - Gateway API returns RunRecord summaries safely
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 import time
 from enum import Enum
@@ -34,6 +36,7 @@ class RunStatus(str, Enum):
     RUNNING = "RUNNING"
     PENDING_HUMAN = "PENDING_HUMAN"
     PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PAUSED_WAITING_FOR_USER = "PAUSED_WAITING_FOR_USER"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -46,6 +49,7 @@ class StepStatus(str, Enum):
     RUNNING = "RUNNING"
     PENDING_HUMAN = "PENDING_HUMAN"
     PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PAUSED_WAITING_FOR_USER = "PAUSED_WAITING_FOR_USER"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"

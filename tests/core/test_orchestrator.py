@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Orchestrator (Engine Basic + HITL Pause/Resume)
 # ==============================
-from __future__ import annotations
 
 from pathlib import Path
 

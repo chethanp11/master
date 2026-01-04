@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Plan Proposal Schema
 # ==============================
-from __future__ import annotations
 
 from core.contracts.plan_schema import EstimatedCost, PlanApproval, PlanProposal, PlanStep
 

@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Hello World Tool: echo_tool
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict

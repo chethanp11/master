@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Prompt Renderer Tests
 # ==============================
-from __future__ import annotations
 
 import pytest
 
@@ -42,4 +43,3 @@ def test_render_messages_handles_list() -> None:
     rendered = render_messages(messages, context)
     assert rendered[0]["content"] == "System hi"
     assert rendered[1]["content"] == "Dataset ok"
-

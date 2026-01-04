@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Integration Tests: Golden Path (Core + Hello World Product)
 # ==============================
-from __future__ import annotations
 
 from pathlib import Path
 

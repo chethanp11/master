@@ -12,10 +12,12 @@ Intended usage:
 - Tracing uses AgentMeta + AgentError
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum

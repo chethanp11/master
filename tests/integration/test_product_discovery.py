@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Integration: Product Discovery
 # ==============================
-from __future__ import annotations
 
 from core.config.loader import load_settings
 from core.utils.product_loader import discover_products

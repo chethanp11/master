@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Parallel Failure Isolation
 # ==============================
-from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List

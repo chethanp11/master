@@ -1,7 +1,7 @@
-# Visual Insights manifest – v1
-name: "visual_insights"
-display_name: "Visual Insights"
-description: "Agentic dashboard for CSV and PDF datasets with citational governance."
+# Analytical Decision Engine manifest – v1
+name: "ade"
+display_name: "Analytical Decision Engine"
+description: "Produces audit-ready analytical decisions with evidence, confidence, and traceability. Visuals are supporting artifacts, not the primary output."
 version: "0.1.0"
 
 default_flow: "visualization"
@@ -10,11 +10,12 @@ exposed_api:
   enabled: true
   allowed_flows:
     - "visualization"
+    - "ade_v1"
 
 ui_enabled: true
 ui:
   enabled: true
-  nav_label: "Visual Insights"
+  nav_label: "Analytical Decision Engine"
   panels:
     - id: "runner"
       title: "Run a Flow"
@@ -25,3 +26,4 @@ ui:
 
 flows:
   - "visualization"
+  - "ade_v1"

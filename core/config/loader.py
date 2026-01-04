@@ -17,6 +17,9 @@ Testability:
 - No hardcoded absolute paths.
 """
 
+from __future__ import annotations
+
+
 # High-level load flow:
 # 1. Determine paths and environment variables (env, .env).
 # 2. Load base YAML configs from configs/ directory.
@@ -29,7 +32,6 @@ Testability:
 # 9. Return validated Settings object (and optionally raw merged dict).
 
 
-from __future__ import annotations
 
 import os
 import logging

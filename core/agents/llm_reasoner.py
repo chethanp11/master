@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Core LLM Reasoner Agent
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import json

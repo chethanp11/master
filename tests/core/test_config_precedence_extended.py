@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Config Precedence Tests
 # ==============================
-from __future__ import annotations
 
 import textwrap
 

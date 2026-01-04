@@ -1,5 +1,6 @@
-# Visual insights tool: simple data reader
 from __future__ import annotations
+
+# Visual insights tool: simple data reader
 
 from typing import Any, Dict, List, Optional, Tuple
 

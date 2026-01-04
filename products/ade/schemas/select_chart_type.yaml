@@ -1,0 +1,19 @@
+schema_version: "1.0"
+form_id: "select_chart_type"
+title: "Select chart type"
+prompt: "Which chart type should be used for evidence?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "bar"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "bar"
+        - "line"
+        - "stacked"

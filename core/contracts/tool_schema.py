@@ -12,10 +12,12 @@ Intended usage:
 - Tool executor emits trace events using ToolMeta + ToolError + ToolEnvelope
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum

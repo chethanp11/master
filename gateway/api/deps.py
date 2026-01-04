@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # API Dependencies / Singletons
 # ==============================
-from __future__ import annotations
 
 from functools import lru_cache
 

@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Agents must not import memory backends
 # ==============================
-from __future__ import annotations
 
 import ast
 from pathlib import Path

@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -20,6 +21,47 @@ class PlanningAgent(BaseAgent):
     name = "planning_agent"
     description = "Produces a replan note and a suggested restart step based on rejection context."
 
+    def _analysis_plan(self, focus_metric: str, chart_type: str, time_axis: str) -> Dict[str, Any]:
+        return {
+            "baseline_comparisons": [
+                "compare recent period vs prior period",
+                "compare segment baselines vs overall baseline",
+            ],
+            "attribution_steps": [
+                "identify top drivers by magnitude",
+                "quantify contribution by segment",
+            ],
+            "seasonality_checks": [
+                "check periodic patterns across time buckets",
+                "flag deviations from expected seasonal bands",
+            ],
+            "hypothesis_tests": [
+                "test variance vs baseline",
+                "test segment lift vs control",
+            ],
+            "user_inputs": {
+                "focus_metric": focus_metric,
+                "chart_type": chart_type,
+                "time_axis": time_axis,
+            },
+        }
+
+    @staticmethod
+    def _resolve_user_selection(artifacts: Dict[str, Any], form_id: str, default: str) -> str:
+        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
+        if not isinstance(user_inputs, dict):
+            return default
+        entry = user_inputs.get(form_id)
+        if not isinstance(entry, dict):
+            return default
+        values = entry.get("values")
+        if not isinstance(values, dict):
+            return default
+        selection = values.get("selection") or values.get("value") or values.get("text")
+        if isinstance(selection, str) and selection.strip():
+            return selection.strip()
+        return default
+
     def run(self, step_context: StepContext) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
@@ -27,6 +69,10 @@ class PlanningAgent(BaseAgent):
                 comment=payload.get("replan_comment", ""),
                 previous_run=payload.get("previous_run", {}),
             )
+            interpreted_intent = (payload.get("prompt") or "").strip()
+            focus_metric = self._resolve_user_selection(step_context.run.artifacts, "select_focus_metric", "mean")
+            chart_type = self._resolve_user_selection(step_context.run.artifacts, "select_chart_type", "bar")
+            time_axis = self._resolve_user_selection(step_context.run.artifacts, "confirm_time_axis", "yes")
             comment = (plan.comment or "").strip()
             note = "Replan requested."
             if comment:
@@ -71,6 +117,13 @@ class PlanningAgent(BaseAgent):
                     "note": note,
                     "start_step_id": start_step_id,
                     "decision_reason": reason,
+                    "analysis_plan": self._analysis_plan(focus_metric, chart_type, time_axis),
+                    "interpreted_intent": interpreted_intent,
+                    "analysis_preferences": {
+                        "focus_metric": focus_metric,
+                        "chart_type": chart_type,
+                        "time_axis": time_axis,
+                    },
                 },
                 error=None,
                 meta=meta,

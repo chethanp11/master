@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # OpenAI Provider Header Tests
 # ==============================
-from __future__ import annotations
 
 from core.models.providers.openai_provider import _should_send_org_header
 

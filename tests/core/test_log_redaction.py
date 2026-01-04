@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Log Redaction Tests
 # ==============================
-from __future__ import annotations
 
 import logging
 

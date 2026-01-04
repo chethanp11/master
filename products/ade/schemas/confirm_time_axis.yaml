@@ -1,0 +1,18 @@
+schema_version: "1.0"
+form_id: "confirm_time_axis"
+title: "Confirm time axis"
+prompt: "Treat H22024..H2029 as time buckets?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "yes"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "yes"
+        - "no"

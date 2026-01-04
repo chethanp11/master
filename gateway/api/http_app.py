@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # FastAPI App Factory
 # ==============================
-from __future__ import annotations
 
 from fastapi import FastAPI
 

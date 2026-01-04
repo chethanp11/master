@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Agent Output Guardrails
 # ==============================
-from __future__ import annotations
 
 import pytest
 

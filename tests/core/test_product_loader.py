@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Product Loader
 # ==============================
-from __future__ import annotations
 
 from pathlib import Path
 from typing import List

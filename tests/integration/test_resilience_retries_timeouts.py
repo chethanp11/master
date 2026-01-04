@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Resilience: Retries & Timeouts
 # ==============================
-from __future__ import annotations
 
 from typing import Dict, List, Type
 

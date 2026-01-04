@@ -12,6 +12,8 @@ This module must remain side-effect safe:
 
 from __future__ import annotations
 
+
+
 from products.hello_world.agents.simple_agent import build as build_agent
 from products.hello_world.tools.echo_tool import build as build_tool
 from core.utils.product_loader import ProductRegistries

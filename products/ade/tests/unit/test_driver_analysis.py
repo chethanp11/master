@@ -1,4 +1,4 @@
-from products.visual_insights.tools.driver_analysis import (
+from products.ade.tools.driver_analysis import (
     DriverAnalysisInput,
     SegmentRow,
     driver_analysis,

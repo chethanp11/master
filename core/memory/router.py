@@ -11,6 +11,8 @@ v1:
 
 from __future__ import annotations
 
+
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -126,6 +128,11 @@ class MemoryRouter(MemoryBackend):
         if self._observability is None:
             return {}
         return self._observability.ensure_dirs(product=product, run_id=run_id)
+
+    def ensure_run_dirs(self, *, product: str, run_id: str) -> None:
+        if self._observability is None:
+            return
+        self._observability.ensure_run_dirs(product=product, run_id=run_id)
 
     def clear_staging(self, *, product: str, clear_input: bool = True, clear_output: bool = True) -> None:
         if self._observability is None:

@@ -1,1 +1,1 @@
-"""Flow helpers for visual insights."""
+"""Flow helpers for Analytical Decision Engine."""

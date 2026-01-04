@@ -16,6 +16,8 @@ Embedding is optional in v1. If embeddings are absent, retrieval can degrade to 
 
 from __future__ import annotations
 
+
+
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field

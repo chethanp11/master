@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Hello World Golden Path Test
 # ==============================
-from __future__ import annotations
 
 import json
 from pathlib import Path

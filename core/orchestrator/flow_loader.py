@@ -15,10 +15,12 @@ Intended usage:
 - Gateway/UI may call this to list flows and validate configs
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 import json
 from pathlib import Path

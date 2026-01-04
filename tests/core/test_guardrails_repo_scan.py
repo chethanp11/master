@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Guardrail Validations
 # ==============================
-from __future__ import annotations
 
 import pathlib
 import re

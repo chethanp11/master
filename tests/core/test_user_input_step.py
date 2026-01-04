@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: User Input Modes
 # ==============================
-from __future__ import annotations
 
 from core.contracts.user_input_schema import UserInputModes, UserInputRequest
 from core.orchestrator.engine import _validate_user_input_values

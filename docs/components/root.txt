@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T13:00:37.972555+00:00
+# captured_at: 2026-01-04T15:55:09.076797+00:00
 
 # .codex.md
 # Codex Permanent Instructions (master/)
@@ -483,36 +483,6 @@ Constraints:
 
 Stop when:
 - Parallel runs are safe by construction
-- 2026-01-04 18:15:46: You are Codex. Act as a senior platform engineer working in repo: master/
-
-Objective:
-Reduce unnecessary complexity in core.
-
-Task:
-Audit core components for premature abstraction.
-
-Review candidates:
-- product_loader.py complexity vs actual usage
-- observability_store vs memory boundaries
-- templating ownership clarity
-
-Rule:
-If a component:
-- is used in only one place
-- adds indirection without policy value
-- lacks a test asserting necessity
-
-Then:
-- Freeze its surface OR
-- Merge it responsibly
-
-Constraints:
-- Preserve public interfaces
-- Patch-safe edits only
-- No feature expansion
-
-Stop when:
-- Core abstractions earn their existence
 - 2026-01-04 18:19:34: You are Codex. Act as a senior platform engineer working in repo: master/
 
 Objective:
@@ -541,6 +511,196 @@ Stop when:
 - V1 boundaries are protected by code, not memory
 - 2026-01-04 18:21:59: create components txt file again
 - 2026-01-04 18:30:22: delete and recreate .txt files
+- 2026-01-04 20:51:13: You are Codex.
+
+Task:
+Rename the Visual Insights product to Analytical Decision Engine (ADE).
+
+Scope:
+- Rename folder: products/visual_insights → products/ade
+- Update all internal imports accordingly
+- Update manifest.yaml and config/product.yaml
+
+Requirements:
+- Product name: ade
+- Display name: Analytical Decision Engine
+- Description must state:
+  "Produces audit-ready analytical decisions with evidence, confidence, and traceability.
+   Visuals are supporting artifacts, not the primary output."
+- Default flow must be ade_v1
+- UI flag must remain enabled (platform_app UI)
+
+Do NOT touch core/.
+Ensure imports remain valid.
+- 2026-01-04 21:00:50: export_pdf has many visualization and other logics. separate that inso different file
+- 2026-01-04 21:02:09: You are Codex.
+
+Task:
+Add core ADE decision contracts.
+
+Scope:
+- Create products/ade/contracts/decision_packet.py
+- Create products/ade/contracts/decision_section.py
+
+Requirements:
+- Use Pydantic BaseModel
+- DecisionPacket fields:
+  - question
+  - decision_summary
+  - confidence_level
+  - assumptions: List[str]
+  - limitations: List[str]
+  - sections: List[DecisionSection]
+  - trace_refs
+- DecisionSection fields:
+  - section_id
+  - title
+  - intent
+  - narrative
+  - claim_strength
+  - visuals
+  - evidence_refs
+  - rejected_alternatives
+
+No logic. No rendering. Contracts only.
+- 2026-01-04 21:04:28: You are Codex.
+
+Task:
+Add a data sufficiency evaluator agent for ADE.
+
+Scope:
+- Create products/ade/agents/sufficiency_evaluator.py
+
+Responsibilities:
+- Evaluate:
+  - time window adequacy
+  - row counts
+  - variance stability
+- Output:
+  - confidence_level
+  - downgrade_reasons
+
+Constraints:
+- No tool execution
+- No LLM calls
+- Deterministic logic only
+
+Add unit tests validating confidence downgrade behavior.
+- 2026-01-04 21:05:24: You are Codex.
+
+Task:
+Enhance the ADE planning agent to emit an explicit analysis plan.
+
+Scope:
+- Modify the existing planner agent
+
+Requirements:
+- Output a structured plan listing:
+  - baseline comparisons
+  - attribution steps
+  - seasonality checks
+  - hypothesis tests
+- Plan must be inspectable in traces
+
+Preserve backward compatibility.
+- 2026-01-04 21:09:04: You are Codex.
+
+Task:
+Add deterministic hypothesis testing tools for ADE.
+
+Scope:
+- Create tools:
+  - hypothesis_test_data_outage.py
+  - hypothesis_test_seasonality.py
+
+Requirements:
+- Each tool returns:
+  - hypothesis_name
+  - status (rejected / plausible)
+  - reasoning
+- No narrative generation
+- Results attach to DecisionSection.rejected_alternatives
+
+Add minimal unit tests.
+- 2026-01-04 21:11:17: You are Codex.
+
+Task:
+Refactor visualization tools to act as evidence renderers.
+
+Scope:
+- Modify recommend_chart.py and build_chart_spec.py
+
+Requirements:
+- Charts may only reference existing evidence tables
+- Add:
+  - purpose
+  - caveats
+- Chart logic must not influence analysis or planning
+
+Ensure charts are optional.
+- 2026-01-04 21:12:36: You are Codex.
+
+Task:
+Create a deterministic DecisionPacket assembly tool.
+
+Scope:
+- Create tools/assemble_decision_packet.py
+
+Requirements:
+- Input:
+  - DecisionSections
+  - confidence_level
+  - assumptions
+  - limitations
+- Output:
+  - DecisionPacket
+- No LLM usage
+
+Update callers accordingly.
+- 2026-01-04 21:14:26: You are Codex.
+
+Task:
+Add HTML rendering for DecisionPacket.
+
+Scope:
+- Create tools/render_decision_packet_html.py
+
+Requirements:
+- Input: DecisionPacket
+- Output: HTML string or file artifact
+- HTML must include:
+  - Decision summary
+  - Sections with narratives
+  - Embedded charts/tables
+  - Confidence and limitations
+  - Evidence references
+
+No JS frameworks. Plain HTML + minimal CSS.
+- 2026-01-04 21:22:12: You are Codex.
+
+Task:
+Create the ADE v1 flow and its integration test.
+
+Scope:
+- Add flows/ade_v1.yaml
+- Add tests/integration/test_ade_v1.py
+
+Flow must include:
+- intent interpretation
+- sufficiency evaluation
+- planning
+- computation
+- hypothesis testing
+- decision assembly
+- HTML rendering
+
+Test must assert:
+- DecisionPacket structure
+- Presence of DecisionSections
+- HTML artifact exists
+- Deterministic output
+
+Do not snapshot text. Validate structure only.
 
 # requirements.txt
 altair==5.4.1

@@ -1,18 +1,18 @@
 import pytest
 
-from products.visual_insights.contracts.card import KeyMetric
-from products.visual_insights.contracts.citations import CitationRef, CsvCitation
-from products.visual_insights.contracts.slices import FilterSpec
-from products.visual_insights.tools.assemble_insight_card import (
+from products.ade.contracts.card import KeyMetric
+from products.ade.contracts.citations import CitationRef, CsvCitation
+from products.ade.contracts.slices import FilterSpec
+from products.ade.tools.assemble_insight_card import (
     AssembleInsightCardInput,
     assemble_insight_card,
 )
-from products.visual_insights.tools.build_chart_spec import (
+from products.ade.tools.build_chart_spec import (
     BuildChartSpecInput,
     ChartData,
     build_chart_spec,
 )
-from products.visual_insights.tools.recommend_chart import (
+from products.ade.tools.recommend_chart import (
     RecommendChartInput,
     recommend_chart,
 )

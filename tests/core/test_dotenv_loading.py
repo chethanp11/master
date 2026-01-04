@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # .env Loading Tests
 # ==============================
-from __future__ import annotations
 
 import textwrap
 

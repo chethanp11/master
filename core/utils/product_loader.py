@@ -11,6 +11,9 @@ Responsibilities (v1):
 - Import products/<name>/registry.py safely and call register(registries)
 """
 
+from __future__ import annotations
+
+
 # Public surface for product discovery/registration; keep minimal and stable.
 __all__ = [
     "discover_products",
@@ -21,7 +24,6 @@ __all__ = [
     "ProductRegistries",
 ]
 
-from __future__ import annotations
 
 import importlib.util
 import logging

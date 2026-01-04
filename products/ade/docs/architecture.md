@@ -1,7 +1,7 @@
-# Visual Insights — Architecture (v1)
+# Analytical Decision Engine — Architecture (v1)
 
 ## Decision Chain
-- **User input** → file uploads are staged under `products/visual_insights/staging/input/`, then copied into the run’s observability input directory under the configured observability root.  
+- **User input** → file uploads are staged under `products/ade/staging/input/`, then copied into the run’s observability input directory under the configured observability root.  
 - **Planning agent** runs first but does not alter control flow (flow order is fixed).  
 - **Tools** execute: read → detect anomalies → recommend chart → build chart spec → assemble card.  
 - **LLM step** (`llm_reasoner`) generates a narrative summary from tool outputs.  

@@ -89,8 +89,8 @@ This section defines the V1 flow composition guardrails.
 
 Product structure:
 
-products/visual_insights/flows/
-  visualization.yaml
+products/ade/flows/
+  ade_v1.yaml
   data_quality.yaml
 
 Entrypoint selection (pseudo-code):
@@ -98,7 +98,7 @@ Entrypoint selection (pseudo-code):
 if request.kind == "data_quality":
     run flow "data_quality"
 else:
-    run flow "visualization"
+    run flow "ade_v1"
 
 ### Why
 

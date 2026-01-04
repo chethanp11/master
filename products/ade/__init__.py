@@ -1,1 +1,1 @@
-"""Visual Insights product package."""
+"""Analytical Decision Engine product package."""

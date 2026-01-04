@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Orchestrator must not import products
 # ==============================
-from __future__ import annotations
 
 import ast
 from pathlib import Path

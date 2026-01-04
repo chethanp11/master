@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 # ==============================
 # Orchestrator Engine
 # ==============================
-from __future__ import annotations
 
 import hashlib
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List, Union
 from uuid import uuid4
 
 from core.agents.registry import AgentRegistry
@@ -21,7 +22,14 @@ from core.contracts.run_schema import (
     StepStatus,
     TraceEvent,
 )
-from core.contracts.user_input_schema import UserInputRequest, UserInputResponse, UserInputModes
+from core.contracts.user_input_schema import (
+    UserInputAnswer,
+    UserInputModes,
+    UserInputOption,
+    UserInputPrompt,
+    UserInputRequest,
+    UserInputResponse,
+)
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
@@ -162,6 +170,9 @@ class OrchestratorEngine:
                     },
                 )
                 self.memory.create_run(run_record)
+                run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+                self._attach_run_dirs(run_ctx)
+                self._stage_inputs(run_ctx)
                 self._emit_event(
                     kind="autonomy_denied",
                     run_id=run_id,
@@ -173,6 +184,7 @@ class OrchestratorEngine:
                         "autonomy_level": flow_def.autonomy_level.value,
                     },
                 )
+                self._persist_run_output(run_ctx)
                 return RunOperationResult.failure(
                     code="autonomy_denied",
                     message=autonomy_decision.reason or "Autonomy denied by policy.",
@@ -230,6 +242,35 @@ class OrchestratorEngine:
             }
         )
 
+    def get_pending_user_input(self, *, run_id: str) -> RunOperationResult:
+        bundle = self.memory.get_run(run_id)
+        if bundle is None:
+            return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
+        if bundle.run.status not in {RunStatus.PENDING_USER_INPUT, RunStatus.PAUSED_WAITING_FOR_USER}:
+            return RunOperationResult.success({"run_id": run_id, "pending": False, "prompt": None})
+        pending_step = next(
+            (s for s in bundle.steps if _is_step_status(s.status, StepStatus.PENDING_USER_INPUT)),
+            None,
+        )
+        if pending_step is None:
+            return RunOperationResult.success({"run_id": run_id, "pending": False, "prompt": None})
+        prompt_payload = None
+        if isinstance(pending_step.output, dict):
+            request_payload = pending_step.output.get("user_input_request")
+            if isinstance(request_payload, dict):
+                prompt_payload = request_payload.get("prompt")
+        if not isinstance(prompt_payload, dict):
+            flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
+            step_def = next((s for s in flow_def.steps if (s.id or "") == pending_step.step_id), None)
+            if step_def is None:
+                return RunOperationResult.failure(code="invalid_state", message="Pending user input step not found.")
+            request = UserInputRequest.model_validate(step_def.params or {})
+            run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+            prompt_payload = _build_user_input_prompt(run_ctx=run_ctx, step_id=pending_step.step_id, request=request).model_dump(
+                mode="json"
+            )
+        return RunOperationResult.success({"run_id": run_id, "pending": True, "prompt": prompt_payload})
+
     def resume_run(
         self,
         *,
@@ -244,7 +285,7 @@ class OrchestratorEngine:
         if bundle is None:
             return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
 
-        if bundle.run.status == RunStatus.PENDING_USER_INPUT:
+        if bundle.run.status in {RunStatus.PENDING_USER_INPUT, RunStatus.PAUSED_WAITING_FOR_USER}:
             return self._resume_user_input(
                 bundle=bundle,
                 user_input_response=user_input_response,
@@ -491,8 +532,13 @@ class OrchestratorEngine:
         comment: Optional[str],
     ) -> RunOperationResult:
         response_payload = user_input_response or {}
+        answer: Optional[UserInputAnswer] = None
+        response: Optional[UserInputResponse] = None
         try:
-            response = UserInputResponse.model_validate(response_payload)
+            if _looks_like_user_input_answer(response_payload):
+                answer = UserInputAnswer.model_validate(response_payload)
+            else:
+                response = UserInputResponse.model_validate(response_payload)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_input", message=str(exc))
 
@@ -514,8 +560,18 @@ class OrchestratorEngine:
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
 
+        if response is None and answer is not None:
+            if answer.prompt_id != request.form_id:
+                return RunOperationResult.failure(code="invalid_input", message="prompt_id does not match pending request.")
+            response = _answer_to_response(request, answer, comment=comment)
+
+        if response is None:
+            return RunOperationResult.failure(code="invalid_input", message="Missing user input response.")
+
         if response.form_id != request.form_id:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
+        if response.metadata and "metadata" not in response.values:
+            response.values["metadata"] = response.metadata
 
         run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
         self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
@@ -598,6 +654,14 @@ class OrchestratorEngine:
             summary={"current_step_index": next_index},
             reason="user_input_resumed",
         )
+        self._emit_event(
+            kind="run_resumed",
+            run_id=bundle.run.run_id,
+            step_id=step_id,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
+            payload={"reason": "user_input_resumed"},
+        )
 
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
@@ -631,8 +695,8 @@ class OrchestratorEngine:
         run_id: str,
         product: str,
         flow: str,
-        current_status: RunStatus | str,
-        target_status: RunStatus | str,
+        current_status: Union[RunStatus, str],
+        target_status: Union[RunStatus, str],
         step_id: Optional[str],
         summary: Optional[Dict[str, Any]] = None,
         reason: Optional[str] = None,
@@ -819,17 +883,17 @@ class OrchestratorEngine:
                             "error": {"message": str(exc), "type": type(exc).__name__},
                         },
                     )
-                self._transition_run_status(
-                    run_id=run_ctx.run_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    current_status=current_status,
-                    target_status=RunStatus.FAILED,
-                    step_id=step_id,
-                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
-                    reason="user_input_invalid_request",
-                )
-                current_status = RunStatus.FAILED
+                    self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.FAILED,
+                        step_id=step_id,
+                        summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                        reason="user_input_invalid_request",
+                    )
+                    current_status = RunStatus.FAILED
                     self._emit_event(
                         kind="step_failed",
                         run_id=run_ctx.run_id,
@@ -841,7 +905,16 @@ class OrchestratorEngine:
                     self._persist_run_output(run_ctx)
                     return RunStatus.FAILED.value
 
+                prompt = _build_user_input_prompt(run_ctx=run_ctx, step_id=step_id, request=request)
                 schema_summary = _summarize_schema(request.schema)
+                self._emit_event(
+                    kind="pending_user_input",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload=prompt.model_dump(mode="json"),
+                )
                 self._emit_event(
                     kind="user_input_requested",
                     run_id=run_ctx.run_id,
@@ -855,6 +928,7 @@ class OrchestratorEngine:
                         "required": request.required,
                         "defaults": request.defaults,
                         "schema_summary": schema_summary,
+                        "prompt": prompt.model_dump(mode="json"),
                     },
                 )
                 self.memory.update_step(
@@ -862,7 +936,7 @@ class OrchestratorEngine:
                     step_id,
                     {
                         "status": StepStatus.PENDING_USER_INPUT.value,
-                        "output": {"user_input_request": {"form_id": request.form_id}},
+                        "output": {"user_input_request": {"form_id": request.form_id, "prompt": prompt.model_dump(mode="json")}},
                     },
                 )
                 current_status = self._transition_run_status(
@@ -870,15 +944,24 @@ class OrchestratorEngine:
                     product=run_ctx.product,
                     flow=run_ctx.flow,
                     current_status=current_status,
-                    target_status=RunStatus.PENDING_USER_INPUT,
+                    target_status=RunStatus.PAUSED_WAITING_FOR_USER,
                     step_id=step_id,
                     summary=self._summary_with_counters(
                         run_ctx,
-                        {"current_step_index": idx, "form_id": request.form_id},
+                        {"current_step_index": idx, "form_id": request.form_id, "pending_user_input": prompt.model_dump(mode="json")},
                     ),
                     reason="user_input_requested",
                 )
-                return RunStatus.PENDING_USER_INPUT.value
+                self._emit_event(
+                    kind="run_paused",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"reason": "user_input_requested", "form_id": request.form_id},
+                )
+                self._persist_run_output(run_ctx)
+                return RunStatus.PAUSED_WAITING_FOR_USER.value
 
             if step_def.type == StepType.PLAN_PROPOSAL:
                 if step_def.agent is None:
@@ -967,16 +1050,16 @@ class OrchestratorEngine:
             idx = next_index
 
         if last_result_data is None:
-        self._transition_run_status(
-            run_id=run_ctx.run_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            current_status=current_status,
-            target_status=RunStatus.FAILED,
-            step_id="output",
-            summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
-            reason="missing_run_output",
-        )
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=current_status,
+                target_status=RunStatus.FAILED,
+                step_id="output",
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
+                reason="missing_run_output",
+            )
             self._emit_event(
                 kind="run_failed",
                 run_id=run_ctx.run_id,
@@ -1145,6 +1228,9 @@ class OrchestratorEngine:
             summary={"error": {"code": code, "message": message, "details": details}},
         )
         self.memory.create_run(run_record)
+        run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+        self._attach_run_dirs(run_ctx)
+        self._stage_inputs(run_ctx)
         self._emit_event(
             kind="run_rejected",
             run_id=run_id,
@@ -1153,6 +1239,7 @@ class OrchestratorEngine:
             flow=flow,
             payload={"code": code, "message": message, "details": details},
         )
+        self._persist_run_output(run_ctx)
         error_details = dict(details)
         error_details["run_id"] = run_id
         return RunOperationResult.failure(code=code, message=message, details=error_details)
@@ -1163,14 +1250,19 @@ class OrchestratorEngine:
             return
         run = bundle.run
         status = run.status.value if hasattr(run.status, "value") else str(run.status)
+        pending_statuses = {
+            RunStatus.PENDING_USER_INPUT.value,
+            RunStatus.PAUSED_WAITING_FOR_USER.value,
+            RunStatus.PENDING_HUMAN.value,
+        }
         result = run.output if status == RunStatus.COMPLETED.value else None
         if isinstance(result, dict) and "output_files" in result:
             result = {k: v for k, v in result.items() if k != "output_files"}
+        error = None
         if status == RunStatus.COMPLETED.value and result is None:
             status = RunStatus.FAILED.value
             error = {"code": "missing_output", "message": "Missing run output", "step_id": None, "details": {}}
-        error = None
-        if status != RunStatus.COMPLETED.value:
+        if error is None and status != RunStatus.COMPLETED.value and status not in pending_statuses:
             failed = next((s for s in bundle.steps if s.status == StepStatus.FAILED), None)
             if failed:
                 if failed.error and isinstance(failed.error, dict):
@@ -1268,7 +1360,7 @@ class OrchestratorEngine:
         return merged
 
     def _stage_inputs(self, run_ctx: RunContext) -> None:
-        self.memory.ensure_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
+        self.memory.ensure_run_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
         payload = run_ctx.payload or {}
         self.memory.capture_run_input(product=run_ctx.product, run_id=run_ctx.run_id, payload=payload)
         self.memory.move_staged_inputs_to_run(product=run_ctx.product, run_id=run_ctx.run_id)
@@ -1318,6 +1410,97 @@ def _summarize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     return {"properties": prop_keys[:10], "property_count": len(prop_keys), "sha256": digest}
 
 
+def _looks_like_user_input_answer(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return any(key in payload for key in ("prompt_id", "selected_option_ids", "free_text"))
+
+
+def _primary_selection_key(request: UserInputRequest) -> str:
+    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
+    if isinstance(props, dict) and len(props) == 1:
+        return next(iter(props))
+    if isinstance(props, dict):
+        if "selection" in props:
+            return "selection"
+        if "value" in props:
+            return "value"
+    return "selection"
+
+
+def _options_from_request(request: UserInputRequest) -> List[UserInputOption]:
+    options: List[UserInputOption] = []
+    if isinstance(request.choices, list):
+        for item in request.choices:
+            if not isinstance(item, dict):
+                continue
+            option_id = str(item.get("id") or item.get("value") or item.get("label") or "").strip()
+            if not option_id:
+                continue
+            label = str(item.get("label") or item.get("value") or option_id)
+            options.append(
+                UserInputOption(
+                    option_id=option_id,
+                    label=label,
+                    value=item.get("value"),
+                    description=item.get("description"),
+                )
+            )
+        return options
+    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
+    if isinstance(props, dict):
+        for spec in props.values():
+            if not isinstance(spec, dict):
+                continue
+            enum = spec.get("enum")
+            if isinstance(enum, list):
+                for item in enum:
+                    option_id = str(item)
+                    options.append(UserInputOption(option_id=option_id, label=option_id, value=item))
+                break
+    return options
+
+
+def _build_user_input_prompt(run_ctx: RunContext, step_id: str, request: UserInputRequest) -> UserInputPrompt:
+    allow_free_text = request.mode == UserInputModes.FREE_TEXT_INPUT or request.input_type == "text"
+    question = request.prompt or request.title or request.form_id
+    return UserInputPrompt(
+        schema_version=request.schema_version,
+        prompt_id=request.form_id,
+        run_id=run_ctx.run_id,
+        step_id=step_id,
+        title=request.title,
+        question=question,
+        options=_options_from_request(request),
+        defaults=request.defaults,
+        required=request.required,
+        allow_free_text=allow_free_text,
+    )
+
+
+def _answer_to_response(
+    request: UserInputRequest,
+    answer: UserInputAnswer,
+    *,
+    comment: Optional[str],
+) -> UserInputResponse:
+    values: Dict[str, Any] = {}
+    selected = answer.selected_option_ids or []
+    if selected:
+        values[_primary_selection_key(request)] = selected[0]
+    if answer.free_text:
+        values["text"] = answer.free_text
+    if answer.metadata:
+        values["metadata"] = answer.metadata
+    return UserInputResponse(
+        schema_version=request.schema_version,
+        form_id=request.form_id,
+        values=values,
+        comment=comment or "",
+        metadata=answer.metadata,
+    )
+
+
 def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any]) -> List[str]:
     errors: List[str] = []
     mode = request.mode or UserInputModes.CHOICE_INPUT
@@ -1359,7 +1542,7 @@ def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any
 def _store_user_input_artifacts(run_ctx: RunContext, form_id: str, values: Dict[str, Any], comment: Optional[str]) -> None:
     bucket = run_ctx.artifacts.setdefault("user_input", {})
     if isinstance(bucket, dict):
-        bucket[form_id] = {"values": values, "comment": comment or ""}
+        bucket[form_id] = {"values": values, "comment": comment or "", "metadata": values.get("metadata", {})}
 
 
 def _is_step_status(value: Any, status: StepStatus) -> bool:
@@ -1370,7 +1553,7 @@ def _is_step_status(value: Any, status: StepStatus) -> bool:
     return False
 
 
-def _coerce_run_status(value: RunStatus | str) -> RunStatus:
+def _coerce_run_status(value: Union[RunStatus, str]) -> RunStatus:
     if isinstance(value, RunStatus):
         return value
     try:

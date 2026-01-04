@@ -1,6 +1,6 @@
 # Product config (tracked in git)
 # Override global defaults for this product only (no secrets here).
-name: "visual_insights"
+name: "ade"
 
 defaults:
   autonomy_level: "semi_auto"

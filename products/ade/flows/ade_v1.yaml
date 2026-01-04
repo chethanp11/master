@@ -1,0 +1,177 @@
+# ==============================
+# Flow: ade_v1
+# ==============================
+# Golden path:
+#   1) Interpret intent and plan
+#   2) Read dataset evidence
+#   3) Evaluate sufficiency and run hypothesis tests
+#   4) Assemble decision packet and render HTML
+
+id: "ade_v1"
+version: "1.0.0"
+description: "Deterministic ADE decision packet generation"
+autonomy_level: "suggest_only"
+
+steps:
+  - id: "intent_interpretation"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "read"
+    type: "tool"
+    backend: "local"
+    tool: "data_reader"
+    params:
+      dataset: "{{payload.dataset}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+
+  - id: "sufficiency_eval"
+    type: "agent"
+    backend: "local"
+    agent: "sufficiency_evaluator"
+    params: {}
+
+  - id: "select_focus_metric"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "select_focus_metric"
+      title: "Select focus metric"
+      prompt: "Which metric should the analysis focus on?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "mean"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["mean", "median", "growth", "outliers"]
+
+  - id: "select_chart_type"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "select_chart_type"
+      title: "Select chart type"
+      prompt: "Which chart type should be used for evidence?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "bar"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["bar", "line", "stacked"]
+
+  - id: "confirm_time_axis"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "confirm_time_axis"
+      title: "Confirm time axis"
+      prompt: "Treat H22024..H2029 as time buckets?"
+      input_type: "select"
+      mode: "choice_input"
+      required: ["selection"]
+      defaults:
+        selection: "yes"
+      schema:
+        type: "object"
+        properties:
+          selection:
+            type: "string"
+            enum: ["yes", "no"]
+
+  - id: "planning"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "compute_anomalies"
+    type: "tool"
+    backend: "local"
+    tool: "detect_anomalies"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
+      min_points: 3
+
+  - id: "hypothesis_data_outage"
+    type: "tool"
+    backend: "local"
+    tool: "hypothesis_test_data_outage"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+
+  - id: "hypothesis_seasonality"
+    type: "tool"
+    backend: "local"
+    tool: "hypothesis_test_seasonality"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+
+  - id: "assemble_decision_packet"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_decision_packet"
+    params:
+      question: "{{payload.prompt}}"
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.select_focus_metric.values.selection}}. Chart: {{artifacts.user_input.select_chart_type.values.selection}}. Time axis: {{artifacts.user_input.confirm_time_axis.values.selection}}."
+      confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
+      assumptions:
+        - "Inputs reflect the provided dataset."
+        - "No external data sources are used."
+      limitations:
+        - "Hypothesis checks are heuristic."
+        - "Evidence tables are limited to uploaded rows."
+      trace_refs:
+        - step_id: "read"
+        - step_id: "compute_anomalies"
+        - step_id: "hypothesis_data_outage"
+        - step_id: "hypothesis_seasonality"
+        - user_inputs:
+            focus_metric: "{{artifacts.user_input.select_focus_metric.values.selection}}"
+            chart_type: "{{artifacts.user_input.select_chart_type.values.selection}}"
+            time_axis: "{{artifacts.user_input.confirm_time_axis.values.selection}}"
+      sections:
+        - section_id: "sufficiency"
+          title: "Data sufficiency"
+          intent: "{{payload.prompt}}"
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}."
+          claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
+          visuals:
+            - table:
+                columns: "{{artifacts.tool.data_reader.output.columns}}"
+                rows: "{{artifacts.tool.data_reader.output.rows}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
+        - section_id: "hypotheses"
+          title: "Hypothesis checks"
+          intent: "Evaluate alternative explanations"
+          narrative: "Data outage: {{artifacts.tool.hypothesis_test_data_outage.output.status}} ({{artifacts.tool.hypothesis_test_data_outage.output.reasoning}}). Seasonality: {{artifacts.tool.hypothesis_test_seasonality.output.status}} ({{artifacts.tool.hypothesis_test_seasonality.output.reasoning}})."
+          claim_strength: "medium"
+          rejected_alternatives:
+            - "data_outage={{artifacts.tool.hypothesis_test_data_outage.output.status}}"
+            - "seasonality={{artifacts.tool.hypothesis_test_seasonality.output.status}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
+
+  - id: "render_decision_packet_html"
+    type: "tool"
+    backend: "local"
+    tool: "render_decision_packet_html"
+    params:
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"

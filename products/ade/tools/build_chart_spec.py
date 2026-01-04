@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
@@ -36,6 +37,7 @@ class BuildChartSpecInput(BaseModel):
     y: Optional[str] = None
     series: Optional[str] = None
     data: ChartData
+    evidence_ref: Optional[Dict[str, Any]] = None
 
 
 class BuildChartSpecOutput(BaseModel):
@@ -43,6 +45,9 @@ class BuildChartSpecOutput(BaseModel):
 
     chart_spec: Dict[str, Any]
     summary: str
+    purpose: str = "evidence_rendering"
+    caveats: List[str] = []
+    optional: bool = True
 
 
 def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
@@ -50,10 +55,16 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
     chart_type: ChartType = payload.fallback_chart_type or "bar"
     if payload.chart_type != "auto":
         chart_type = payload.chart_type  # type: ignore[assignment]
+    caveats: List[str] = ["charts_optional", "does_not_influence_analysis"]
+    evidence_ref = payload.evidence_ref
+    if evidence_ref is None:
+        caveats.append("missing_evidence_ref")
+        evidence_ref = {"columns": columns}
     spec: Dict[str, Any] = {
         "type": chart_type,
         "title": payload.title,
-        "data": {"columns": columns, "rows": payload.data.rows},
+        "data": {"columns": columns},
+        "data_ref": evidence_ref,
     }
     encoding: Dict[str, Dict[str, str]] = {}
     if chart_type == "table":
@@ -71,7 +82,11 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
             encoding["series"] = {"field": payload.series}
         spec["encoding"] = encoding
     summary = f"built spec for {chart_type}"
-    return BuildChartSpecOutput(chart_spec=spec, summary=summary)
+    return BuildChartSpecOutput(
+        chart_spec=spec,
+        summary=summary,
+        caveats=caveats,
+    )
 
 
 class BuildChartSpecTool(BaseTool):

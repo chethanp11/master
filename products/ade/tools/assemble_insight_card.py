@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from statistics import mean, median
@@ -8,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-from products.visual_insights.contracts.card import InsightCard, KeyMetric
-from products.visual_insights.contracts.citations import CitationRef
-from products.visual_insights.contracts.slices import DataSlice
+from products.ade.contracts.card import InsightCard, KeyMetric
+from products.ade.contracts.citations import CitationRef
+from products.ade.contracts.slices import DataSlice
 
 ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
 
@@ -133,6 +134,7 @@ def _build_primary_metric(chart_spec: Dict[str, object], metric: Optional[str]) 
 
 
 def _to_float(value: Any) -> Optional[float]:
+    # TODO: Keep local conversion to avoid cross-tool coupling; consolidate if a shared util is introduced.
     if isinstance(value, (int, float)):
         return float(value)
     try:

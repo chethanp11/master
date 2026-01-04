@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Hello World Agent: simple_agent
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict
 

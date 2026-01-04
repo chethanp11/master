@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Orchestrator State Enums + Transitions
 # ==============================
-from __future__ import annotations
 
 from core.orchestrator.state import RunStatus, StepStatus, RunState, is_valid_run_transition, to_run_state
 

@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T13:00:37.963415+00:00
+# captured_at: 2026-01-04T15:55:09.065401+00:00
 
 # gateway/__init__.py
 
@@ -1441,14 +1441,14 @@ def main() -> None:
                 if prod == "hello_world":
                     st.session_state[payload_key] = _pretty({"keyword": "Hello from the demo"})
                 else:
-                    st.session_state[payload_key] = _pretty(
-                        {
-                            "dataset": "visual_insights_input.csv",
-                            "prompt": "Summarize key trends and highlight anomalies.",
-                            "files": [{"name": "visual_insights_input.csv", "file_type": "csv"}],
-                            "upload_id": "demo_upload_1",
-                        }
-                    )
+                        st.session_state[payload_key] = _pretty(
+                            {
+                                "dataset": "ade_input.csv",
+                                "prompt": "Summarize key trends and highlight anomalies.",
+                                "files": [{"name": "ade_input.csv", "file_type": "csv"}],
+                                "upload_id": "demo_upload_1",
+                            }
+                        )
             payload_text = st.text_area("Payload (JSON)", value=st.session_state[payload_key], height=220)
             st.session_state[payload_key] = payload_text
             ok, payload, err = _safe_json_loads(payload_text)

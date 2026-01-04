@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Governance Limits Tests
 # ==============================
-from __future__ import annotations
 
 from pathlib import Path
 

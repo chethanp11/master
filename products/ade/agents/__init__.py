@@ -1,1 +1,1 @@
-"""Visual Insights agents package."""
+"""Analytical Decision Engine agents package."""

@@ -21,6 +21,8 @@ All actions go through the Gateway API. No direct core imports besides settings.
 
 from __future__ import annotations
 
+
+
 import json
 import shutil
 from dataclasses import dataclass
@@ -84,6 +86,26 @@ class ApiClient:
     def get_run(self, run_id: str) -> ApiResponse:
         return self._request("GET", f"/api/run/{run_id}")
 
+    def get_pending_input(self, run_id: str) -> ApiResponse:
+        return self._request("GET", f"/api/runs/{run_id}/pending_input")
+
+    def submit_user_input(
+        self,
+        run_id: str,
+        *,
+        prompt_id: str,
+        selected_option_ids: Optional[List[str]] = None,
+        free_text: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> ApiResponse:
+        payload = {
+            "prompt_id": prompt_id,
+            "selected_option_ids": selected_option_ids,
+            "free_text": free_text,
+            "metadata": metadata or {},
+        }
+        return self._request("POST", f"/api/runs/{run_id}/user_input", payload)
+
     def resume_run(
         self,
         run_id: str,
@@ -125,7 +147,7 @@ def _resolve_path(path_str: str) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path)
 
 
-def _observability_root(settings: Any | None = None) -> Path:
+def _observability_root(settings: Optional[Any] = None) -> Path:
     resolved = settings or load_settings()
     path = Path(resolved.app.paths.observability_dir)
     return path if path.is_absolute() else (resolved.repo_root_path() / path)
@@ -258,8 +280,8 @@ def _summarize_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         if kind == "pending_human":
             status = "PENDING_HUMAN"
             break
-        if kind == "user_input_requested":
-            status = "PENDING_USER_INPUT"
+        if kind in {"pending_user_input", "user_input_requested", "run_paused"}:
+            status = "PAUSED_WAITING_FOR_USER"
             break
     return {"status": status, "started_at": started_at}
 
@@ -299,6 +321,23 @@ def _safe_json_loads(value: str) -> Tuple[bool, Dict[str, Any], str]:
         return True, parsed, ""
     except Exception as exc:
         return False, {}, str(exc)
+
+
+def _refresh_last_run_status(client: ApiClient, run_id: str) -> Optional[str]:
+    if not run_id:
+        return None
+    resp = client.get_run(run_id)
+    if not resp.ok or not resp.body:
+        return None
+    run = resp.body.get("data", {}).get("run", {})
+    if not isinstance(run, dict):
+        return None
+    status = run.get("status")
+    if isinstance(status, str) and status:
+        st.session_state["last_run_status"] = status
+        st.session_state["last_run_id"] = run_id
+        return status
+    return None
 
 
 def _pretty(obj: Any) -> str:
@@ -427,8 +466,8 @@ def _render_run_history(*, observability_root: Path) -> None:
                         step_state[step_id] = {"step_id": step_id, "status": "FAILED"}
                     elif kind == "pending_human":
                         step_state[step_id] = {"step_id": step_id, "status": "PENDING_HUMAN"}
-                    elif kind == "user_input_requested":
-                        step_state[step_id] = {"step_id": step_id, "status": "PENDING_USER_INPUT"}
+                    elif kind in {"user_input_requested", "pending_user_input", "run_paused"}:
+                        step_state[step_id] = {"step_id": step_id, "status": "PAUSED_WAITING_FOR_USER"}
                     elif kind == "user_input_received":
                         step_state[step_id] = {"step_id": step_id, "status": "COMPLETED"}
                     if kind in {"run_resumed", "run_rejected"}:
@@ -572,6 +611,11 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
             )
             if resp.ok:
                 st.success(f"Run resumed (approved): {run_id.strip()}")
+                if resp.body:
+                    updated_status = resp.body.get("data", {}).get("status")
+                    if isinstance(updated_status, str):
+                        st.session_state["last_run_status"] = updated_status
+                        st.session_state["last_run_id"] = run_id.strip()
                 _append_history(run_id.strip())
                 st.rerun()
             else:
@@ -587,6 +631,11 @@ button[kind="secondary"] { background-color: #c62828 !important; color: white !i
             )
             if resp.ok:
                 st.success(f"Run resumed (rejected): {run_id.strip()}")
+                if resp.body:
+                    updated_status = resp.body.get("data", {}).get("status")
+                    if isinstance(updated_status, str):
+                        st.session_state["last_run_status"] = updated_status
+                        st.session_state["last_run_id"] = run_id.strip()
                 _append_history(run_id.strip())
                 st.rerun()
             else:
@@ -640,97 +689,104 @@ def _get_user_input_config(flow_def: Dict[str, Any], form_id: str) -> Optional[D
     return None
 
 
+def _pending_user_input_runs(client: ApiClient) -> List[Dict[str, Any]]:
+    resp = client.list_runs()
+    if not resp.ok or not resp.body:
+        return []
+    runs = resp.body.get("data", {}).get("runs", [])
+    pending: List[Dict[str, Any]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        status = run.get("status")
+        if status in {"PAUSED_WAITING_FOR_USER", "PENDING_USER_INPUT"}:
+            pending.append(run)
+    return pending
+
+
+def _render_user_input_prompt(prompt: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[str]]:
+    options = prompt.get("options") if isinstance(prompt.get("options"), list) else []
+    defaults = prompt.get("defaults") if isinstance(prompt.get("defaults"), dict) else {}
+    allow_free_text = bool(prompt.get("allow_free_text"))
+    selected_ids: Optional[List[str]] = None
+    free_text: Optional[str] = None
+
+    if options:
+        option_ids = [opt.get("option_id") for opt in options if isinstance(opt, dict) and opt.get("option_id")]
+        labels = [opt.get("label") or opt.get("option_id") for opt in options if isinstance(opt, dict) and opt.get("option_id")]
+        default_candidate = next((v for v in defaults.values() if isinstance(v, str)), None)
+        if default_candidate and default_candidate in option_ids:
+            default_idx = option_ids.index(default_candidate)
+        else:
+            default_idx = 0 if option_ids else 0
+        if option_ids:
+            selection = st.selectbox("Select option", labels, index=default_idx)
+            selected_ids = [option_ids[labels.index(selection)]]
+
+    if allow_free_text:
+        free_text = st.text_area("Free text", value="", height=120)
+
+    return selected_ids, free_text
+
+
 def _render_user_inputs(client: ApiClient) -> None:
     st.subheader("Pending user inputs")
-    observability_root = _observability_root()
-    pending_inputs: List[Dict[str, Any]] = []
-    if observability_root.exists():
-        for product_dir in sorted(observability_root.glob("*")):
-            if not product_dir.is_dir():
-                continue
-            for run_dir in sorted(product_dir.glob("*")):
-                if not run_dir.is_dir():
-                    continue
-                events = _load_run_events(observability_root, product=product_dir.name, run_id=run_dir.name)
-                if not events:
-                    continue
-                flow = events[0].get("flow") or ""
-                pending = _pending_user_inputs_from_events(events)
-                for item in pending:
-                    item.update({"product": product_dir.name, "run_id": run_dir.name, "flow": flow})
-                    pending_inputs.append(item)
-
+    pending_inputs = _pending_user_input_runs(client)
     if not pending_inputs:
         st.info("No pending user inputs.")
         return
 
     options = []
     for item in pending_inputs:
-        label = f"{item['run_id']} — {item['product']}/{item['flow']} ({item['step_id']})"
+        run_id = item.get("run_id") or ""
+        product = item.get("product") or ""
+        flow = item.get("flow") or ""
+        label = f"{run_id} — {product}/{flow}"
         options.append((label, item))
 
     selection = st.selectbox("Select pending input", options, format_func=lambda item: item[0])
     selected = selection[1]
-    run_id = selected["run_id"]
-    product = selected["product"]
-    flow = selected["flow"]
-    form_id = selected["form_id"]
-    payload = selected.get("payload") or {}
+    run_id = selected.get("run_id", "")
+    if not run_id:
+        st.info("No run selected.")
+        return
+
+    pending_resp = client.get_pending_input(run_id)
+    if not pending_resp.ok or not pending_resp.body:
+        st.error(f"Failed to load pending input: {pending_resp.error or pending_resp.body}")
+        return
+    prompt = pending_resp.body.get("data", {}).get("prompt")
+    if not isinstance(prompt, dict):
+        st.info("No pending user input prompt available.")
+        return
 
     st.write(f"Selected run: {run_id}")
-    title = payload.get("title") or form_id
+    title = prompt.get("title") or prompt.get("prompt_id") or "User input"
     st.markdown(f"**{title}**")
-    description = payload.get("description")
-    if description:
-        st.write(description)
+    question = prompt.get("question")
+    if question:
+        st.write(question)
 
-    flow_def = _load_flow_definition(product, flow) or {}
-    form_config = _get_user_input_config(flow_def, form_id) or {}
-    schema = form_config.get("schema") if isinstance(form_config.get("schema"), dict) else {}
-    defaults = form_config.get("defaults") if isinstance(form_config.get("defaults"), dict) else {}
-    required = form_config.get("required") if isinstance(form_config.get("required"), list) else []
-
-    properties = schema.get("properties") if isinstance(schema, dict) else {}
-    values: Dict[str, Any] = {}
-    if isinstance(properties, dict) and properties:
-        for key, spec in properties.items():
-            if not isinstance(spec, dict):
-                continue
-            label = f"{key}{' *' if key in required else ''}"
-            default = defaults.get(key)
-            enum = spec.get("enum") if isinstance(spec.get("enum"), list) else None
-            field_type = spec.get("type")
-            if enum:
-                selected_value = default if default in enum else enum[0]
-                values[key] = st.selectbox(label, enum, index=enum.index(selected_value))
-            elif field_type == "boolean":
-                values[key] = st.checkbox(label, value=bool(default) if default is not None else False)
-            elif field_type == "integer":
-                values[key] = int(st.number_input(label, value=int(default) if default is not None else 0, step=1))
-            elif field_type == "number":
-                values[key] = float(st.number_input(label, value=float(default) if default is not None else 0.0))
-            else:
-                values[key] = st.text_input(label, value=str(default) if default is not None else "")
-    else:
-        st.info("No schema properties available for this user input.")
-
-    comment = st.text_area("Comment", value="", height=120, help="Optional note for this input submission.")
+    selected_ids, free_text = _render_user_input_prompt(prompt)
     if st.button("Submit input", type="primary", disabled=not run_id.strip()):
-        response_payload = {
-            "schema_version": form_config.get("schema_version", "1.0"),
-            "form_id": form_id,
-            "values": values,
-            "comment": comment or "",
-        }
-        resp = client.resume_run(
+        prompt_id = str(prompt.get("prompt_id") or "")
+        if not prompt_id:
+            st.error("Missing prompt_id for pending input.")
+            return
+        resp = client.submit_user_input(
             run_id.strip(),
-            decision="APPROVED",
-            approval_payload={},
-            comment=None,
-            user_input_response=response_payload,
+            prompt_id=prompt_id,
+            selected_option_ids=selected_ids,
+            free_text=free_text,
+            metadata={"source": "ui"},
         )
         if resp.ok:
             st.success(f"User input submitted for run: {run_id.strip()}")
+            if resp.body:
+                updated_status = resp.body.get("data", {}).get("status")
+                if isinstance(updated_status, str):
+                    st.session_state["last_run_status"] = updated_status
+                    st.session_state["last_run_id"] = run_id.strip()
             _append_history(run_id.strip())
             st.rerun()
         else:
@@ -850,14 +906,14 @@ def main() -> None:
                 if prod == "hello_world":
                     st.session_state[payload_key] = _pretty({"keyword": "Hello from the demo"})
                 else:
-                    st.session_state[payload_key] = _pretty(
-                        {
-                            "dataset": "visual_insights_input.csv",
-                            "prompt": "Summarize key trends and highlight anomalies.",
-                            "files": [{"name": "visual_insights_input.csv", "file_type": "csv"}],
-                            "upload_id": "demo_upload_1",
-                        }
-                    )
+                        st.session_state[payload_key] = _pretty(
+                            {
+                                "dataset": "ade_input.csv",
+                                "prompt": "Summarize key trends and highlight anomalies.",
+                                "files": [{"name": "ade_input.csv", "file_type": "csv"}],
+                                "upload_id": "demo_upload_1",
+                            }
+                        )
             payload_text = st.text_area("Payload (JSON)", value=st.session_state[payload_key], height=220)
             st.session_state[payload_key] = payload_text
             ok, payload, err = _safe_json_loads(payload_text)
@@ -888,80 +944,51 @@ def main() -> None:
                     st.session_state["last_run_product"] = prod
                     st.session_state["last_run_flow"] = flow
 
-        pending_status = st.session_state.get("last_run_status")
-        if pending_status in {"PENDING_USER_INPUT", "NEEDS_USER_INPUT"}:
-            run_id = st.session_state.get("last_run_id")
-            flow_name = st.session_state.get("last_run_flow") or flow
-            flow_def = _load_flow_definition(prod, flow_name) or {}
-            user_input_step = None
-            for step in flow_def.get("steps", []):
-                if isinstance(step, dict) and step.get("type") == "user_input":
-                    user_input_step = step
-                    break
-            if not user_input_step:
-                st.info("Run is waiting for user input, but no user_input step metadata is available.")
+        last_run_id = st.session_state.get("last_run_id")
+        if st.button("Refresh run status", disabled=not last_run_id):
+            refreshed = _refresh_last_run_status(client, last_run_id or "")
+            if refreshed:
+                st.success(f"Run status refreshed: {refreshed}")
             else:
-                params = user_input_step.get("params") if isinstance(user_input_step.get("params"), dict) else {}
-                form_id = params.get("form_id") or "user_input"
-                prompt = params.get("prompt") or params.get("title") or "Provide input"
-                input_type = params.get("input_type") or ("text" if params.get("mode") == "free_text_input" else "select")
-                choices = params.get("choices") if isinstance(params.get("choices"), list) else None
-                defaults = params.get("defaults") if isinstance(params.get("defaults"), dict) else {}
-                required = params.get("required") if isinstance(params.get("required"), list) else []
-                schema = params.get("schema") if isinstance(params.get("schema"), dict) else {}
-                properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+                st.warning("Unable to refresh run status.")
 
-                st.markdown("### User input required")
-                st.write(prompt)
-                values: Dict[str, Any] = {}
-                if input_type == "select" and choices:
-                    labels = [c.get("label") or c.get("value") for c in choices]
-                    default_val = defaults.get("value")
-                    default_idx = labels.index(default_val) if default_val in labels else 0
-                    selection = st.selectbox("Select value", labels, index=default_idx)
-                    values["value"] = selection
-                elif properties:
-                    for key, spec in properties.items():
-                        if not isinstance(spec, dict):
-                            continue
-                        label = f"{key}{' *' if key in required else ''}"
-                        enum = spec.get("enum") if isinstance(spec.get("enum"), list) else None
-                        default = defaults.get(key)
-                        if enum:
-                            selected_value = default if default in enum else enum[0]
-                            values[key] = st.selectbox(label, enum, index=enum.index(selected_value))
-                        elif spec.get("type") == "number":
-                            values[key] = float(st.number_input(label, value=float(default or 0.0)))
-                        elif spec.get("type") == "integer":
-                            values[key] = int(st.number_input(label, value=int(default or 0), step=1))
-                        elif spec.get("type") == "boolean":
-                            values[key] = st.checkbox(label, value=bool(default) if default is not None else False)
-                        else:
-                            values[key] = st.text_input(label, value=str(default) if default is not None else "")
+        pending_status = st.session_state.get("last_run_status")
+        if pending_status in {"PAUSED_WAITING_FOR_USER", "PENDING_USER_INPUT", "NEEDS_USER_INPUT"}:
+            run_id = st.session_state.get("last_run_id")
+            if run_id:
+                pending_resp = client.get_pending_input(run_id)
+                if not pending_resp.ok or not pending_resp.body:
+                    st.error(f"Failed to load pending input: {pending_resp.error or pending_resp.body}")
                 else:
-                    values["text"] = st.text_area("Response", value=str(defaults.get("text", "")), height=140)
-
-                comment = st.text_area("Comment", value="", height=80)
-                if st.button("Submit input", type="primary", disabled=not run_id):
-                    response_payload = {
-                        "schema_version": params.get("schema_version", "1.0"),
-                        "form_id": form_id,
-                        "values": values,
-                        "comment": comment or "",
-                    }
-                    resp = client.resume_run(
-                        run_id,
-                        decision="APPROVED",
-                        approval_payload={},
-                        comment=None,
-                        user_input_response=response_payload,
-                    )
-                    if resp.ok:
-                        st.success("User input submitted. Refreshing run status...")
-                        st.session_state["last_run_status"] = resp.body.get("data", {}).get("status") if resp.body else None
-                        st.rerun()
+                    prompt = pending_resp.body.get("data", {}).get("prompt")
+                    if not isinstance(prompt, dict):
+                        st.info("Run is waiting for user input, but no prompt is available.")
                     else:
-                        st.error(f"Failed to submit user input: {resp.error or resp.body}")
+                        st.markdown("### User input required")
+                        st.write(prompt.get("question") or "Provide input")
+                        selected_ids, free_text = _render_user_input_prompt(prompt)
+                        if st.button("Submit input", type="primary"):
+                            prompt_id = str(prompt.get("prompt_id") or "")
+                            if not prompt_id:
+                                st.error("Missing prompt_id for pending input.")
+                            else:
+                                resp = client.submit_user_input(
+                                    run_id,
+                                    prompt_id=prompt_id,
+                                    selected_option_ids=selected_ids,
+                                    free_text=free_text,
+                                    metadata={"source": "ui"},
+                                )
+                                if resp.ok:
+                                    st.success("User input submitted. Refreshing run status...")
+                                    if resp.body:
+                                        updated_status = resp.body.get("data", {}).get("status")
+                                        if isinstance(updated_status, str):
+                                            st.session_state["last_run_status"] = updated_status
+                                            st.session_state["last_run_id"] = run_id
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to submit user input: {resp.error or resp.body}")
 
     elif page == "Approvals":
         _render_approvals(client)

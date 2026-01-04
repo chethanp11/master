@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # ==============================
 # Tests: Architecture Guardrails
 # ==============================
-from __future__ import annotations
 
 import ast
 from pathlib import Path
