@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T12:52:14.750050+00:00
+# captured_at: 2026-01-04T13:00:37.965102+00:00
 
 # products/__init__.py
 """Product packs namespace package."""

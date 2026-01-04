@@ -128,6 +128,7 @@ Rules:
 - ❌ Agents do not call other agents.
 - ❌ Agents do not schedule tools.
 - ✅ Agents return structured intent; orchestrator decides execution.
+- ✅ Agent outputs are data-only; no control fields (next_step, retry, branching) are allowed.
 
 ---
 
@@ -176,7 +177,7 @@ validate_policy()
 Examples:
 
 RUNNING
-PENDING_HUMAN (PENDING_APPROVAL in API)
+PENDING_HUMAN
 PENDING_USER_INPUT
 FULL_AUTO
 
@@ -202,6 +203,9 @@ Required fields:
 - `data: Any`
 - `error: AgentError | None`
 - `meta: dict`
+
+Additional rules:
+- LLM calls must declare a reasoning purpose (see `core/contracts/reasoning_schema.py`).
 
 ---
 
@@ -288,7 +292,7 @@ core/governance/security.py
 ### 6.3 Retries & Backoff
 - ❌ No manual retry loops in agents or tools
 - Retry behavior is driven by:
-  - flow definition
+  - flow definition (tool steps only)
   - error policy evaluation
 
 ---
@@ -323,6 +327,10 @@ Products **do NOT** define:
 - governance
 - model invocation logic
 - template-based behavior control
+- cross-run or module-level mutable state
+
+Registries:
+- Product agents/tools must be registered as factories (no shared instances).
 
 ---
 

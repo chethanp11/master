@@ -41,12 +41,13 @@ flowchart LR
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy policy, persists runs/steps, emits trace events. |
+| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy and governance checks, persists runs/steps, emits trace events. |
 | `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML/JSON. | Validates and normalizes step ids; no execution or persistence. |
-| `core/orchestrator/step_executor.py` | Step executor | Executes tool or agent steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, handles retry policy. |
+| `core/orchestrator/step_executor.py` | Step executor | Executes tool/agent/plan_proposal steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, enforces agent output governance; tool retries only. |
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
 | `core/contracts/user_input_schema.py` | User input contracts | Typed request/response for `user_input` steps. | Supports choice and free-text modes. |
 | `core/contracts/plan_schema.py` | Plan proposal contracts | Structured plan proposal schema. | Used by `plan_proposal` steps. |
+| `core/contracts/reasoning_schema.py` | Reasoning purpose contract | Enum for required LLM reasoning purposes. | Used by LLM routing, governance, and tracing. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
 
 ```mermaid
@@ -184,7 +185,7 @@ erDiagram
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/governance/policies.py` | Policy engine | Evaluates tool/model allowlists and autonomy rules. | Per-product overrides supported. |
-| `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy check at run start; step/tool/model checks at execution. |
+| `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy, step/tool/model checks; agent output validation; user input/output gating. |
 | `core/governance/security.py` | Redaction | Scrubs secrets/PII from payloads. | Regex + key-hint based sanitization. |
 
 ```mermaid
@@ -206,7 +207,7 @@ flowchart LR
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/memory/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend and `observability/<product>/<run_id>/runtime/events.jsonl`. |
+| `core/memory/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend; MemoryRouter mirrors to observability runtime logs. |
 | `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/`. Root is configurable. |
 
 ---
@@ -243,7 +244,7 @@ Products are discovered and registered by `core/utils/product_loader.py`.
 | `app.yaml` | Global app metadata | Host/ports, paths, flags. |
 | `logging.yaml` | Logging config | Level, redaction, tracing toggle. |
 | `models.yaml` | Model routing | Provider and model defaults. |
-| `policies.yaml` | Governance rules | Tool/model allowlists, autonomy. |
+| `policies.yaml` | Governance rules | Tool/model allowlists, autonomy, per-run limits. |
 | `products.yaml` | Product enablement | Discovery settings. |
 
 ---

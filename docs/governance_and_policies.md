@@ -137,7 +137,7 @@ HITL is not optional when required.
 
 When HITL is triggered:
 	•	Execution pauses immediately
-	•	Run status transitions to PENDING_APPROVAL (PENDING_HUMAN in storage)
+	•	Run status transitions to PENDING_HUMAN
 	•	Run and step context are persisted
 	•	An approval request is created and tracked
 
@@ -152,7 +152,7 @@ Flow resumption occurs via:
 POST /api/resume_run/{run_id}
 
 Rules:
-	•	Run must be in PENDING_APPROVAL (PENDING_HUMAN in storage)
+	•	Run must be in PENDING_HUMAN
 	•	Approval decision must exist
 	•	Resume action is fully audited
 
@@ -182,7 +182,10 @@ check_autonomy	Run initialization (autonomy policy enforcement)
 before_step	Step execution
 before_tool_call	Tool invocation
 before_model_call	Model invocation
-before_complete	Run finalization
+validate_agent_output	Agent output validation
+before_user_input_response	User input ingestion
+before_run_output	Run output persistence
+before_output_files	Run output file persistence
 
 
 ---
@@ -224,7 +227,7 @@ Scrubbing occurs before persistence and trace/log emission.
 
 Redacted values appear as:
 
-[REDACTED]
+***REDACTED***
 
 Rules:
 	•	Raw secrets must never be written to disk
@@ -246,7 +249,7 @@ Stored via:
 
 core/memory/*
 
-Audit records are immutable once written.
+Audit records are persisted and updated via core/memory.
 
 ---
 

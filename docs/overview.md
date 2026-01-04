@@ -88,8 +88,7 @@ sequenceDiagram
   Orchestrator-->>Gateway: PENDING_USER_INPUT
   User->>Gateway: submit input
   Gateway->>Orchestrator: resume_run (user_input_response)
-  Orchestrator->>HITL: create approval
-  Orchestrator-->>Gateway: PENDING_APPROVAL (PENDING_HUMAN)
+  Orchestrator-->>Gateway: PENDING_HUMAN
   User->>Gateway: approve
   Gateway->>Orchestrator: resume_run
   Orchestrator->>Agent: run(step)
@@ -106,7 +105,10 @@ sequenceDiagram
 - Policies are loaded from `configs/policies.yaml`.
 - Autonomy is checked at run start.
 - Tool calls are checked before execution.
+- Model calls are checked before invocation and require a reasoning purpose.
 - Payloads are redacted before persistence/logging.
+- User input ingestion and run output/export are governed before persistence.
+- Run limits are enforced (max steps, tool calls, tokens per run).
 - Runs pause only for `user_input` or `human_approval` steps; every state transition is traced.
 
 ```mermaid
@@ -132,7 +134,7 @@ Core owns:
 - Memory & persistence
 - Governance & safety
 - Tracing & observability
- - LLM invocation via `core/agents/llm_reasoner.py`
+- LLM invocation via `core/agents/llm_reasoner.py`
 
 Core **must not**:
 - Contain domain logic

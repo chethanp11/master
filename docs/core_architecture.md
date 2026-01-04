@@ -124,7 +124,7 @@ flowchart TB
 
 **Source of truth:** `core/orchestrator/*`.
 
-Purpose: control flow execution, retries, HITL pauses, and resume.
+Purpose: control flow execution, tool retries, HITL pauses, and resume.
 
 ### Key Modules
 ```
@@ -140,13 +140,14 @@ core/orchestrator/
 ### Responsibilities
 - Load flow definitions (YAML/JSON) via `FlowLoader` from `products/<product>/flows/`.
 - Enforce autonomy policy **before** a run starts.
-- Execute steps in order, honoring retry policies & backoff.
-- Pause execution for HITL approvals and persist approvals.
+- Execute steps in order, honoring tool retry policies & backoff.
+- Pause execution for HITL approvals and user_input steps; persist approvals and user input requests.
 - Resume execution deterministically using stored run/step snapshots.
 - Emit trace events for every transition (run, step, tool, approval, user_input, plan proposals).
+- Govern output persistence (run output + output files) before write.
 
 ### Session Isolation (Gateway)
-The Gateway API constructs an `OrchestratorEngine` per request to avoid cross-user state leakage. Registries, settings, and the memory/tracing backends remain cached, but run context and engine execution state are request-scoped. Run ids include a timestamp plus a random suffix to avoid collisions under concurrent starts.
+The Gateway API constructs an `OrchestratorEngine` per request to avoid cross-user state leakage. Registries, settings, and the memory/tracing backends remain cached, but run context and execution state are request-scoped. Run ids include a timestamp plus a random suffix to avoid collisions under concurrent starts.
 
 ### What It Does NOT Do
 - Call models directly.
@@ -171,7 +172,7 @@ sequenceDiagram
   Engine->>Governance: check_autonomy
   Engine->>Memory: create_run
   Engine->>Tracer: run_started
-  Engine->>Tracer: runtime events (events.jsonl)
+  Engine->>Tracer: emit trace events
   loop steps
     Engine->>Memory: add_step
     Engine->>Governance: before_step
@@ -187,7 +188,7 @@ sequenceDiagram
     else human approval
       Engine->>Memory: create_approval
       Engine->>Tracer: pending_human
-      Engine-->>Gateway: PENDING_APPROVAL (PENDING_HUMAN)
+      Engine-->>Gateway: PENDING_HUMAN
     else user input
       Engine->>Tracer: user_input_requested
       Engine-->>Gateway: PENDING_USER_INPUT
@@ -221,7 +222,7 @@ Templating lives in `core/orchestrator/templating.py` and is used by:
 
 - `FlowDef` is the canonical flow structure.
 - Step types: `agent`, `tool`, `human_approval`, `user_input`, `plan_proposal`, `subflow` (subflow is not implemented in v1).
-- Retry policy is declarative (`max_attempts`, `backoff_seconds`, `retry_on_codes`).
+- Retry policy is declarative (`max_attempts`, `backoff_seconds`, `retry_on_codes`) and applies to tool steps.
 
 ---
 
@@ -237,7 +238,10 @@ Hooks run:
 - At run initialization (autonomy check)
 - Before step execution
 - Before tool execution
-- Before run completion
+- Before model execution
+- Before user input ingestion
+- Before run output persistence
+- Before output file persistence
 
 ```mermaid
 flowchart LR
@@ -364,7 +368,8 @@ erDiagram
 
 **Source of truth:** `core/memory/tracing.py` and `core/memory/observability_store.py`.
 
-- `Tracer` sanitizes and persists `TraceEvent` via memory and writes `observability/<product>/<run_id>/runtime/events.jsonl`.
+- `Tracer` sanitizes and persists `TraceEvent` via memory.
+- `MemoryRouter` mirrors trace events to `observability/<product>/<run_id>/runtime/events.jsonl` when observability is enabled.
 - `ObservabilityStore` owns the run directory layout:
   - `input/`
   - `runtime/`
@@ -389,6 +394,7 @@ flowchart TB
 - Providers live under `core/models/providers/`.
 - Provider modules are the only location allowed to call vendor SDKs.
 - LLM invocation in v1 is centralized in `core/agents/llm_reasoner.py`.
+- Reasoning purpose is required for every model call.
 
 ---
 
@@ -420,10 +426,10 @@ The CLI calls the orchestrator directly; the UI talks only to the API.
 ```mermaid
 stateDiagram-v2
   [*] --> RUNNING
-  RUNNING --> PENDING_APPROVAL: approval needed
+  RUNNING --> PENDING_HUMAN: approval needed
   RUNNING --> PENDING_USER_INPUT: user input needed
-  PENDING_APPROVAL --> RUNNING: approved
-  PENDING_APPROVAL --> FAILED: rejected
+  PENDING_HUMAN --> RUNNING: approved
+  PENDING_HUMAN --> FAILED: rejected
   PENDING_USER_INPUT --> RUNNING: input received
   RUNNING --> COMPLETED: success
   RUNNING --> FAILED: error

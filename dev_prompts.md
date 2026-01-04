@@ -161,36 +161,6 @@ Constraints:
 
 Stop when:
 - Parallel runs are safe by construction
-- 2026-01-04 18:15:46: You are Codex. Act as a senior platform engineer working in repo: master/
-
-Objective:
-Reduce unnecessary complexity in core.
-
-Task:
-Audit core components for premature abstraction.
-
-Review candidates:
-- product_loader.py complexity vs actual usage
-- observability_store vs memory boundaries
-- templating ownership clarity
-
-Rule:
-If a component:
-- is used in only one place
-- adds indirection without policy value
-- lacks a test asserting necessity
-
-Then:
-- Freeze its surface OR
-- Merge it responsibly
-
-Constraints:
-- Preserve public interfaces
-- Patch-safe edits only
-- No feature expansion
-
-Stop when:
-- Core abstractions earn their existence
 - 2026-01-04 18:19:34: You are Codex. Act as a senior platform engineer working in repo: master/
 
 Objective:
@@ -218,3 +188,4 @@ Constraints:
 Stop when:
 - V1 boundaries are protected by code, not memory
 - 2026-01-04 18:21:59: create components txt file again
+- 2026-01-04 18:30:22: delete and recreate .txt files

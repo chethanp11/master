@@ -85,8 +85,9 @@ The flow loader normalizes step IDs and loads step definitions for the orchestra
 
 Agents (`BaseAgent`) operate on `StepContext`, inspect payload/artifacts, and return an `AgentResult`. They must not execute tools directly, call vendors, or write to disk.
 If a flow needs LLM output, reference the built-in `llm_reasoner` agent in the flow definition.
+LLM calls require an explicit reasoning purpose (`INSIGHT`, `PRIORITIZATION`, `EXPLANATION`, `UNCERTAINTY`).
 
-Tools (`BaseTool`) validate inputs (Pydantic), perform deterministic actions, and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks and redaction. Retry policy is enforced by the orchestrator.
+Tools (`BaseTool`) perform deterministic actions and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks and redaction. Retry policy is enforced by the orchestrator on tool steps only.
 
 ## 6. Registration
 
@@ -101,6 +102,7 @@ def register(registries: ProductRegistries) -> None:
 ```
 
 `ProductRegistries` bundles the global `AgentRegistry` and `ToolRegistry` plus settings. The loader imports each registry module, calls `register(...)`, and only then exposes the product's flows to the API/UI. Keep registry imports side-effect-free and idempotent.
+Registries accept factories only; do not register shared instances or module-level mutable state.
 
 ## 7. Testing & Validation
 

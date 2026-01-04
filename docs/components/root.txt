@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T12:52:14.758869+00:00
+# captured_at: 2026-01-04T13:00:37.972555+00:00
 
 # .codex.md
 # Codex Permanent Instructions (master/)
@@ -540,6 +540,7 @@ Constraints:
 Stop when:
 - V1 boundaries are protected by code, not memory
 - 2026-01-04 18:21:59: create components txt file again
+- 2026-01-04 18:30:22: delete and recreate .txt files
 
 # requirements.txt
 altair==5.4.1

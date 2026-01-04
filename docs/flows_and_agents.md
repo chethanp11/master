@@ -51,7 +51,7 @@ Flows:
 An **agent** is a unit of goal-driven reasoning.
 
 Agents are:
-- Stateless
+- Stateless (no mutable module-level state)
 - Goal-driven (not template-driven)
 - Side-effect free
 
@@ -122,9 +122,6 @@ steps:
     agent: hello_world.planner
     params:
       instruction: "Generate an execution plan"
-    retry:
-      max_attempts: 2
-      backoff_seconds: 1
 
   - id: approve
     type: human_approval
@@ -139,7 +136,7 @@ steps:
 
 Notes:
 - `params` are the primary control inputs to agents and tools
-- Retry behavior is declarative and flow-driven
+- Retry behavior is declarative and applies to tool steps only
 
 ---
 
@@ -157,7 +154,7 @@ Behavior:
 - Resolves agent from registry
 - Provides StepContext (params, payload, artifacts)
 - Executes agent reasoning
-- Expects an AgentResult
+- Expects an AgentResult; outputs are validated by governance
 
 Agents:
 - Do not decide the next step
@@ -180,6 +177,7 @@ Behavior:
 Notes:
 - The orchestrator decides whether and when tools run
 - Tools are executed only by ToolExecutor
+- Retry policy applies to tool steps only
 
 ---
 
@@ -192,7 +190,7 @@ Notes:
 Behavior:
 - Pauses execution
 - Persists run and step state
-- Sets run status to PENDING_APPROVAL (PENDING_HUMAN in storage)
+- Sets run status to PENDING_HUMAN
 - Requires explicit resume action
 - Approval context can be supplied in `params` (reason, decision notes, recommended action)
 
@@ -220,7 +218,8 @@ Behavior:
 Behavior:
 - Pauses execution
 - Sets run status to PENDING_USER_INPUT
-- Requires resume with `user_input_response` payload
+- Requires resume with `user_input_response` payload (schema-validated)
+- User input steps are orchestrator-managed; they are not executed by StepExecutor
 
 ---
 
@@ -315,6 +314,7 @@ Agents MUST NOT:
 - Call other agents
 - Read/write files
 - Persist state
+- Return control fields (next_step, retry, branching hints)
 - Call models directly (model access is centralized in `core/agents/llm_reasoner.py` via `core/models/router.py`)
 - Read environment variables
 
@@ -324,7 +324,7 @@ Agents MUST NOT:
 
 Agents are registered at startup:
 - Product agents self-register via controlled import
-- Registry maps agent_name -> agent class
+- Registry maps agent_name -> factory (new instance per resolution)
 
 Resolution:
 - Orchestrator resolves agents by name at runtime
@@ -336,11 +336,12 @@ Resolution:
 	1.	Flow loaded and validated
 	2.	RunContext initialized
 	3.	Step loop begins
-	4.	Step executed
-	5.	Trace events emitted
-	6.	State persisted via memory backend
-	7.	HITL pause or continuation
-	8.	Completion or failure recorded
+	4.	Governance checks applied
+	5.	Step executed (agent/tool/HITL/user_input)
+	6.	Trace events emitted
+	7.	State persisted via memory backend
+	8.	HITL/user_input pause or continuation
+	9.	Output persisted or run failed
 
 Step parameter rendering supports:
 - `{{payload.<key>}}`
@@ -375,6 +376,7 @@ Required:
 - Prefer more steps over complex agents
 - Use approval gates early for high-risk actions
 - Log decisions and intent, not raw data
+- When using `llm_reasoner`, always supply a reasoning purpose
 
 ---
 
