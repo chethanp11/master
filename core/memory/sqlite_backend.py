@@ -28,6 +28,10 @@ from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
 
 MAX_PAYLOAD_CHARS = 4096
+SQLITE_TIMEOUT_SECONDS = 30.0
+SQLITE_CHECK_SAME_THREAD = False
+SQLITE_JOURNAL_MODE = "WAL"
+SQLITE_SYNCHRONOUS = "NORMAL"
 
 
 def _dumps(x: Any) -> str:
@@ -62,10 +66,16 @@ class SQLiteBackend(MemoryBackend):
             self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
+        con = sqlite3.connect(
+            self.db_path,
+            check_same_thread=SQLITE_CHECK_SAME_THREAD,
+            timeout=SQLITE_TIMEOUT_SECONDS,
+        )
         con.row_factory = sqlite3.Row
-        con.execute("PRAGMA journal_mode=WAL;")
-        con.execute("PRAGMA synchronous=NORMAL;")
+        con.execute(f"PRAGMA journal_mode={SQLITE_JOURNAL_MODE};")
+        con.execute(f"PRAGMA synchronous={SQLITE_SYNCHRONOUS};")
+        con.execute(f"PRAGMA busy_timeout={int(SQLITE_TIMEOUT_SECONDS * 1000)};")
+        con.execute("PRAGMA foreign_keys=ON;")
         return con
 
     def _init_db(self) -> None:

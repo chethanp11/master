@@ -53,7 +53,6 @@ flowchart TB
     GOV[governance]
     MEM[memory]
     MOD[models]
-    KNO[knowledge]
     LOG[observability]
   end
   subgraph Gateway
@@ -71,7 +70,6 @@ flowchart TB
   ORC --> GOV
   ORC --> MEM
   ORC --> LOG
-  ORC --> KNO
   ORC --> MOD
 ```
 
@@ -85,6 +83,7 @@ flowchart TB
 - Precedence: `env` > `secrets/secrets.yaml` > `configs/*.yaml` > defaults.
 - `.env` is optional and does not override real env vars.
 - Environment overrides use `MASTER__` namespacing.
+- Paths are resolved through `app.paths.*` (repo_root, storage_dir, observability_dir).
 
 ```mermaid
 flowchart LR
@@ -146,6 +145,9 @@ core/orchestrator/
 - Resume execution deterministically using stored run/step snapshots.
 - Emit trace events for every transition (run, step, tool, approval, user_input, plan proposals).
 
+### Session Isolation (Gateway)
+The Gateway API constructs an `OrchestratorEngine` per request to avoid cross-user state leakage. Registries, settings, and the memory/tracing backends remain cached, but run context and engine execution state are request-scoped. Run ids include a timestamp plus a random suffix to avoid collisions under concurrent starts.
+
 ### What It Does NOT Do
 - Call models directly.
 - Call tools directly.
@@ -204,6 +206,12 @@ sequenceDiagram
 - `{{artifacts.<key>}}` (flat keys or nested access)
 
 Missing values render as `null` for full-token values and as empty strings for inline tokens.
+
+### Templating
+
+Templating lives in `core/orchestrator/templating.py` and is used by:
+- `render_template` / `render_messages` for strict message rendering (missing keys raise).
+- `render_params` for lenient tool parameter rendering (missing keys resolve to `None` or empty string).
 
 ---
 
@@ -361,7 +369,7 @@ erDiagram
   - `input/`
   - `runtime/`
   - `output/`
-  - `response.json` is emitted on completion/failure.
+The observability root is configurable via `app.paths.observability_dir`.
 
 ```mermaid
 flowchart TB
@@ -379,29 +387,12 @@ flowchart TB
 
 - `ModelRouter` selects provider/model by product/purpose.
 - Providers live under `core/models/providers/`.
-- v1 providers are **stubs** and do not call external APIs.
+- Provider modules are the only location allowed to call vendor SDKs.
+- LLM invocation in v1 is centralized in `core/agents/llm_reasoner.py`.
 
 ---
 
-## 12. Knowledge Layer
-
-**Source of truth:** `core/knowledge/*`.
-
-- SQLite-backed chunk store with lexical scoring (Jaccard).
-- Structured access reads CSV deterministically (pandas optional).
-- Ingestion is the only write path into the store.
-
-```mermaid
-flowchart TB
-  Ingest[Ingestion] --> Store[SqliteVectorStore]
-  Store --> Retriever[Retriever]
-  Retriever --> Orchestrator
-  Orchestrator --> Agents
-```
-
----
-
-## 13. Contracts & Envelopes
+## 12. Contracts & Envelopes
 
 **Source of truth:** `core/contracts/*`.
 
@@ -410,7 +401,7 @@ flowchart TB
 
 ---
 
-## 14. Gateway
+## 13. Gateway
 
 **Source of truth:** `gateway/*`.
 
@@ -422,7 +413,7 @@ The CLI calls the orchestrator directly; the UI talks only to the API.
 
 ---
 
-## 15. Run Lifecycle (Status Model)
+## 14. Run Lifecycle (Status Model)
 
 **Source of truth:** `core/contracts/run_schema.py`, `core/orchestrator/state.py`.
 
@@ -444,7 +435,7 @@ stateDiagram-v2
 
 ---
 
-## 16. Adding a New Product (No Core Changes)
+## 15. Adding a New Product (No Core Changes)
 
 Steps:
 1. Create `products/<new_product>/`.
@@ -454,14 +445,3 @@ Steps:
 5. UI/API auto-discover the product when enabled.
 
 ---
-
-## 17. Why This Architecture Scales
-
-- Clear ownership boundaries
-- Strong contracts
-- Centralized governance
-- Headless execution
-- Pluggable products
-- Resume-safe execution
-
-This is a **platform**, not a bot.

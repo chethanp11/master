@@ -33,6 +33,7 @@ class PathsConfig(BaseModel):
     configs_dir: str = Field(default="configs", description="Configs directory")
     secrets_dir: str = Field(default="secrets", description="Secrets directory")
     storage_dir: str = Field(default="storage", description="Runtime storage directory")
+    observability_dir: str = Field(default="observability", description="Observability output directory")
 
 
 class AppConfig(BaseModel):
@@ -105,6 +106,10 @@ class PoliciesConfig(BaseModel):
         default=None,
         description="Optional hard ceiling for model max_tokens requests.",
     )
+    max_tokens_per_run: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for total model tokens consumed per run.",
+    )
     max_steps: Optional[int] = Field(
         default=None,
         description="Optional hard ceiling for total steps per run.",
@@ -112,6 +117,10 @@ class PoliciesConfig(BaseModel):
     max_tool_calls: Optional[int] = Field(
         default=None,
         description="Optional hard ceiling for tool calls per run.",
+    )
+    max_payload_bytes: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for run payload size in bytes.",
     )
 
     # Per-product policy overrides

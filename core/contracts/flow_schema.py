@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
+from core.contracts.user_input_schema import UserInputRequest
+
 # ==============================
 # Enums
 # ==============================
@@ -114,6 +116,10 @@ class StepDef(BaseModel):
             raise ValueError("agent steps require the 'agent' field")
         if self.type == StepType.PLAN_PROPOSAL and not self.agent:
             raise ValueError("plan_proposal steps require the 'agent' field")
+        if self.type == StepType.USER_INPUT:
+            UserInputRequest.model_validate(self.params or {})
+        if self.type == StepType.SUBFLOW:
+            raise ValueError("subflow steps are not supported in v1; compose flows at the entrypoint")
         return self
 
 

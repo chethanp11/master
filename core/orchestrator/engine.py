@@ -8,6 +8,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, List
+from uuid import uuid4
 
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
@@ -35,11 +36,23 @@ from core.tools.registry import ToolRegistry
 
 
 def _new_run_id() -> str:
-    ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    return f"run_{ts}"
+    ts = datetime.now().strftime("%Y-%m-%d-%H%M%S%f")
+    return f"run_{ts}_{uuid4().hex[:8]}"
+
+
+def _payload_size_bytes(payload: Dict[str, Any]) -> int:
+    try:
+        raw = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    except Exception:
+        raw = str(payload)
+    return len(raw.encode("utf-8"))
 
 
 class OrchestratorEngine:
+    """
+    Orchestrator entrypoint. Holds only shared dependencies; all run state is request-scoped.
+    """
+    __slots__ = ("flow_loader", "step_executor", "memory", "tracer", "governance", "hitl")
     def __init__(
         self,
         *,
@@ -75,6 +88,7 @@ class OrchestratorEngine:
         tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
         step_executor = StepExecutor(
             tool_executor=tool_executor,
+            governance=governance,
             agent_registry=AgentRegistry,
             sleep_fn=sleep_fn or time.sleep,
         )
@@ -100,6 +114,32 @@ class OrchestratorEngine:
             run_id = _new_run_id()
             run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
             run_ctx.trace = self._trace_hook(run_ctx)
+
+            payload_limit = self.governance.settings.policies.max_payload_bytes
+            if payload_limit is not None:
+                size_bytes = _payload_size_bytes(payload)
+                if size_bytes > payload_limit:
+                    return self._reject_run(
+                        run_id=run_id,
+                        product=product,
+                        flow=flow,
+                        payload=payload,
+                        code="payload_limit_exceeded",
+                        message="Payload exceeds configured limit.",
+                        details={"size_bytes": size_bytes, "limit_bytes": payload_limit},
+                    )
+
+            step_limit = self.governance.settings.policies.max_steps
+            if step_limit is not None and len(flow_def.steps) > step_limit:
+                return self._reject_run(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    payload=payload,
+                    code="max_steps_exceeded",
+                    message="Flow exceeds configured step limit.",
+                    details={"step_count": len(flow_def.steps), "limit": step_limit},
+                )
 
             autonomy_decision = self.governance.check_autonomy(
                 run_ctx=run_ctx,
@@ -145,9 +185,15 @@ class OrchestratorEngine:
                 status=RunStatus.RUNNING,
                 autonomy_level=str(flow_def.autonomy_level.value),
                 input=payload,
-                summary={"current_step_index": 0},
+                summary={
+                    "current_step_index": 0,
+                    "steps_executed": 0,
+                    "tool_calls": 0,
+                    "tokens_used": 0,
+                },
             )
             self.memory.create_run(run_record)
+            run_ctx.meta.update({"steps_executed": 0, "tool_calls": 0, "tokens_used": 0})
             self.memory.clear_staging(product=product, clear_input=False, clear_output=True)
             self._attach_run_dirs(run_ctx)
             self._stage_inputs(run_ctx)
@@ -281,7 +327,7 @@ class OrchestratorEngine:
                     current_status=bundle.run.status,
                     target_status=RunStatus.RUNNING,
                     step_id=approval.step_id,
-                    summary={"current_step_index": plan_index or 0, "replan_of": run_id},
+                    summary={**(bundle.run.summary or {}), "current_step_index": plan_index or 0, "replan_of": run_id},
                     reason="replan_after_rejection",
                 )
                 replan_ctx = RunContext(
@@ -290,6 +336,7 @@ class OrchestratorEngine:
                     flow=bundle.run.flow,
                     payload=replan_payload,
                 )
+                self._init_run_meta(replan_ctx, summary=bundle.run.summary, steps=bundle.steps)
                 replan_ctx.trace = self._trace_hook(replan_ctx)
                 self._attach_run_dirs(replan_ctx)
                 self._stage_inputs(replan_ctx)
@@ -358,7 +405,7 @@ class OrchestratorEngine:
                             current_status=RunStatus.RUNNING,
                             target_status=RunStatus.FAILED,
                             step_id=replan_step_id,
-                            summary={"failed_step_id": replan_step_id},
+                            summary=self._summary_with_counters(replan_ctx, {"failed_step_id": replan_step_id}),
                             reason="replan_failed",
                         )
                         self._emit_event(
@@ -385,7 +432,7 @@ class OrchestratorEngine:
                 current_status=bundle.run.status,
                 target_status=RunStatus.FAILED,
                 step_id=approval.step_id,
-                summary={"rejection": decision},
+                summary={**(bundle.run.summary or {}), "rejection": decision},
                 reason="approval_rejected",
             )
             self._emit_event(
@@ -407,7 +454,7 @@ class OrchestratorEngine:
             current_status=bundle.run.status,
             target_status=RunStatus.RUNNING,
             step_id=approval.step_id,
-            summary={"current_step_index": next_index},
+            summary={**(bundle.run.summary or {}), "current_step_index": next_index},
             reason="approval_resumed",
         )
         self._emit_event(
@@ -422,6 +469,7 @@ class OrchestratorEngine:
         merged_payload = dict(bundle.run.input or {})
         merged_payload.update(payload)
         run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=merged_payload)
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
         run_ctx.trace = self._trace_hook(run_ctx)
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
@@ -468,6 +516,33 @@ class OrchestratorEngine:
 
         if response.form_id != request.form_id:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
+
+        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
+        run_ctx.trace = self._trace_hook(run_ctx)
+
+        step_ctx = run_ctx.new_step(
+            step_def=step_def,
+            step_id=step_id,
+            step_type=step_def.type.value,
+            backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
+            target=step_def.agent or step_def.tool,
+        )
+        decision = self.governance.before_user_input_response(
+            request=request.model_dump(mode="json"),
+            response=response.model_dump(mode="json"),
+            ctx=step_ctx,
+        )
+        if not decision.allowed:
+            self._emit_event(
+                kind="user_input_denied",
+                run_id=bundle.run.run_id,
+                step_id=step_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            return RunOperationResult.failure(code="policy_blocked", message=decision.reason, details=decision.details)
 
         errors = _validate_user_input_values(request, response.values)
         if errors:
@@ -524,8 +599,6 @@ class OrchestratorEngine:
             reason="user_input_resumed",
         )
 
-        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
-        run_ctx.trace = self._trace_hook(run_ctx)
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
         _store_user_input_artifacts(run_ctx, request.form_id, response.values, response.comment)
@@ -674,12 +747,14 @@ class OrchestratorEngine:
                     current_status=current_status,
                     target_status=RunStatus.FAILED,
                     step_id=step_id,
-                    summary={"failed_step_id": step_id, "reason": decision.reason},
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id, "reason": decision.reason}),
                     reason="governance_denied",
                 )
                 current_status = RunStatus.FAILED
                 self._persist_run_output(run_ctx)
                 return RunStatus.FAILED.value
+
+            run_ctx.meta["steps_executed"] = int(run_ctx.meta.get("steps_executed", 0)) + 1
 
             self._emit_event(
                 kind="step_started",
@@ -715,7 +790,7 @@ class OrchestratorEngine:
                     current_status=current_status,
                     target_status=RunStatus.PENDING_HUMAN,
                     step_id=step_id,
-                    summary={"current_step_index": idx},
+                    summary=self._summary_with_counters(run_ctx, {"current_step_index": idx}),
                     reason="approval_requested",
                 )
                 self._emit_event(
@@ -744,17 +819,17 @@ class OrchestratorEngine:
                             "error": {"message": str(exc), "type": type(exc).__name__},
                         },
                     )
-                    self._transition_run_status(
-                        run_id=run_ctx.run_id,
-                        product=run_ctx.product,
-                        flow=run_ctx.flow,
-                        current_status=current_status,
-                        target_status=RunStatus.FAILED,
-                        step_id=step_id,
-                        summary={"failed_step_id": step_id},
-                        reason="user_input_invalid_request",
-                    )
-                    current_status = RunStatus.FAILED
+                self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.FAILED,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                    reason="user_input_invalid_request",
+                )
+                current_status = RunStatus.FAILED
                     self._emit_event(
                         kind="step_failed",
                         run_id=run_ctx.run_id,
@@ -797,7 +872,10 @@ class OrchestratorEngine:
                     current_status=current_status,
                     target_status=RunStatus.PENDING_USER_INPUT,
                     step_id=step_id,
-                    summary={"current_step_index": idx, "form_id": request.form_id},
+                    summary=self._summary_with_counters(
+                        run_ctx,
+                        {"current_step_index": idx, "form_id": request.form_id},
+                    ),
                     reason="user_input_requested",
                 )
                 return RunStatus.PENDING_USER_INPUT.value
@@ -811,7 +889,7 @@ class OrchestratorEngine:
                         current_status=current_status,
                         target_status=RunStatus.FAILED,
                         step_id=step_id,
-                        summary={"failed_step_id": step_id},
+                        summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
                         reason="plan_proposal_missing_agent",
                     )
                     current_status = RunStatus.FAILED
@@ -863,7 +941,7 @@ class OrchestratorEngine:
                     current_status=current_status,
                     target_status=RunStatus.FAILED,
                     step_id=step_id,
-                    summary={"failed_step_id": step_id},
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
                     reason="step_failed",
                 )
                 current_status = RunStatus.FAILED
@@ -881,20 +959,24 @@ class OrchestratorEngine:
             next_index = idx + 1
             if step_id in {"plan", "planning"}:
                 next_index = self._resolve_plan_next_index(flow_def, idx, result)
-            self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+            self.memory.update_run_status(
+                run_ctx.run_id,
+                RunStatus.RUNNING.value,
+                summary=self._summary_with_counters(run_ctx, {"current_step_index": next_index}),
+            )
             idx = next_index
 
         if last_result_data is None:
-            self._transition_run_status(
-                run_id=run_ctx.run_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                current_status=current_status,
-                target_status=RunStatus.FAILED,
-                step_id="output",
-                summary={"failed_step_id": "output", "reason": "missing_run_output"},
-                reason="missing_run_output",
-            )
+        self._transition_run_status(
+            run_id=run_ctx.run_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            current_status=current_status,
+            target_status=RunStatus.FAILED,
+            step_id="output",
+            summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
+            reason="missing_run_output",
+        )
             self._emit_event(
                 kind="run_failed",
                 run_id=run_ctx.run_id,
@@ -906,7 +988,30 @@ class OrchestratorEngine:
             self._persist_run_output(run_ctx)
             return RunStatus.FAILED.value
 
-        self.memory.update_run_output(run_ctx.run_id, output=self._normalize_run_output(last_result_data))
+        normalized_output = self._normalize_run_output(last_result_data)
+        decision = self.governance.before_run_output(output=normalized_output, run_ctx=run_ctx)
+        if not decision.allowed:
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=current_status,
+                target_status=RunStatus.FAILED,
+                step_id="output",
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": decision.reason}),
+                reason="output_denied",
+            )
+            self._emit_event(
+                kind="output_denied",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.FAILED.value
+        self.memory.update_run_output(run_ctx.run_id, output=normalized_output)
         self._transition_run_status(
             run_id=run_ctx.run_id,
             product=run_ctx.product,
@@ -914,7 +1019,7 @@ class OrchestratorEngine:
             current_status=current_status,
             target_status=RunStatus.COMPLETED,
             step_id=None,
-            summary={"current_step_index": len(flow_def.steps)},
+            summary=self._summary_with_counters(run_ctx, {"current_step_index": len(flow_def.steps)}),
             reason="run_completed",
         )
         self._emit_event(
@@ -947,6 +1052,17 @@ class OrchestratorEngine:
         files = data.get("output_files")
         if not isinstance(files, list) or not files:
             return result
+        decision = self.governance.before_output_files(files=files, run_ctx=run_ctx)
+        if not decision.allowed:
+            self._emit_event(
+                kind="output_files_denied",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            raise RuntimeError(decision.reason or "output_files_denied")
         stored = self.memory.write_output_files(product=run_ctx.product, run_id=run_ctx.run_id, files=files) or []
         updated = dict(result)
         updated_data = dict(data)
@@ -1004,6 +1120,42 @@ class OrchestratorEngine:
             payload=payload,
         )
         self.tracer.emit(evt)
+
+    def _reject_run(
+        self,
+        *,
+        run_id: str,
+        product: str,
+        flow: str,
+        payload: Dict[str, Any],
+        code: str,
+        message: str,
+        details: Dict[str, Any],
+    ) -> RunOperationResult:
+        now = int(time.time())
+        run_record = RunRecord(
+            run_id=run_id,
+            product=product,
+            flow=flow,
+            status=RunStatus.FAILED,
+            autonomy_level=None,
+            started_at=now,
+            finished_at=now,
+            input=payload,
+            summary={"error": {"code": code, "message": message, "details": details}},
+        )
+        self.memory.create_run(run_record)
+        self._emit_event(
+            kind="run_rejected",
+            run_id=run_id,
+            step_id=None,
+            product=product,
+            flow=flow,
+            payload={"code": code, "message": message, "details": details},
+        )
+        error_details = dict(details)
+        error_details["run_id"] = run_id
+        return RunOperationResult.failure(code=code, message=message, details=error_details)
 
     def _persist_run_output(self, run_ctx: RunContext) -> None:
         bundle = self.memory.get_run(run_ctx.run_id)
@@ -1085,6 +1237,35 @@ class OrchestratorEngine:
             if agent_name:
                 run_ctx.artifacts[f"agent.{agent_name}.output"] = data
                 run_ctx.artifacts[f"agent.{agent_name}.meta"] = meta
+
+    def _init_run_meta(
+        self,
+        run_ctx: RunContext,
+        *,
+        summary: Optional[Dict[str, Any]] = None,
+        steps: Optional[List[StepRecord]] = None,
+    ) -> None:
+        summary = summary or {}
+        def _as_int(value: Any) -> Optional[int]:
+            try:
+                return int(value)
+            except Exception:
+                return None
+
+        steps_executed = _as_int(summary.get("steps_executed"))
+        if steps_executed is None and steps is not None:
+            steps_executed = sum(1 for s in steps if not _is_step_status(s.status, StepStatus.NOT_STARTED))
+        run_ctx.meta["steps_executed"] = steps_executed or 0
+        run_ctx.meta["tool_calls"] = _as_int(summary.get("tool_calls")) or 0
+        run_ctx.meta["tokens_used"] = _as_int(summary.get("tokens_used")) or 0
+
+    @staticmethod
+    def _summary_with_counters(run_ctx: RunContext, summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        merged = dict(summary or {})
+        for key in ("steps_executed", "tool_calls", "tokens_used"):
+            if key in run_ctx.meta:
+                merged[key] = run_ctx.meta.get(key)
+        return merged
 
     def _stage_inputs(self, run_ctx: RunContext) -> None:
         self.memory.ensure_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)

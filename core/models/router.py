@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from core.config.schema import Settings
+from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.policies import PolicyEngine
 from core.models.providers.openai_provider import OpenAIProvider, OpenAIRequest, OpenAIResponse
 
@@ -68,7 +69,7 @@ class ModelRouter:
         self,
         *,
         product: str,
-        purpose: str,
+        purpose: ReasoningPurpose,
         override_model: Optional[str] = None,
         override_provider: Optional[str] = None,
     ) -> ModelSelection:
@@ -84,8 +85,9 @@ class ModelRouter:
         model = default_model
         if isinstance(by_product, dict) and product in by_product and isinstance(by_product[product], dict):
             model = str(by_product[product].get("model", model))
-        if isinstance(by_purpose, dict) and purpose in by_purpose and isinstance(by_purpose[purpose], dict):
-            model = str(by_purpose[purpose].get("model", model))
+        purpose_key = purpose.value
+        if isinstance(by_purpose, dict) and purpose_key in by_purpose and isinstance(by_purpose[purpose_key], dict):
+            model = str(by_purpose[purpose_key].get("model", model))
 
         provider = default_provider
         if override_provider:
@@ -106,13 +108,23 @@ class ModelRouter:
         self,
         *,
         product: str,
-        purpose: str,
+        purpose: ReasoningPurpose,
         request: OpenAIRequest,
         override_model: Optional[str] = None,
     ) -> OpenAIResponse:
         sel = self.select(product=product, purpose=purpose, override_model=override_model, override_provider="openai")
         provider = self._get_provider("openai")
-        req = request.model_copy(update={"model": sel.model})
+        req = request.model_copy(
+            update={
+                "model": sel.model,
+                "metadata": {
+                    **(request.metadata or {}),
+                    "router_provider": sel.provider,
+                    "router_model": sel.model,
+                    "reasoning_purpose": purpose.value,
+                },
+            },
+        )
         return provider.complete(req)
 
     def _get_provider(self, name: str) -> Any:

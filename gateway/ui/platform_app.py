@@ -125,8 +125,10 @@ def _resolve_path(path_str: str) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path)
 
 
-def _observability_root() -> Path:
-    return REPO_ROOT / "observability"
+def _observability_root(settings: Any | None = None) -> Path:
+    resolved = settings or load_settings()
+    path = Path(resolved.app.paths.observability_dir)
+    return path if path.is_absolute() else (resolved.repo_root_path() / path)
 
 
 def _save_uploaded_files(
@@ -845,14 +847,17 @@ def main() -> None:
             example_key = f"{prod}_example_loaded"
             if st.button("Load Example", type="secondary"):
                 st.session_state[example_key] = True
-                st.session_state[payload_key] = _pretty(
-                    {
-                        "dataset": "visual_insights_input.csv",
-                        "prompt": "Summarize key trends and highlight anomalies.",
-                        "files": [{"name": "visual_insights_input.csv", "file_type": "csv"}],
-                        "upload_id": "demo_upload_1",
-                    }
-                )
+                if prod == "hello_world":
+                    st.session_state[payload_key] = _pretty({"keyword": "Hello from the demo"})
+                else:
+                    st.session_state[payload_key] = _pretty(
+                        {
+                            "dataset": "visual_insights_input.csv",
+                            "prompt": "Summarize key trends and highlight anomalies.",
+                            "files": [{"name": "visual_insights_input.csv", "file_type": "csv"}],
+                            "upload_id": "demo_upload_1",
+                        }
+                    )
             payload_text = st.text_area("Payload (JSON)", value=st.session_state[payload_key], height=220)
             st.session_state[payload_key] = payload_text
             ok, payload, err = _safe_json_loads(payload_text)
@@ -878,6 +883,85 @@ def main() -> None:
                     st.success(f"Run started: {run_id}")
                     _append_history(run_id)
                     _materialize_run_dirs(observability_root, product=prod, run_id=run_id)
+                    st.session_state["last_run_id"] = run_id
+                    st.session_state["last_run_status"] = resp.body.get("data", {}).get("status")
+                    st.session_state["last_run_product"] = prod
+                    st.session_state["last_run_flow"] = flow
+
+        pending_status = st.session_state.get("last_run_status")
+        if pending_status in {"PENDING_USER_INPUT", "NEEDS_USER_INPUT"}:
+            run_id = st.session_state.get("last_run_id")
+            flow_name = st.session_state.get("last_run_flow") or flow
+            flow_def = _load_flow_definition(prod, flow_name) or {}
+            user_input_step = None
+            for step in flow_def.get("steps", []):
+                if isinstance(step, dict) and step.get("type") == "user_input":
+                    user_input_step = step
+                    break
+            if not user_input_step:
+                st.info("Run is waiting for user input, but no user_input step metadata is available.")
+            else:
+                params = user_input_step.get("params") if isinstance(user_input_step.get("params"), dict) else {}
+                form_id = params.get("form_id") or "user_input"
+                prompt = params.get("prompt") or params.get("title") or "Provide input"
+                input_type = params.get("input_type") or ("text" if params.get("mode") == "free_text_input" else "select")
+                choices = params.get("choices") if isinstance(params.get("choices"), list) else None
+                defaults = params.get("defaults") if isinstance(params.get("defaults"), dict) else {}
+                required = params.get("required") if isinstance(params.get("required"), list) else []
+                schema = params.get("schema") if isinstance(params.get("schema"), dict) else {}
+                properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+
+                st.markdown("### User input required")
+                st.write(prompt)
+                values: Dict[str, Any] = {}
+                if input_type == "select" and choices:
+                    labels = [c.get("label") or c.get("value") for c in choices]
+                    default_val = defaults.get("value")
+                    default_idx = labels.index(default_val) if default_val in labels else 0
+                    selection = st.selectbox("Select value", labels, index=default_idx)
+                    values["value"] = selection
+                elif properties:
+                    for key, spec in properties.items():
+                        if not isinstance(spec, dict):
+                            continue
+                        label = f"{key}{' *' if key in required else ''}"
+                        enum = spec.get("enum") if isinstance(spec.get("enum"), list) else None
+                        default = defaults.get(key)
+                        if enum:
+                            selected_value = default if default in enum else enum[0]
+                            values[key] = st.selectbox(label, enum, index=enum.index(selected_value))
+                        elif spec.get("type") == "number":
+                            values[key] = float(st.number_input(label, value=float(default or 0.0)))
+                        elif spec.get("type") == "integer":
+                            values[key] = int(st.number_input(label, value=int(default or 0), step=1))
+                        elif spec.get("type") == "boolean":
+                            values[key] = st.checkbox(label, value=bool(default) if default is not None else False)
+                        else:
+                            values[key] = st.text_input(label, value=str(default) if default is not None else "")
+                else:
+                    values["text"] = st.text_area("Response", value=str(defaults.get("text", "")), height=140)
+
+                comment = st.text_area("Comment", value="", height=80)
+                if st.button("Submit input", type="primary", disabled=not run_id):
+                    response_payload = {
+                        "schema_version": params.get("schema_version", "1.0"),
+                        "form_id": form_id,
+                        "values": values,
+                        "comment": comment or "",
+                    }
+                    resp = client.resume_run(
+                        run_id,
+                        decision="APPROVED",
+                        approval_payload={},
+                        comment=None,
+                        user_input_response=response_payload,
+                    )
+                    if resp.ok:
+                        st.success("User input submitted. Refreshing run status...")
+                        st.session_state["last_run_status"] = resp.body.get("data", {}).get("status") if resp.body else None
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to submit user input: {resp.error or resp.body}")
 
     elif page == "Approvals":
         _render_approvals(client)

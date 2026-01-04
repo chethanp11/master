@@ -206,9 +206,7 @@ Coercion attempts to convert strings to bool/int/float for convenience.
 
 
 def _is_hf_space_env(env: Dict[str, str]) -> bool:
-    if "HF_HOME" in env:
-        return True
-    return any(key.startswith("HF_") for key in env.keys())
+    return "HF_HOME" in env or "SPACE_ID" in env
 
 
 # ==============================
@@ -292,11 +290,14 @@ Inputs:
     merged = _deep_merge(merged, {"secrets": _section(secrets_cfg, "secrets")})
 
     if _is_hf_space_env(effective_env):
-        # Hugging Face Spaces has an ephemeral filesystem; default to /data/storage when unset.
+        # Hugging Face Spaces has an ephemeral filesystem; default to /data for persistence when unset.
         paths_cfg = (merged.get("app") or {}).get("paths") if isinstance(merged.get("app"), dict) else None
         storage_dir = paths_cfg.get("storage_dir") if isinstance(paths_cfg, dict) else None
+        observability_dir = paths_cfg.get("observability_dir") if isinstance(paths_cfg, dict) else None
         if not storage_dir:
             merged = _deep_merge(merged, {"app": {"paths": {"storage_dir": "/data/storage"}}})
+        if not observability_dir:
+            merged = _deep_merge(merged, {"app": {"paths": {"observability_dir": "/data/observability"}}})
 
     # --- Apply MASTER__ env var overrides ---
     merged = _apply_env_overrides(merged, effective_env)

@@ -16,9 +16,9 @@ highlights how components collaborate at runtime.
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfile, docker-compose, and k8s manifests. |
-| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/memory/observability_store.py` defines the directory layout and output paths. |
+| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/memory/observability_store.py` defines the directory layout; root is configurable via `app.paths.observability_dir`. |
 | `/products` | Product packs | Individual product definitions (flows, agents, tools, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
-| `/storage` | Persistent state | Storage folders for legacy artifacts and memory DB files. | Still used for vector store/SQLite in dev; observability moved to `/observability`. |
+| `/storage` | Persistent state | Default runtime storage path for memory DB files and other artifacts. | Used by `core/memory` as the default storage root; overridable via `app.paths.storage_dir`. |
 | `/tests` | Automated tests | Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `products/*/tests`. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions. |
 
@@ -79,6 +79,7 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | `core/agents/base.py` | `BaseAgent` | Abstract contract for agents. | `run(step_context)` returns `AgentResult`. |
 | `core/agents/registry.py` | Agent registry | Global DI container for agent factories. | Case-normalized name resolution; new instance per resolution. |
+| `core/agents/llm_reasoner.py` | LLM reasoner | Built-in LLM agent. | Invokes models via `core/models/router.py` and emits governance/tracing hooks. |
 
 ### Tools
 
@@ -183,7 +184,7 @@ erDiagram
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/governance/policies.py` | Policy engine | Evaluates tool/model allowlists and autonomy rules. | Per-product overrides supported. |
-| `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy check at run start; tool/step checks at execution. |
+| `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy check at run start; step/tool/model checks at execution. |
 | `core/governance/security.py` | Redaction | Scrubs secrets/PII from payloads. | Regex + key-hint based sanitization. |
 
 ```mermaid
@@ -199,29 +200,14 @@ flowchart LR
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/models/router.py` | Model router | Selects provider/model per product/purpose. | Enforces model policies. |
-| `core/models/providers/openai_provider.py` | OpenAI provider (stub) | Placeholder adapter. | No network calls in v1. |
-
-### Knowledge
-
-| Code Path | Code Name | Functional Details | Technical Details |
-| --- | --- | --- | --- |
-| `core/knowledge/vector_store.py` | Vector store | SQLite-backed chunk store. | Lexical Jaccard scoring in v1. |
-| `core/knowledge/retriever.py` | Retriever | Thin wrapper over VectorStore. | Adds filters/top_k defaults. |
-
-```mermaid
-flowchart TB
-  Ingest[Ingestion] --> Store[SqliteVectorStore]
-  Store --> Retriever[Retriever]
-  Retriever --> Orchestrator
-  Orchestrator --> Agents
-```
+| `core/models/providers/openai_provider.py` | OpenAI provider | Vendor adapter. | Provider modules are the only place allowed to call model SDKs. |
 
 ### Tracing & Observability
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/memory/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend and `observability/<product>/<run_id>/runtime/events.jsonl`. |
-| `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/` and writes `response.json`. |
+| `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/`. Root is configurable. |
 
 ---
 
@@ -267,7 +253,7 @@ Products are discovered and registered by `core/utils/product_loader.py`.
 | Path | Purpose | Notes |
 | --- | --- | --- |
 | `tests/core` | Unit/regression suites for core subsystems. | Orchestrator, memory, governance, tools, contracts. |
-| `tests/integration` | End-to-end flows. | CLI, API, UI, knowledge, resilience. |
+| `tests/integration` | End-to-end flows. | CLI, API, UI, resilience. |
 | `products/*/tests` | Product regressions. | Golden paths for each product. |
 
 ---

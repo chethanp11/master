@@ -1,3 +1,5 @@
+# captured_at: 2026-01-04T12:52:14.741269+00:00
+
 # core/__init__.py
 
 
@@ -80,23 +82,25 @@ class BaseAgent(ABC):
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import json
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
 from core.agents.base import BaseAgent
 from core.config.loader import load_settings
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult, AgentKind
+from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.hooks import GovernanceHooks
-from core.models.providers.openai_provider import OpenAIRequest
-from core.models.router import ModelRouter
+from ..models.providers.openai_provider import OpenAIRequest
+from ..models.router import ModelRouter
 from core.orchestrator.context import StepContext
-from core.agents.renderer import render_messages
+from core.orchestrator.templating import render_messages
 
 
 class LlmReasonerParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    purpose: Optional[str] = Field(default=None, description="Routing hint for model selection.")
+    purpose: ReasoningPurpose = Field(..., description="Required reasoning purpose for model selection.")
     system: Optional[str] = Field(default=None, description="System instruction for the model.")
     prompt: Optional[str] = Field(default=None, description="Primary user instruction.")
     messages: List[Dict[str, Any]] = Field(default_factory=list, description="Optional pre-built message list.")
@@ -154,7 +158,7 @@ class LlmReasoner(BaseAgent):
                 "model_call_attempt_started",
                 {
                     "model": model_name,
-                    "purpose": params.purpose,
+                    "purpose": params.purpose.value,
                     "allowed": decision.allowed,
                     "reason": decision.reason,
                 },
@@ -169,7 +173,12 @@ class LlmReasoner(BaseAgent):
                 messages=messages,
                 temperature=params.temperature,
                 max_tokens=params.max_tokens,
-                metadata={"product": step_context.product, "flow": step_context.flow, "step_id": step_context.step_id},
+                metadata={
+                    "product": step_context.product,
+                    "flow": step_context.flow,
+                    "step_id": step_context.step_id,
+                    "reasoning_purpose": params.purpose.value,
+                },
             )
             resp = router.completion_openai(
                 request=req,
@@ -186,16 +195,50 @@ class LlmReasoner(BaseAgent):
                 err = AgentError(code=AgentErrorCode.MODEL_ERROR, message=message, details=resp.error or {})
                 step_context.emit(
                     "model_call_failed",
-                    {"model": model_name, "reason": err.message, "error": resp.error or {}},
+                    {
+                        "model": model_name,
+                        "purpose": params.purpose.value,
+                        "reason": err.message,
+                        "error": resp.error or {},
+                    },
                 )
                 return AgentResult(ok=False, data=None, error=err, meta=meta)
 
             usage = resp.usage or {}
             meta.token_estimate = usage.get("total_tokens")
+            tokens_used = usage.get("total_tokens")
+            if tokens_used is None:
+                tokens_used = params.max_tokens or 0
+            try:
+                tokens_used_int = int(tokens_used)
+            except Exception:
+                tokens_used_int = 0
+            run_tokens = int(step_context.run.meta.get("tokens_used", 0))
+            run_tokens += tokens_used_int
+            step_context.run.meta["tokens_used"] = run_tokens
+            run_budget = governance.settings.policies.max_tokens_per_run
+            if run_budget is not None and run_tokens > run_budget:
+                step_context.emit(
+                    "model_call_budget_exceeded",
+                    {
+                        "model": resp.model,
+                        "purpose": params.purpose.value,
+                        "used": run_tokens,
+                        "limit": run_budget,
+                    },
+                )
+                err = AgentError(
+                    code=AgentErrorCode.POLICY_BLOCKED,
+                    message="run_token_budget_exceeded",
+                    details={"used": run_tokens, "limit": run_budget},
+                )
+                meta.redacted = True
+                return AgentResult(ok=False, data=None, error=err, meta=meta)
             step_context.emit(
                 "model_call_succeeded",
                 {
                     "model": resp.model,
+                    "purpose": params.purpose.value,
                     "usage": usage,
                     "provider": resp.meta.get("provider") if isinstance(resp.meta, dict) else None,
                 },
@@ -207,6 +250,9 @@ class LlmReasoner(BaseAgent):
                 "provider": resp.meta.get("provider") if isinstance(resp.meta, dict) else None,
             }
             return AgentResult(ok=True, data=data, error=None, meta=meta)
+        except ValidationError as exc:
+            err = AgentError(code=AgentErrorCode.INVALID_INPUT, message="invalid_llm_reasoner_params", details=exc.errors())
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
         except Exception as exc:
             err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
             return AgentResult(ok=False, data=None, error=err, meta=meta)
@@ -226,6 +272,128 @@ class LlmReasoner(BaseAgent):
 def build() -> LlmReasoner:
     return LlmReasoner()
 
+
+class RoleReasonerParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str
+    temperature: float = Field(default=0.2)
+    max_tokens: Optional[int] = Field(default=None)
+    override_model: Optional[str] = Field(default=None)
+
+
+class InsightReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    highlights: List[str] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+
+
+class PrioritizedItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    priority: int
+    rationale: str
+
+
+class PrioritizationReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priorities: List[PrioritizedItem]
+
+
+class ExplanationReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explanation: str
+    assumptions: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
+
+class _RoleReasoner(BaseAgent):
+    name: str = "role_reasoner"
+    purpose: ReasoningPurpose = ReasoningPurpose.EXPLANATION
+    output_model: type[BaseModel]
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        meta = AgentMeta(
+            agent_name=self.name,
+            kind=AgentKind.OTHER,
+            tags={"product": step_context.product, "flow": step_context.flow},
+        )
+        try:
+            if not step_context.step:
+                raise ValueError("missing_step_definition")
+            params = RoleReasonerParams.model_validate(step_context.step.params or {})
+            llm_params = LlmReasonerParams(
+                purpose=self.purpose,
+                system=self._system_prompt(),
+                prompt=params.prompt,
+                temperature=params.temperature,
+                max_tokens=params.max_tokens,
+                override_model=params.override_model,
+            )
+            updated_step = step_context.step.model_copy(update={"params": llm_params.model_dump(mode="json")})
+            llm_ctx = step_context.run.new_step(step_def=updated_step)
+            llm_result = LlmReasoner().run(llm_ctx)
+            if not llm_result.ok:
+                return llm_result
+            content = (llm_result.data or {}).get("content")
+            payload = _parse_json_payload(content)
+            output = self.output_model.model_validate(payload)
+            meta = llm_result.meta.model_copy(update={"agent_name": self.name})
+            return AgentResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.CONTRACT_VIOLATION, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+
+    def _system_prompt(self) -> str:
+        fields = list(getattr(self.output_model, "model_fields", {}).keys())
+        return f"Return JSON only with keys: {', '.join(fields)}."
+
+
+class InsightReasoner(_RoleReasoner):
+    name = "insight_reasoner"
+    purpose = ReasoningPurpose.INSIGHT
+    output_model = InsightReasonerOutput
+
+
+class PrioritizationReasoner(_RoleReasoner):
+    name = "prioritization_reasoner"
+    purpose = ReasoningPurpose.PRIORITIZATION
+    output_model = PrioritizationReasonerOutput
+
+
+class ExplanationReasoner(_RoleReasoner):
+    name = "explanation_reasoner"
+    purpose = ReasoningPurpose.EXPLANATION
+    output_model = ExplanationReasonerOutput
+
+
+def build_insight_reasoner() -> InsightReasoner:
+    return InsightReasoner()
+
+
+def build_prioritization_reasoner() -> PrioritizationReasoner:
+    return PrioritizationReasoner()
+
+
+def build_explanation_reasoner() -> ExplanationReasoner:
+    return ExplanationReasoner()
+
+
+def _parse_json_payload(content: Any) -> Dict[str, Any]:
+    if isinstance(content, dict):
+        return content
+    if isinstance(content, str):
+        try:
+            return json.loads(content)
+        except Exception as exc:
+            raise ValueError("invalid_json_output") from exc
+    raise ValueError("missing_json_output")
+
 # core/agents/registry.py
 # ==============================
 # Agent Registry
@@ -233,8 +401,8 @@ def build() -> LlmReasoner:
 """
 Global agent registry.
 
-Design:
-- Registry stores name -> agent factory or instance
+    Design:
+    - Registry stores name -> agent factory (no shared instances)
 - Products can register their agents during boot (gateway startup, or product loader)
 - Resolution is by string name used in StepDef.agent
 """
@@ -245,6 +413,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 from core.agents.base import BaseAgent
+from core.agents.llm_reasoner import (
+    build as build_llm_reasoner,
+    build_explanation_reasoner,
+    build_insight_reasoner,
+    build_prioritization_reasoner,
+)
 
 
 AgentFactory = Callable[[], BaseAgent]
@@ -270,6 +444,8 @@ class AgentRegistry:
     @classmethod
     def clear(cls) -> None:
         cls._agents.clear()
+        global _CORE_REGISTERED
+        _CORE_REGISTERED = False
 
     @classmethod
     def register(
@@ -285,19 +461,14 @@ class AgentRegistry:
             raise ValueError(f"Agent already registered: {name}")
 
         if isinstance(factory, BaseAgent):
-            inst = factory
-
-            def _factory(inst: BaseAgent = inst) -> BaseAgent:
-                return inst
-
-            actual_factory: AgentFactory = _factory
-        else:
-            actual_factory = factory
+            raise ValueError("AgentRegistry.register requires a factory to avoid shared state across runs.")
+        actual_factory = factory
 
         cls._agents[norm] = AgentRegistration(name=norm, factory=actual_factory, meta=meta or {})
 
     @classmethod
     def resolve(cls, name: str) -> BaseAgent:
+        _register_core_agents()
         norm = _norm(name)
         reg = cls._agents.get(norm)
         if reg is None:
@@ -306,20 +477,36 @@ class AgentRegistry:
 
     @classmethod
     def has(cls, name: str) -> bool:
+        _register_core_agents()
         return _norm(name) in cls._agents
 
     @classmethod
     def list(cls) -> Dict[str, Dict[str, Any]]:
+        _register_core_agents()
         return {k: {"name": v.name, "meta": v.meta} for k, v in cls._agents.items()}
 
 
 def _norm(name: str) -> str:
     return name.strip().lower().replace(" ", "_")
 
-# core/agents/renderer.py
-from core.orchestrator.templating import render_messages, render_template
 
-__all__ = ["render_messages", "render_template"]
+_CORE_REGISTERED = False
+
+
+def _register_core_agents() -> None:
+    global _CORE_REGISTERED
+    if _CORE_REGISTERED:
+        return
+    for factory in (
+        build_llm_reasoner,
+        build_insight_reasoner,
+        build_prioritization_reasoner,
+        build_explanation_reasoner,
+    ):
+        name = _norm(factory().name)
+        if name not in AgentRegistry._agents:
+            AgentRegistry.register(name, factory)
+    _CORE_REGISTERED = True
 
 # core/config/__init__.py
 
@@ -532,6 +719,10 @@ Coercion attempts to convert strings to bool/int/float for convenience.
     return out
 
 
+def _is_hf_space_env(env: Dict[str, str]) -> bool:
+    return "HF_HOME" in env or "SPACE_ID" in env
+
+
 # ==============================
 # Public Loader API
 # ==============================
@@ -611,6 +802,16 @@ Inputs:
     sec_path = Path(secrets_file or secrets_path) if (secrets_file or secrets_path) else (root / "secrets" / "secrets.yaml")
     secrets_cfg = _read_yaml(sec_path)
     merged = _deep_merge(merged, {"secrets": _section(secrets_cfg, "secrets")})
+
+    if _is_hf_space_env(effective_env):
+        # Hugging Face Spaces has an ephemeral filesystem; default to /data for persistence when unset.
+        paths_cfg = (merged.get("app") or {}).get("paths") if isinstance(merged.get("app"), dict) else None
+        storage_dir = paths_cfg.get("storage_dir") if isinstance(paths_cfg, dict) else None
+        observability_dir = paths_cfg.get("observability_dir") if isinstance(paths_cfg, dict) else None
+        if not storage_dir:
+            merged = _deep_merge(merged, {"app": {"paths": {"storage_dir": "/data/storage"}}})
+        if not observability_dir:
+            merged = _deep_merge(merged, {"app": {"paths": {"observability_dir": "/data/observability"}}})
 
     # --- Apply MASTER__ env var overrides ---
     merged = _apply_env_overrides(merged, effective_env)
@@ -739,6 +940,7 @@ class PathsConfig(BaseModel):
     configs_dir: str = Field(default="configs", description="Configs directory")
     secrets_dir: str = Field(default="secrets", description="Secrets directory")
     storage_dir: str = Field(default="storage", description="Runtime storage directory")
+    observability_dir: str = Field(default="observability", description="Observability output directory")
 
 
 class AppConfig(BaseModel):
@@ -810,6 +1012,22 @@ class PoliciesConfig(BaseModel):
     model_max_tokens: Optional[int] = Field(
         default=None,
         description="Optional hard ceiling for model max_tokens requests.",
+    )
+    max_tokens_per_run: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for total model tokens consumed per run.",
+    )
+    max_steps: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for total steps per run.",
+    )
+    max_tool_calls: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for tool calls per run.",
+    )
+    max_payload_bytes: Optional[int] = Field(
+        default=None,
+        description="Optional hard ceiling for run payload size in bytes.",
     )
 
     # Per-product policy overrides
@@ -904,7 +1122,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -913,6 +1131,49 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 # Typing
 # ==============================
 T = TypeVar("T")
+
+CONTROL_FIELDS = frozenset(
+    {
+        "next_step",
+        "retry",
+        "retry_instructions",
+        "branch",
+        "branching",
+        "branch_hint",
+        "branching_hint",
+    }
+)
+
+
+def find_control_fields(payload: Any) -> List[str]:
+    violations: List[str] = []
+
+    def _walk(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                key_str = str(key)
+                key_lower = key_str.lower()
+                current = f"{path}{key_str}"
+                if key_lower in CONTROL_FIELDS:
+                    violations.append(current)
+                _walk(child, f"{current}.")
+        elif isinstance(value, list):
+            for idx, child in enumerate(value):
+                _walk(child, f"{path}[{idx}].")
+
+    _walk(payload, "")
+    return violations
+
+
+def validate_agent_output_payload(payload: Any) -> None:
+    if payload is None:
+        return
+    if not isinstance(payload, dict):
+        raise ValueError("agent_output_not_object")
+    violations = find_control_fields(payload)
+    if violations:
+        joined = ", ".join(violations)
+        raise ValueError(f"agent_output_contains_control_fields: {joined}")
 
 
 # ==============================
@@ -1028,6 +1289,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
+from core.contracts.user_input_schema import UserInputRequest
+
 # ==============================
 # Enums
 # ==============================
@@ -1037,6 +1300,7 @@ class StepType(str, Enum):
     TOOL = "tool"
     HUMAN_APPROVAL = "human_approval"
     USER_INPUT = "user_input"
+    PLAN_PROPOSAL = "plan_proposal"
     SUBFLOW = "subflow"
 
 
@@ -1059,6 +1323,7 @@ StepType.agent = StepType.AGENT  # type: ignore[attr-defined]
 StepType.tool = StepType.TOOL  # type: ignore[attr-defined]
 StepType.human_approval = StepType.HUMAN_APPROVAL  # type: ignore[attr-defined]
 StepType.user_input = StepType.USER_INPUT  # type: ignore[attr-defined]
+StepType.plan_proposal = StepType.PLAN_PROPOSAL  # type: ignore[attr-defined]
 StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
 
 AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
@@ -1116,6 +1381,12 @@ class StepDef(BaseModel):
             raise ValueError("tool steps require the 'tool' field")
         if self.type == StepType.AGENT and not self.agent:
             raise ValueError("agent steps require the 'agent' field")
+        if self.type == StepType.PLAN_PROPOSAL and not self.agent:
+            raise ValueError("plan_proposal steps require the 'agent' field")
+        if self.type == StepType.USER_INPUT:
+            UserInputRequest.model_validate(self.params or {})
+        if self.type == StepType.SUBFLOW:
+            raise ValueError("subflow steps are not supported in v1; compose flows at the entrypoint")
         return self
 
 
@@ -1149,6 +1420,73 @@ class FlowDef(BaseModel):
     @property
     def name(self) -> str:
         return self.id
+
+# core/contracts/plan_schema.py
+# ==============================
+# Plan Proposal Contracts
+# ==============================
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class PlanStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    description: str
+    step_type: str
+    tool: Optional[str] = None
+    agent: Optional[str] = None
+    requires_approval: bool = False
+
+
+class PlanApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    reason: str
+
+
+class EstimatedCost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    currency: str = "USD"
+    amount: float = 0.0
+    tokens: Optional[int] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlanProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "1.0"
+    summary: str
+    steps: List[PlanStep]
+    required_tools: List[str] = Field(default_factory=list)
+    approvals: List[PlanApproval] = Field(default_factory=list)
+    estimated_cost: EstimatedCost
+
+# core/contracts/reasoning_schema.py
+# ==============================
+# Reasoning Purpose Contract
+# ==============================
+"""
+Reasoning purposes for LLM usage in master/.
+
+This is a stable contract used across routing, governance, and tracing.
+"""
+
+from enum import Enum
+
+
+class ReasoningPurpose(str, Enum):
+    INSIGHT = "INSIGHT"
+    PRIORITIZATION = "PRIORITIZATION"
+    EXPLANATION = "EXPLANATION"
+    UNCERTAINTY = "UNCERTAINTY"
 
 # core/contracts/run_schema.py
 # ==============================
@@ -1422,9 +1760,16 @@ class ToolResult(ToolEnvelope[Dict[str, Any]]):
 # core/contracts/user_input_schema.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+UserInputMode = Literal["choice_input", "free_text_input"]
+
+
+class UserInputModes:
+    CHOICE_INPUT = "choice_input"
+    FREE_TEXT_INPUT = "free_text_input"
 
 
 class UserInputRequest(BaseModel):
@@ -1432,12 +1777,31 @@ class UserInputRequest(BaseModel):
 
     schema_version: str = Field(default="1.0")
     form_id: str
-    title: str
+    prompt: Optional[str] = None
+    title: Optional[str] = None
+    input_type: Optional[Literal["text", "select", "number", "boolean"]] = None
+    mode: UserInputMode = Field(default=UserInputModes.CHOICE_INPUT)
     description: Optional[str] = None
     schema: Dict[str, Any] = Field(default_factory=dict)
     defaults: Dict[str, Any] = Field(default_factory=dict)
     options: Optional[Dict[str, Any]] = None
     required: List[str] = Field(default_factory=list)
+    choices: Optional[List[Dict[str, Any]]] = None
+    constraints: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _normalize_prompt_and_input_type(self) -> "UserInputRequest":
+        if not self.prompt:
+            if self.title:
+                self.prompt = self.title
+            else:
+                raise ValueError("prompt is required")
+        if not self.input_type:
+            if self.mode == UserInputModes.FREE_TEXT_INPUT:
+                self.input_type = "text"
+            else:
+                self.input_type = "select"
+        return self
 
 
 class UserInputResponse(BaseModel):
@@ -1469,13 +1833,22 @@ No persistence here. No logging here. Callers emit trace events.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any, Dict, Optional
 
 from core.config.schema import Settings
+from core.contracts.agent_schema import find_control_fields, validate_agent_output_payload
+from core.contracts.reasoning_schema import ReasoningPurpose
 from core.contracts.flow_schema import AutonomyLevel
 from core.governance.policies import PolicyDecision, PolicyEngine
 from core.governance.security import SecurityRedactor
 from core.orchestrator.context import RunContext, StepContext
+
+_INJECTION_PATTERNS = (
+    "ignore previous instructions",
+    "dump system prompt",
+    "reveal configuration",
+)
 
 
 @dataclass(frozen=True)
@@ -1508,11 +1881,25 @@ class GovernanceHooks:
     # ------------------------------
 
     def before_step(self, *, step_ctx: StepContext) -> HookDecision:
+        step_payload = step_ctx.step.model_dump() if step_ctx.step is not None else {"id": self._step_id(step_ctx), "type": step_ctx.type}
+        limit = self.settings.policies.max_steps
+        if limit is not None:
+            count = int(step_ctx.run.meta.get("steps_executed", 0))
+            if count >= limit:
+                return self._decision(
+                    allowed=False,
+                    reason="step_limit_exceeded",
+                    details={"step_id": self._step_id(step_ctx), "requested": count + 1, "limit": limit},
+                    scrubbed={"step": self.redactor.sanitize(step_payload)},
+                )
         return self._decision(
             allowed=True,
             reason="ok",
-            details={"step_id": self._step_id(step_ctx), "step_type": step_ctx.step.type.value},
-            scrubbed={"step": self.redactor.sanitize(step_ctx.step.model_dump())},
+            details={
+                "step_id": self._step_id(step_ctx),
+                "step_type": step_ctx.step.type.value if step_ctx.step is not None else step_ctx.type,
+            },
+            scrubbed={"step": self.redactor.sanitize(step_payload)},
         )
 
     def before_complete(self, *, run_ctx: RunContext, output: Dict[str, Any]) -> HookDecision:
@@ -1544,17 +1931,41 @@ class GovernanceHooks:
             "run_id": self._run_id(ctx.run),
             "product": self._product(ctx.run),
         }
+        limit = self.settings.policies.max_tool_calls
+        if limit is not None:
+            count = int(ctx.run.meta.get("tool_calls", 0))
+            if count >= limit:
+                decision = PolicyDecision(
+                    allow=False,
+                    reason="tool_call_limit_exceeded",
+                    details={"tool": tool_name, "requested": count + 1, "limit": limit},
+                )
+            else:
+                ctx.run.meta["tool_calls"] = count + 1
         return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
 
     def before_model_call(
         self,
         *,
         model_name: str,
-        purpose: Optional[str],
+        purpose: ReasoningPurpose,
         messages: Dict[str, Any],
         max_tokens: Optional[int],
         ctx: StepContext,
     ) -> HookDecision:
+        flattened = str(messages).lower()
+        if any(pat in flattened for pat in _INJECTION_PATTERNS):
+            return self._decision(
+                allowed=False,
+                reason="prompt_injection_detected",
+                details={"patterns": [p for p in _INJECTION_PATTERNS if p in flattened]},
+                scrubbed={
+                    "model": model_name,
+                    "purpose": purpose.value,
+                    "run_id": self._run_id(ctx.run),
+                    "product": self._product(ctx.run),
+                },
+            )
         decision = self.engine.evaluate_model_use(model_name=model_name, step_ctx=ctx)
         limit = self.settings.policies.model_max_tokens
         if limit is not None and max_tokens is not None and max_tokens > limit:
@@ -1563,15 +1974,106 @@ class GovernanceHooks:
                 reason="model_token_limit_exceeded",
                 details={"model": model_name, "requested": max_tokens, "limit": limit},
             )
+        run_limit = self.settings.policies.max_tokens_per_run
+        if run_limit is not None:
+            used = int(ctx.run.meta.get("tokens_used", 0))
+            requested = int(max_tokens or 0)
+            if used >= run_limit or (requested and used + requested > run_limit):
+                decision = PolicyDecision(
+                    allow=False,
+                    reason="run_token_budget_exceeded",
+                    details={"model": model_name, "used": used, "requested": requested, "limit": run_limit},
+                )
         scrubbed = {
             "model": model_name,
-            "purpose": purpose or "",
+            "purpose": purpose.value,
             "messages": self.redactor.sanitize(messages),
             "max_tokens": max_tokens,
+            "tokens_used": int(ctx.run.meta.get("tokens_used", 0)),
             "run_id": self._run_id(ctx.run),
             "product": self._product(ctx.run),
         }
         return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
+
+    def before_user_input_response(
+        self,
+        *,
+        request: Any,
+        response: Any,
+        ctx: StepContext,
+    ) -> HookDecision:
+        limit = self.settings.policies.max_payload_bytes
+        payload = {"request": request, "response": response}
+        if limit is not None and self._payload_size_bytes(response) > limit:
+            return self._decision(
+                allowed=False,
+                reason="user_input_payload_limit_exceeded",
+                details={"limit_bytes": limit},
+                scrubbed={"payload": self.redactor.sanitize(payload), "run_id": self._run_id(ctx.run)},
+            )
+        return self._decision(
+            allowed=True,
+            reason="ok",
+            details={"run_id": self._run_id(ctx.run)},
+            scrubbed={"payload": self.redactor.sanitize(payload)},
+        )
+
+    def before_run_output(self, *, output: Dict[str, Any], run_ctx: RunContext) -> HookDecision:
+        limit = self.settings.policies.max_payload_bytes
+        if limit is not None and self._payload_size_bytes(output) > limit:
+            return self._decision(
+                allowed=False,
+                reason="output_payload_limit_exceeded",
+                details={"limit_bytes": limit},
+                scrubbed={"output": self.redactor.sanitize(output), "run_id": self._run_id(run_ctx)},
+            )
+        return self._decision(
+            allowed=True,
+            reason="ok",
+            details={"run_id": self._run_id(run_ctx)},
+            scrubbed={"output": self.redactor.sanitize(output)},
+        )
+
+    def before_output_files(self, *, files: Any, run_ctx: RunContext) -> HookDecision:
+        limit = self.settings.policies.max_payload_bytes
+        if limit is not None and self._payload_size_bytes(files) > limit:
+            return self._decision(
+                allowed=False,
+                reason="output_files_limit_exceeded",
+                details={"limit_bytes": limit},
+                scrubbed={"files": self.redactor.sanitize(files), "run_id": self._run_id(run_ctx)},
+            )
+        return self._decision(
+            allowed=True,
+            reason="ok",
+            details={"run_id": self._run_id(run_ctx)},
+            scrubbed={"files": self.redactor.sanitize(files)},
+        )
+
+    def validate_agent_output(self, *, agent_name: str, output: Dict[str, Any], ctx: StepContext) -> HookDecision:
+        violations = find_control_fields(output)
+        allowed = True
+        reason = "ok"
+        details: Dict[str, Any] = {"agent": agent_name}
+        if violations:
+            allowed = False
+            reason = "agent_output_control_fields"
+            details["violations"] = violations
+        try:
+            validate_agent_output_payload(output)
+        except Exception as exc:
+            allowed = False
+            if reason == "ok":
+                reason = "agent_output_invalid"
+            details["error"] = str(exc)
+        scrubbed = {
+            "agent": agent_name,
+            "output": self.redactor.sanitize(output),
+            "violations": violations,
+            "run_id": self._run_id(ctx.run),
+            "product": self._product(ctx.run),
+        }
+        return self._decision(allowed, reason, details, scrubbed)
 
     def _decision(self, allowed: bool, reason: str, details: Dict[str, Any], scrubbed: Dict[str, Any]) -> HookDecision:
         return HookDecision(allowed=allowed, reason=reason, details=details, scrubbed=scrubbed)
@@ -1589,6 +2091,14 @@ class GovernanceHooks:
     def _product(run_ctx: RunContext) -> str:
         record = getattr(run_ctx, "run_record", None)
         return getattr(record, "product", "unknown_product")
+
+    @staticmethod
+    def _payload_size_bytes(payload: Any) -> int:
+        try:
+            raw = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+        except Exception:
+            raw = str(payload)
+        return len(raw.encode("utf-8"))
 
     @classmethod
     def noop(cls) -> "GovernanceHooks":
@@ -1865,470 +2375,6 @@ class Redactor(SecurityRedactor):
 
     pass
 
-# core/knowledge/__init__.py
-
-
-# core/knowledge/base.py
-# ==============================
-# Knowledge Layer Contracts
-# ==============================
-"""
-Core knowledge abstractions (product-agnostic).
-
-Design goals (v1):
-- Keep minimal and stable.
-- Avoid vendor/LLM calls here.
-- Provide a small, typed interface for:
-  - Ingestion (text + metadata)
-  - Retrieval (query -> ranked chunks with source metadata)
-
-Embedding is optional in v1. If embeddings are absent, retrieval can degrade to lexical scoring.
-"""
-
-from __future__ import annotations
-
-from typing import Any, Dict, List, Optional
-
-from pydantic import BaseModel, Field
-
-
-class Chunk(BaseModel):
-    """
-    Retrieval result chunk.
-
-    Fields mirror ingestion metadata so callers can trace provenance.
-    """
-
-    chunk_id: str
-    text: str
-    source: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    score: float = 0.0
-
-
-class IngestChunk(BaseModel):
-    """
-    Input payload for upserting chunks into the store.
-    """
-
-    collection: str = Field(default="default", min_length=1)
-    doc_id: str = Field(..., min_length=1)
-    chunk_id: str = Field(..., min_length=1)
-    text: str = Field(..., min_length=1)
-    source: str = Field(..., min_length=1)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class IngestResult(BaseModel):
-    ok: bool
-    inserted: int = 0
-    updated: int = 0
-    errors: List[str] = Field(default_factory=list)
-
-    @property
-    def count(self) -> int:
-        return self.inserted + self.updated
-
-
-class Query(BaseModel):
-    collection: str = Field(default="default", min_length=1)
-    text: str = Field(..., min_length=1)
-    top_k: int = Field(default=5, ge=1, le=100)
-    filters: Dict[str, Any] = Field(default_factory=dict)
-    use_embeddings: bool = False  # placeholder for future hybrid routing
-
-
-class VectorStoreStats(BaseModel):
-    total_chunks: int
-    store_path: str
-    collections: Dict[str, int] = Field(default_factory=dict)
-
-
-class VectorStore:
-    """
-    Interface-like base for vector stores.
-    Concrete backends should implement the abstract operations below.
-    """
-
-    def upsert(self, items: List[IngestChunk]) -> IngestResult:  # pragma: no cover
-        raise NotImplementedError
-
-    def query(self, q: Query) -> List[Chunk]:  # pragma: no cover
-        raise NotImplementedError
-
-    def delete(
-        self,
-        *,
-        collection: str,
-        doc_ids: Optional[List[str]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> int:  # pragma: no cover
-        raise NotImplementedError
-
-    def stats(self, collection: Optional[str] = None) -> VectorStoreStats:  # pragma: no cover
-        raise NotImplementedError
-
-    def clear(self) -> None:  # pragma: no cover
-        raise NotImplementedError
-
-# core/knowledge/retriever.py
-# ==============================
-# Retriever
-# ==============================
-"""
-High-level retrieval orchestration.
-
-v1:
-- Thin wrapper over VectorStore.
-- Adds minor conveniences (defaults, safe handling).
-"""
-
-from __future__ import annotations
-
-from typing import Any, Dict, List, Optional
-
-from core.knowledge.base import Chunk, Query, VectorStore
-
-
-class Retriever:
-    def __init__(self, store: VectorStore) -> None:
-        self.store = store
-
-    def retrieve(
-        self,
-        *,
-        query: str,
-        collection: str = "default",
-        top_k: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
-        use_embeddings: bool = False,
-    ) -> List[Chunk]:
-        q = Query(
-            collection=collection,
-            text=query,
-            top_k=top_k,
-            filters=filters or {},
-            use_embeddings=use_embeddings,
-        )
-        return self.store.query(q)
-
-# core/knowledge/vector_store.py
-# ==============================
-# Minimal Local Vector Store (SQLite)
-# ==============================
-"""
-A minimal SQLite-backed store for text chunks + metadata.
-
-v1 choices:
-- Store chunks in SQLite at a configurable path (default under storage/vectors/).
-- Support lexical retrieval (token overlap / Jaccard) by default.
-- Optional embeddings support: store embedding JSON if provided by caller (future).
-  Retrieval can still be lexical unless embeddings are wired in.
-
-No LLM calls here. No external vector DB dependencies.
-"""
-
-from __future__ import annotations
-
-import json
-import os
-import sqlite3
-import time
-import uuid
-from typing import Any, Dict, List, Optional, Tuple
-
-from core.knowledge.base import Chunk, IngestChunk, IngestResult, Query, VectorStore, VectorStoreStats
-
-
-def _now_ts() -> int:
-    return int(time.time())
-
-
-def _new_chunk_id() -> str:
-    return f"chk_{uuid.uuid4().hex}"
-
-
-def _tokenize(text: str) -> List[str]:
-    # Simple tokenizer for v1 lexical scoring.
-    # Lowercase, split on whitespace, strip punctuation-ish edges.
-    out: List[str] = []
-    for raw in text.lower().split():
-        tok = raw.strip(".,;:!?()[]{}\"'`")
-        if tok:
-            out.append(tok)
-    return out
-
-
-def _jaccard(a: List[str], b: List[str]) -> float:
-    sa, sb = set(a), set(b)
-    if not sa or not sb:
-        return 0.0
-    inter = len(sa.intersection(sb))
-    union = len(sa.union(sb))
-    return float(inter) / float(union) if union else 0.0
-
-
-class SqliteVectorStore(VectorStore):
-    """
-    SQLite-backed chunk store.
-
-    Table schema (v1):
-      knowledge_chunks(
-        collection TEXT NOT NULL,
-        doc_id TEXT NOT NULL,
-        chunk_id TEXT NOT NULL,
-        text TEXT NOT NULL,
-        source TEXT NOT NULL,
-        metadata_json TEXT NOT NULL,
-        embedding_json TEXT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (collection, doc_id, chunk_id)
-      )
-    """
-
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-        self._ensure_dir()
-        self._ensure_schema()
-
-    def _ensure_dir(self) -> None:
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        return conn
-
-    def _ensure_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS knowledge_chunks (
-                    collection TEXT NOT NULL,
-                    doc_id TEXT NOT NULL,
-                    chunk_id TEXT NOT NULL,
-                    text TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL,
-                    embedding_json TEXT NULL,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL,
-                    PRIMARY KEY (collection, doc_id, chunk_id)
-                )
-                """
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_collection ON knowledge_chunks(collection)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_doc ON knowledge_chunks(collection, doc_id)"
-            )
-            conn.commit()
-
-    def upsert(self, items: List[IngestChunk]) -> IngestResult:
-        if not items:
-            return IngestResult(ok=True, inserted=0, updated=0)
-
-        errors: List[str] = []
-        inserted = 0
-        updated = 0
-        now = _now_ts()
-
-        with self._connect() as conn:
-            for it in items:
-                try:
-                    meta = dict(it.metadata or {})
-                    meta.setdefault("doc_id", it.doc_id)
-                    meta.setdefault("chunk_id", it.chunk_id)
-                    meta.setdefault("source", it.source)
-                    meta.setdefault("collection", it.collection)
-                    payload = (
-                        it.collection,
-                        it.doc_id,
-                        it.chunk_id,
-                        it.text,
-                        it.source,
-                        json.dumps(meta, ensure_ascii=False),
-                        None,
-                        now,
-                        now,
-                    )
-                    exists = conn.execute(
-                        """
-                        SELECT 1 FROM knowledge_chunks
-                        WHERE collection=? AND doc_id=? AND chunk_id=?
-                        """,
-                        (it.collection, it.doc_id, it.chunk_id),
-                    ).fetchone()
-                    conn.execute(
-                        """
-                        INSERT INTO knowledge_chunks(
-                            collection, doc_id, chunk_id, text, source,
-                            metadata_json, embedding_json, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(collection, doc_id, chunk_id)
-                        DO UPDATE SET
-                            text=excluded.text,
-                            source=excluded.source,
-                            metadata_json=excluded.metadata_json,
-                            updated_at=excluded.updated_at
-                        """,
-                        payload,
-                    )
-                    if exists:
-                        updated += 1
-                    else:
-                        inserted += 1
-                except Exception as e:  # pragma: no cover - error path
-                    errors.append(str(e))
-            conn.commit()
-        # ensure counts sum even if items empty
-        remainder = len(items) - (inserted + updated)
-        if remainder > 0 and errors:
-            # errors already captured; keep counts as-is
-            pass
-        elif remainder > 0:
-            inserted += remainder
-
-        ok = len(errors) == 0
-        return IngestResult(ok=ok, inserted=inserted, updated=updated, errors=errors)
-
-    def query(self, q: Query) -> List[Chunk]:
-        top_k = max(1, int(q.top_k or 5))
-        q_tokens = _tokenize(q.text)
-
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT doc_id, chunk_id, text, source, metadata_json
-                FROM knowledge_chunks
-                WHERE collection=?
-                """,
-                (q.collection,),
-            ).fetchall()
-
-        scored: List[Chunk] = []
-        for row in rows:
-            try:
-                meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
-            except Exception:
-                meta = {}
-
-            if q.filters and not self._passes_filters(row, meta, q.filters):
-                continue
-
-            score = _jaccard(q_tokens, _tokenize(row["text"]))
-            if score <= 0.0:
-                continue
-
-            scored.append(
-                Chunk(
-                    chunk_id=row["chunk_id"],
-                    text=row["text"],
-                    source=row["source"],
-                    metadata=meta,
-                    score=score,
-                )
-            )
-
-        scored.sort(key=lambda c: c.score, reverse=True)
-        return scored[:top_k]
-
-    def delete(
-        self,
-        *,
-        collection: str,
-        doc_ids: Optional[List[str]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> int:
-        removed = 0
-        with self._connect() as conn:
-            if doc_ids:
-                placeholders = ",".join("?" for _ in doc_ids)
-                cur = conn.execute(
-                    f"DELETE FROM knowledge_chunks WHERE collection=? AND doc_id IN ({placeholders})",
-                    (collection, *doc_ids),
-                )
-                removed += cur.rowcount
-            elif filters:
-                rows = conn.execute(
-                    """
-                    SELECT doc_id, chunk_id, metadata_json
-                    FROM knowledge_chunks
-                    WHERE collection=?
-                    """,
-                    (collection,),
-                ).fetchall()
-                targets: List[Tuple[str, str]] = []
-                for row in rows:
-                    try:
-                        meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
-                    except Exception:
-                        meta = {}
-                    if self._passes_filters(row, meta, filters):
-                        targets.append((row["doc_id"], row["chunk_id"]))
-                for doc_id, chunk_id in targets:
-                    cur = conn.execute(
-                        """
-                        DELETE FROM knowledge_chunks
-                        WHERE collection=? AND doc_id=? AND chunk_id=?
-                        """,
-                        (collection, doc_id, chunk_id),
-                    )
-                    removed += cur.rowcount
-            else:
-                cur = conn.execute(
-                    "DELETE FROM knowledge_chunks WHERE collection=?",
-                    (collection,),
-                )
-                removed += cur.rowcount
-            conn.commit()
-        return removed
-
-    def stats(self, collection: Optional[str] = None) -> VectorStoreStats:
-        collections: Dict[str, int] = {}
-        total = 0
-        with self._connect() as conn:
-            if collection:
-                cur = conn.execute(
-                    "SELECT COUNT(1) FROM knowledge_chunks WHERE collection=?",
-                    (collection,),
-                )
-                total = int(cur.fetchone()[0])
-                collections[collection] = total
-            else:
-                cur = conn.execute(
-                    "SELECT collection, COUNT(1) FROM knowledge_chunks GROUP BY collection"
-                )
-                rows = cur.fetchall()
-                for coll, cnt in rows:
-                    collections[coll] = int(cnt)
-                    total += int(cnt)
-        return VectorStoreStats(total_chunks=total, store_path=self.db_path, collections=collections)
-
-    def clear(self) -> None:
-        with self._connect() as conn:
-            conn.execute("DELETE FROM knowledge_chunks")
-            conn.commit()
-
-    def _passes_filters(self, row: sqlite3.Row, meta: Dict[str, Any], filters: Dict[str, Any]) -> bool:
-        for key, expected in filters.items():
-            if key == "doc_id":
-                if row["doc_id"] != expected:
-                    return False
-                continue
-            if key == "source":
-                if row["source"] != expected:
-                    return False
-                continue
-            if meta.get(key) != expected:
-                return False
-        return True
-
 # core/memory/__init__.py
 
 
@@ -2476,6 +2522,7 @@ Not durable. Deterministic. No file I/O.
 from __future__ import annotations
 
 import time
+import threading
 from typing import Any, Dict, List, Optional
 
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
@@ -2484,47 +2531,55 @@ from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
 
 class InMemoryBackend(MemoryBackend):
     def __init__(self) -> None:
+        self._lock = threading.RLock()
         self._runs: Dict[str, RunRecord] = {}
         self._steps: Dict[str, Dict[str, StepRecord]] = {}
         self._events: Dict[str, List[TraceEvent]] = {}
         self._approvals: Dict[str, ApprovalRecord] = {}
 
     def create_run(self, run: RunRecord) -> None:
-        self._runs[run.run_id] = run
-        self._steps.setdefault(run.run_id, {})
-        self._events.setdefault(run.run_id, [])
+        with self._lock:
+            self._runs[run.run_id] = run
+            self._steps.setdefault(run.run_id, {})
+            self._events.setdefault(run.run_id, [])
 
     def update_run_status(self, run_id: str, status: str, *, summary: Optional[Dict[str, Any]] = None) -> None:
-        run = self._runs.get(run_id)
-        if run is None:
-            return
-        patch: Dict[str, Any] = {"status": status}
-        if summary is not None:
-            patch["summary"] = summary
-        self._runs[run_id] = run.model_copy(update=patch)
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return
+            patch: Dict[str, Any] = {"status": status}
+            if summary is not None:
+                patch["summary"] = summary
+            self._runs[run_id] = run.model_copy(update=patch)
 
     def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
-        run = self._runs.get(run_id)
-        if run is None:
-            return
-        self._runs[run_id] = run.model_copy(update={"output": output})
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return
+            self._runs[run_id] = run.model_copy(update={"output": output})
 
     def add_step(self, step: StepRecord) -> None:
-        self._steps.setdefault(step.run_id, {})
-        self._steps[step.run_id][step.step_id] = step
+        with self._lock:
+            self._steps.setdefault(step.run_id, {})
+            self._steps[step.run_id][step.step_id] = step
 
     def update_step(self, run_id: str, step_id: str, patch: Dict[str, Any]) -> None:
-        step = self._steps.get(run_id, {}).get(step_id)
-        if step is None:
-            return
-        self._steps[run_id][step_id] = step.model_copy(update=patch)
+        with self._lock:
+            step = self._steps.get(run_id, {}).get(step_id)
+            if step is None:
+                return
+            self._steps[run_id][step_id] = step.model_copy(update=patch)
 
     def add_event(self, event: TraceEvent) -> None:
-        self._events.setdefault(event.run_id, [])
-        self._events[event.run_id].append(event)
+        with self._lock:
+            self._events.setdefault(event.run_id, [])
+            self._events[event.run_id].append(event)
 
     def create_approval(self, approval: ApprovalRecord) -> None:
-        self._approvals[approval.approval_id] = approval
+        with self._lock:
+            self._approvals[approval.approval_id] = approval
 
     def resolve_approval(
         self,
@@ -2534,39 +2589,43 @@ class InMemoryBackend(MemoryBackend):
         resolved_by: Optional[str] = None,
         comment: Optional[str] = None,
     ) -> None:
-        a = self._approvals.get(approval_id)
-        if a is None:
-            return
-        now = int(time.time())
-        status = "APPROVED" if decision.upper().startswith("APPROVE") else "REJECTED"
-        self._approvals[approval_id] = a.model_copy(
-            update={
-                "status": status,
-                "decision": decision,
-                "resolved_by": resolved_by,
-                "comment": comment,
-                "resolved_at": now,
-            }
-        )
+        with self._lock:
+            a = self._approvals.get(approval_id)
+            if a is None:
+                return
+            now = int(time.time())
+            status = "APPROVED" if decision.upper().startswith("APPROVE") else "REJECTED"
+            self._approvals[approval_id] = a.model_copy(
+                update={
+                    "status": status,
+                    "decision": decision,
+                    "resolved_by": resolved_by,
+                    "comment": comment,
+                    "resolved_at": now,
+                }
+            )
 
     def get_run(self, run_id: str) -> Optional[RunBundle]:
-        run = self._runs.get(run_id)
-        if run is None:
-            return None
-        steps = list(self._steps.get(run_id, {}).values())
-        events = list(self._events.get(run_id, []))
-        approvals = [a for a in self._approvals.values() if a.run_id == run_id]
-        return RunBundle(run=run, steps=steps, events=events, approvals=approvals)
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return None
+            steps = list(self._steps.get(run_id, {}).values())
+            events = list(self._events.get(run_id, []))
+            approvals = [a for a in self._approvals.values() if a.run_id == run_id]
+            return RunBundle(run=run, steps=steps, events=events, approvals=approvals)
 
     def list_runs(self, *, limit: int = 50, offset: int = 0) -> List[RunRecord]:
-        runs = list(self._runs.values())
-        runs.sort(key=lambda r: r.started_at, reverse=True)
-        return runs[offset : offset + limit]
+        with self._lock:
+            runs = list(self._runs.values())
+            runs.sort(key=lambda r: r.started_at, reverse=True)
+            return runs[offset : offset + limit]
 
     def list_pending_approvals(self, *, limit: int = 50, offset: int = 0) -> List[ApprovalRecord]:
-        pending = [a for a in self._approvals.values() if a.status == "PENDING"]
-        pending.sort(key=lambda a: a.requested_at, reverse=True)
-        return pending[offset : offset + limit]
+        with self._lock:
+            pending = [a for a in self._approvals.values() if a.status == "PENDING"]
+            pending.sort(key=lambda a: a.requested_at, reverse=True)
+            return pending[offset : offset + limit]
 
     def ensure_schema(self) -> None:
         # Nothing to create for in-memory backend
@@ -2582,11 +2641,15 @@ class InMemoryBackend(MemoryBackend):
 """
 File-backed observability outputs owned by core/memory.
 
+Internal-only: MemoryRouter is the sole caller; avoid new direct imports.
+
 Layout per run:
 - observability/<product>/<run_id>/input/*
 - observability/<product>/<run_id>/runtime/events.jsonl
 - observability/<product>/<run_id>/output/*
 """
+
+__all__ = ["ObservabilityStore"]
 
 from __future__ import annotations
 
@@ -2600,9 +2663,9 @@ from typing import Any, Dict, List, Optional
 
 
 class ObservabilityStore:
-    def __init__(self, *, repo_root: Path) -> None:
+    def __init__(self, *, repo_root: Path, observability_root: Optional[Path] = None) -> None:
         self.repo_root = repo_root
-        self.root = repo_root / "observability"
+        self.root = observability_root or (repo_root / "observability")
         self.products_root = repo_root / "products"
 
     def ensure_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
@@ -2931,9 +2994,20 @@ from core.memory.sqlite_backend import SQLiteBackend
 
 
 class MemoryRouter(MemoryBackend):
-    def __init__(self, backend: MemoryBackend, *, repo_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        backend: MemoryBackend,
+        *,
+        repo_root: Optional[Path] = None,
+        observability_root: Optional[Path] = None,
+    ) -> None:
         self.backend = backend
-        self._observability = ObservabilityStore(repo_root=repo_root) if repo_root else None
+        # Observability store is internal to the memory layer; keep call sites centralized here.
+        self._observability = (
+            ObservabilityStore(repo_root=repo_root, observability_root=observability_root)
+            if repo_root
+            else None
+        )
 
     def create_run(self, run: RunRecord) -> None:
         self.backend.create_run(run)
@@ -3082,6 +3156,7 @@ class MemoryRouter(MemoryBackend):
             return path if path.is_absolute() else (repo_root / path)
 
         storage_dir = _resolve(settings.app.paths.storage_dir)
+        observability_dir = _resolve(settings.app.paths.observability_dir)
         memory_dir = storage_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3091,7 +3166,7 @@ class MemoryRouter(MemoryBackend):
 
         backend = SQLiteBackend(db_path=str(db_file))
         backend.ensure_schema()
-        return cls(backend, repo_root=repo_root)
+        return cls(backend, repo_root=repo_root, observability_root=observability_dir)
 
 # core/memory/sqlite_backend.py
 # ==============================
@@ -3124,6 +3199,10 @@ from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
 
 MAX_PAYLOAD_CHARS = 4096
+SQLITE_TIMEOUT_SECONDS = 30.0
+SQLITE_CHECK_SAME_THREAD = False
+SQLITE_JOURNAL_MODE = "WAL"
+SQLITE_SYNCHRONOUS = "NORMAL"
 
 
 def _dumps(x: Any) -> str:
@@ -3158,8 +3237,16 @@ class SQLiteBackend(MemoryBackend):
             self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.db_path, check_same_thread=False)
+        con = sqlite3.connect(
+            self.db_path,
+            check_same_thread=SQLITE_CHECK_SAME_THREAD,
+            timeout=SQLITE_TIMEOUT_SECONDS,
+        )
         con.row_factory = sqlite3.Row
+        con.execute(f"PRAGMA journal_mode={SQLITE_JOURNAL_MODE};")
+        con.execute(f"PRAGMA synchronous={SQLITE_SYNCHRONOUS};")
+        con.execute(f"PRAGMA busy_timeout={int(SQLITE_TIMEOUT_SECONDS * 1000)};")
+        con.execute("PRAGMA foreign_keys=ON;")
         return con
 
     def _init_db(self) -> None:
@@ -3957,6 +4044,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from core.config.schema import Settings
+from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.policies import PolicyEngine
 from core.models.providers.openai_provider import OpenAIProvider, OpenAIRequest, OpenAIResponse
 
@@ -4000,7 +4088,7 @@ class ModelRouter:
         self,
         *,
         product: str,
-        purpose: str,
+        purpose: ReasoningPurpose,
         override_model: Optional[str] = None,
         override_provider: Optional[str] = None,
     ) -> ModelSelection:
@@ -4016,8 +4104,9 @@ class ModelRouter:
         model = default_model
         if isinstance(by_product, dict) and product in by_product and isinstance(by_product[product], dict):
             model = str(by_product[product].get("model", model))
-        if isinstance(by_purpose, dict) and purpose in by_purpose and isinstance(by_purpose[purpose], dict):
-            model = str(by_purpose[purpose].get("model", model))
+        purpose_key = purpose.value
+        if isinstance(by_purpose, dict) and purpose_key in by_purpose and isinstance(by_purpose[purpose_key], dict):
+            model = str(by_purpose[purpose_key].get("model", model))
 
         provider = default_provider
         if override_provider:
@@ -4038,13 +4127,23 @@ class ModelRouter:
         self,
         *,
         product: str,
-        purpose: str,
+        purpose: ReasoningPurpose,
         request: OpenAIRequest,
         override_model: Optional[str] = None,
     ) -> OpenAIResponse:
         sel = self.select(product=product, purpose=purpose, override_model=override_model, override_provider="openai")
         provider = self._get_provider("openai")
-        req = request.model_copy(update={"model": sel.model})
+        req = request.model_copy(
+            update={
+                "model": sel.model,
+                "metadata": {
+                    **(request.metadata or {}),
+                    "router_provider": sel.provider,
+                    "router_model": sel.model,
+                    "reasoning_purpose": purpose.value,
+                },
+            },
+        )
         return provider.complete(req)
 
     def _get_provider(self, name: str) -> Any:
@@ -4105,6 +4204,8 @@ class RunContext(BaseModel):
     Provides:
     - run metadata (ids, payload, artifacts)
     - trace hook used by agents/tools
+
+    RunContext is request-scoped; do not reuse across runs.
     """
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
@@ -4190,6 +4291,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, List
+from uuid import uuid4
 
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
@@ -4202,7 +4304,7 @@ from core.contracts.run_schema import (
     StepStatus,
     TraceEvent,
 )
-from core.contracts.user_input_schema import UserInputRequest, UserInputResponse
+from core.contracts.user_input_schema import UserInputRequest, UserInputResponse, UserInputModes
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
@@ -4210,17 +4312,30 @@ from core.memory.router import MemoryRouter
 from core.orchestrator.context import RunContext
 from core.orchestrator.flow_loader import FlowLoader
 from core.orchestrator.hitl import HitlService
+from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 
 
 def _new_run_id() -> str:
-    ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    return f"run_{ts}"
+    ts = datetime.now().strftime("%Y-%m-%d-%H%M%S%f")
+    return f"run_{ts}_{uuid4().hex[:8]}"
+
+
+def _payload_size_bytes(payload: Dict[str, Any]) -> int:
+    try:
+        raw = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    except Exception:
+        raw = str(payload)
+    return len(raw.encode("utf-8"))
 
 
 class OrchestratorEngine:
+    """
+    Orchestrator entrypoint. Holds only shared dependencies; all run state is request-scoped.
+    """
+    __slots__ = ("flow_loader", "step_executor", "memory", "tracer", "governance", "hitl")
     def __init__(
         self,
         *,
@@ -4256,6 +4371,7 @@ class OrchestratorEngine:
         tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=redactor)
         step_executor = StepExecutor(
             tool_executor=tool_executor,
+            governance=governance,
             agent_registry=AgentRegistry,
             sleep_fn=sleep_fn or time.sleep,
         )
@@ -4281,6 +4397,32 @@ class OrchestratorEngine:
             run_id = _new_run_id()
             run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
             run_ctx.trace = self._trace_hook(run_ctx)
+
+            payload_limit = self.governance.settings.policies.max_payload_bytes
+            if payload_limit is not None:
+                size_bytes = _payload_size_bytes(payload)
+                if size_bytes > payload_limit:
+                    return self._reject_run(
+                        run_id=run_id,
+                        product=product,
+                        flow=flow,
+                        payload=payload,
+                        code="payload_limit_exceeded",
+                        message="Payload exceeds configured limit.",
+                        details={"size_bytes": size_bytes, "limit_bytes": payload_limit},
+                    )
+
+            step_limit = self.governance.settings.policies.max_steps
+            if step_limit is not None and len(flow_def.steps) > step_limit:
+                return self._reject_run(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    payload=payload,
+                    code="max_steps_exceeded",
+                    message="Flow exceeds configured step limit.",
+                    details={"step_count": len(flow_def.steps), "limit": step_limit},
+                )
 
             autonomy_decision = self.governance.check_autonomy(
                 run_ctx=run_ctx,
@@ -4326,9 +4468,15 @@ class OrchestratorEngine:
                 status=RunStatus.RUNNING,
                 autonomy_level=str(flow_def.autonomy_level.value),
                 input=payload,
-                summary={"current_step_index": 0},
+                summary={
+                    "current_step_index": 0,
+                    "steps_executed": 0,
+                    "tool_calls": 0,
+                    "tokens_used": 0,
+                },
             )
             self.memory.create_run(run_record)
+            run_ctx.meta.update({"steps_executed": 0, "tool_calls": 0, "tokens_used": 0})
             self.memory.clear_staging(product=product, clear_input=False, clear_output=True)
             self._attach_run_dirs(run_ctx)
             self._stage_inputs(run_ctx)
@@ -4435,15 +4583,6 @@ class OrchestratorEngine:
         )
 
         if step_status == StepStatus.FAILED:
-            self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"rejection": decision})
-            self._emit_event(
-                kind="run_rejected",
-                run_id=run_id,
-                step_id=approval.step_id,
-                product=bundle.run.product,
-                flow=bundle.run.flow,
-                payload={"decision": decision, "approved": payload.get("approved"), "comment": comment},
-            )
             if comment:
                 replan_payload = dict(bundle.run.input or {})
                 replan_payload.update(
@@ -4464,10 +4603,15 @@ class OrchestratorEngine:
                         plan_index = idx
                         plan_def = definition
                         break
-                self.memory.update_run_status(
-                    run_id,
-                    RunStatus.RUNNING.value,
-                    summary={"current_step_index": plan_index or 0, "replan_of": run_id},
+                self._transition_run_status(
+                    run_id=run_id,
+                    product=bundle.run.product,
+                    flow=bundle.run.flow,
+                    current_status=bundle.run.status,
+                    target_status=RunStatus.RUNNING,
+                    step_id=approval.step_id,
+                    summary={**(bundle.run.summary or {}), "current_step_index": plan_index or 0, "replan_of": run_id},
+                    reason="replan_after_rejection",
                 )
                 replan_ctx = RunContext(
                     run_id=run_id,
@@ -4475,6 +4619,7 @@ class OrchestratorEngine:
                     flow=bundle.run.flow,
                     payload=replan_payload,
                 )
+                self._init_run_meta(replan_ctx, summary=bundle.run.summary, steps=bundle.steps)
                 replan_ctx.trace = self._trace_hook(replan_ctx)
                 self._attach_run_dirs(replan_ctx)
                 self._stage_inputs(replan_ctx)
@@ -4536,7 +4681,16 @@ class OrchestratorEngine:
                                 "error": {"message": str(exc), "type": type(exc).__name__},
                             },
                         )
-                        self.memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"failed_step_id": replan_step_id})
+                        self._transition_run_status(
+                            run_id=run_id,
+                            product=bundle.run.product,
+                            flow=bundle.run.flow,
+                            current_status=RunStatus.RUNNING,
+                            target_status=RunStatus.FAILED,
+                            step_id=replan_step_id,
+                            summary=self._summary_with_counters(replan_ctx, {"failed_step_id": replan_step_id}),
+                            reason="replan_failed",
+                        )
                         self._emit_event(
                             kind="step_failed",
                             run_id=run_id,
@@ -4554,11 +4708,38 @@ class OrchestratorEngine:
                     requested_by=resolved_by,
                 )
                 return RunOperationResult.success({"run_id": run_id, "status": status})
+            self._transition_run_status(
+                run_id=run_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                current_status=bundle.run.status,
+                target_status=RunStatus.FAILED,
+                step_id=approval.step_id,
+                summary={**(bundle.run.summary or {}), "rejection": decision},
+                reason="approval_rejected",
+            )
+            self._emit_event(
+                kind="run_rejected",
+                run_id=run_id,
+                step_id=approval.step_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                payload={"decision": decision, "approved": payload.get("approved"), "comment": comment},
+            )
             return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
 
         flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
         next_index = self._find_step_index(flow_def, approval.step_id) + 1
-        self.memory.update_run_status(run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+        self._transition_run_status(
+            run_id=run_id,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
+            current_status=bundle.run.status,
+            target_status=RunStatus.RUNNING,
+            step_id=approval.step_id,
+            summary={**(bundle.run.summary or {}), "current_step_index": next_index},
+            reason="approval_resumed",
+        )
         self._emit_event(
             kind="run_resumed",
             run_id=run_id,
@@ -4571,6 +4752,7 @@ class OrchestratorEngine:
         merged_payload = dict(bundle.run.input or {})
         merged_payload.update(payload)
         run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=merged_payload)
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
         run_ctx.trace = self._trace_hook(run_ctx)
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
@@ -4618,6 +4800,33 @@ class OrchestratorEngine:
         if response.form_id != request.form_id:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
 
+        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
+        run_ctx.trace = self._trace_hook(run_ctx)
+
+        step_ctx = run_ctx.new_step(
+            step_def=step_def,
+            step_id=step_id,
+            step_type=step_def.type.value,
+            backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
+            target=step_def.agent or step_def.tool,
+        )
+        decision = self.governance.before_user_input_response(
+            request=request.model_dump(mode="json"),
+            response=response.model_dump(mode="json"),
+            ctx=step_ctx,
+        )
+        if not decision.allowed:
+            self._emit_event(
+                kind="user_input_denied",
+                run_id=bundle.run.run_id,
+                step_id=step_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            return RunOperationResult.failure(code="policy_blocked", message=decision.reason, details=decision.details)
+
         errors = _validate_user_input_values(request, response.values)
         if errors:
             self._emit_event(
@@ -4655,16 +4864,24 @@ class OrchestratorEngine:
             flow=bundle.run.flow,
             payload={
                 "form_id": request.form_id,
+                "mode": request.mode,
                 "values": response.values,
                 "comment": response.comment or comment or "",
             },
         )
 
         next_index = self._find_step_index(flow_def, step_id) + 1
-        self.memory.update_run_status(bundle.run.run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+        self._transition_run_status(
+            run_id=bundle.run.run_id,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
+            current_status=bundle.run.status,
+            target_status=RunStatus.RUNNING,
+            step_id=step_id,
+            summary={"current_step_index": next_index},
+            reason="user_input_resumed",
+        )
 
-        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
-        run_ctx.trace = self._trace_hook(run_ctx)
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
         _store_user_input_artifacts(run_ctx, request.form_id, response.values, response.comment)
@@ -4691,6 +4908,38 @@ class OrchestratorEngine:
 
         return _hook
 
+    def _transition_run_status(
+        self,
+        *,
+        run_id: str,
+        product: str,
+        flow: str,
+        current_status: RunStatus | str,
+        target_status: RunStatus | str,
+        step_id: Optional[str],
+        summary: Optional[Dict[str, Any]] = None,
+        reason: Optional[str] = None,
+    ) -> RunStatus:
+        current = _coerce_run_status(current_status)
+        target = _coerce_run_status(target_status)
+        if not is_valid_run_transition(current, target):
+            raise ValueError(f"Invalid run transition: {to_run_state(current).value} -> {to_run_state(target).value}")
+        if current != target:
+            self._emit_event(
+                kind="run_state_transition",
+                run_id=run_id,
+                step_id=step_id,
+                product=product,
+                flow=flow,
+                payload={
+                    "from": to_run_state(current).value,
+                    "to": to_run_state(target).value,
+                    "reason": reason or "",
+                },
+            )
+        self.memory.update_run_status(run_id, target.value, summary=summary)
+        return target
+
     def _execute_from_index(
         self,
         *,
@@ -4700,10 +4949,39 @@ class OrchestratorEngine:
         requested_by: Optional[str],
     ) -> str:
         idx = start_index
+        current_status = RunStatus.RUNNING
         last_result_data: Optional[Dict[str, Any]] = None
         while idx < len(flow_def.steps):
             step_def = flow_def.steps[idx]
             step_id = step_def.id or f"step_{idx}"
+            if idx > 0:
+                prev_def = flow_def.steps[idx - 1]
+                if (
+                    prev_def.type == StepType.USER_INPUT
+                    and (prev_def.params or {}).get("mode") == UserInputModes.FREE_TEXT_INPUT
+                    and step_def.type in {StepType.AGENT, StepType.TOOL}
+                ):
+                    self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.FAILED,
+                        step_id=step_id,
+                        summary={"failed_step_id": step_id},
+                        reason="free_text_guard_blocked",
+                    )
+                    current_status = RunStatus.FAILED
+                    self._emit_event(
+                        kind="free_text_guard_blocked",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"message": "Free-text input cannot directly trigger tools or agents."},
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunStatus.FAILED.value
 
             step_record = StepRecord(
                 run_id=run_ctx.run_id,
@@ -4745,13 +5023,21 @@ class OrchestratorEngine:
                         "error": {"message": decision.reason, "type": "PermissionError"},
                     },
                 )
-                self.memory.update_run_status(
-                    run_ctx.run_id,
-                    RunStatus.FAILED.value,
-                    summary={"failed_step_id": step_id, "reason": decision.reason},
+                self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.FAILED,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id, "reason": decision.reason}),
+                    reason="governance_denied",
                 )
+                current_status = RunStatus.FAILED
                 self._persist_run_output(run_ctx)
                 return RunStatus.FAILED.value
+
+            run_ctx.meta["steps_executed"] = int(run_ctx.meta.get("steps_executed", 0)) + 1
 
             self._emit_event(
                 kind="step_started",
@@ -4780,7 +5066,16 @@ class OrchestratorEngine:
                         "output": {"approval_id": approval.approval_id},
                     },
                 )
-                self.memory.update_run_status(run_ctx.run_id, RunStatus.PENDING_HUMAN.value, summary={"current_step_index": idx})
+                current_status = self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.PENDING_HUMAN,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(run_ctx, {"current_step_index": idx}),
+                    reason="approval_requested",
+                )
                 self._emit_event(
                     kind="pending_human",
                     run_id=run_ctx.run_id,
@@ -4807,7 +5102,17 @@ class OrchestratorEngine:
                             "error": {"message": str(exc), "type": type(exc).__name__},
                         },
                     )
-                    self.memory.update_run_status(run_ctx.run_id, RunStatus.FAILED.value, summary={"failed_step_id": step_id})
+                self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.FAILED,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                    reason="user_input_invalid_request",
+                )
+                current_status = RunStatus.FAILED
                     self._emit_event(
                         kind="step_failed",
                         run_id=run_ctx.run_id,
@@ -4829,6 +5134,7 @@ class OrchestratorEngine:
                     payload={
                         "form_id": request.form_id,
                         "title": request.title,
+                        "mode": request.mode,
                         "required": request.required,
                         "defaults": request.defaults,
                         "schema_summary": schema_summary,
@@ -4842,12 +5148,44 @@ class OrchestratorEngine:
                         "output": {"user_input_request": {"form_id": request.form_id}},
                     },
                 )
-                self.memory.update_run_status(
-                    run_ctx.run_id,
-                    RunStatus.PENDING_USER_INPUT.value,
-                    summary={"current_step_index": idx, "form_id": request.form_id},
+                current_status = self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.PENDING_USER_INPUT,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(
+                        run_ctx,
+                        {"current_step_index": idx, "form_id": request.form_id},
+                    ),
+                    reason="user_input_requested",
                 )
                 return RunStatus.PENDING_USER_INPUT.value
+
+            if step_def.type == StepType.PLAN_PROPOSAL:
+                if step_def.agent is None:
+                    self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.FAILED,
+                        step_id=step_id,
+                        summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                        reason="plan_proposal_missing_agent",
+                    )
+                    current_status = RunStatus.FAILED
+                    self._emit_event(
+                        kind="step_failed",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"error": {"message": "plan_proposal step missing agent", "type": "ValueError"}},
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunStatus.FAILED.value
 
             try:
                 result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def, step_id=step_id)
@@ -4879,7 +5217,17 @@ class OrchestratorEngine:
                         "error": {"message": str(exc), "type": type(exc).__name__},
                     },
                 )
-                self.memory.update_run_status(run_ctx.run_id, RunStatus.FAILED.value, summary={"failed_step_id": step_id})
+                self._transition_run_status(
+                    run_id=run_ctx.run_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    current_status=current_status,
+                    target_status=RunStatus.FAILED,
+                    step_id=step_id,
+                    summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                    reason="step_failed",
+                )
+                current_status = RunStatus.FAILED
                 self._emit_event(
                     kind="step_failed",
                     run_id=run_ctx.run_id,
@@ -4894,15 +5242,24 @@ class OrchestratorEngine:
             next_index = idx + 1
             if step_id in {"plan", "planning"}:
                 next_index = self._resolve_plan_next_index(flow_def, idx, result)
-            self.memory.update_run_status(run_ctx.run_id, RunStatus.RUNNING.value, summary={"current_step_index": next_index})
+            self.memory.update_run_status(
+                run_ctx.run_id,
+                RunStatus.RUNNING.value,
+                summary=self._summary_with_counters(run_ctx, {"current_step_index": next_index}),
+            )
             idx = next_index
 
         if last_result_data is None:
-            self.memory.update_run_status(
-                run_ctx.run_id,
-                RunStatus.FAILED.value,
-                summary={"failed_step_id": "output", "reason": "missing_run_output"},
-            )
+        self._transition_run_status(
+            run_id=run_ctx.run_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            current_status=current_status,
+            target_status=RunStatus.FAILED,
+            step_id="output",
+            summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": "missing_run_output"}),
+            reason="missing_run_output",
+        )
             self._emit_event(
                 kind="run_failed",
                 run_id=run_ctx.run_id,
@@ -4914,9 +5271,39 @@ class OrchestratorEngine:
             self._persist_run_output(run_ctx)
             return RunStatus.FAILED.value
 
-        self.memory.update_run_output(run_ctx.run_id, output=self._normalize_run_output(last_result_data))
-        self.memory.update_run_status(
-            run_ctx.run_id, RunStatus.COMPLETED.value, summary={"current_step_index": len(flow_def.steps)}
+        normalized_output = self._normalize_run_output(last_result_data)
+        decision = self.governance.before_run_output(output=normalized_output, run_ctx=run_ctx)
+        if not decision.allowed:
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=current_status,
+                target_status=RunStatus.FAILED,
+                step_id="output",
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": "output", "reason": decision.reason}),
+                reason="output_denied",
+            )
+            self._emit_event(
+                kind="output_denied",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.FAILED.value
+        self.memory.update_run_output(run_ctx.run_id, output=normalized_output)
+        self._transition_run_status(
+            run_id=run_ctx.run_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            current_status=current_status,
+            target_status=RunStatus.COMPLETED,
+            step_id=None,
+            summary=self._summary_with_counters(run_ctx, {"current_step_index": len(flow_def.steps)}),
+            reason="run_completed",
         )
         self._emit_event(
             kind="run_completed",
@@ -4948,6 +5335,17 @@ class OrchestratorEngine:
         files = data.get("output_files")
         if not isinstance(files, list) or not files:
             return result
+        decision = self.governance.before_output_files(files=files, run_ctx=run_ctx)
+        if not decision.allowed:
+            self._emit_event(
+                kind="output_files_denied",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": decision.reason, "details": decision.details},
+            )
+            raise RuntimeError(decision.reason or "output_files_denied")
         stored = self.memory.write_output_files(product=run_ctx.product, run_id=run_ctx.run_id, files=files) or []
         updated = dict(result)
         updated_data = dict(data)
@@ -5005,6 +5403,42 @@ class OrchestratorEngine:
             payload=payload,
         )
         self.tracer.emit(evt)
+
+    def _reject_run(
+        self,
+        *,
+        run_id: str,
+        product: str,
+        flow: str,
+        payload: Dict[str, Any],
+        code: str,
+        message: str,
+        details: Dict[str, Any],
+    ) -> RunOperationResult:
+        now = int(time.time())
+        run_record = RunRecord(
+            run_id=run_id,
+            product=product,
+            flow=flow,
+            status=RunStatus.FAILED,
+            autonomy_level=None,
+            started_at=now,
+            finished_at=now,
+            input=payload,
+            summary={"error": {"code": code, "message": message, "details": details}},
+        )
+        self.memory.create_run(run_record)
+        self._emit_event(
+            kind="run_rejected",
+            run_id=run_id,
+            step_id=None,
+            product=product,
+            flow=flow,
+            payload={"code": code, "message": message, "details": details},
+        )
+        error_details = dict(details)
+        error_details["run_id"] = run_id
+        return RunOperationResult.failure(code=code, message=message, details=error_details)
 
     def _persist_run_output(self, run_ctx: RunContext) -> None:
         bundle = self.memory.get_run(run_ctx.run_id)
@@ -5087,6 +5521,35 @@ class OrchestratorEngine:
                 run_ctx.artifacts[f"agent.{agent_name}.output"] = data
                 run_ctx.artifacts[f"agent.{agent_name}.meta"] = meta
 
+    def _init_run_meta(
+        self,
+        run_ctx: RunContext,
+        *,
+        summary: Optional[Dict[str, Any]] = None,
+        steps: Optional[List[StepRecord]] = None,
+    ) -> None:
+        summary = summary or {}
+        def _as_int(value: Any) -> Optional[int]:
+            try:
+                return int(value)
+            except Exception:
+                return None
+
+        steps_executed = _as_int(summary.get("steps_executed"))
+        if steps_executed is None and steps is not None:
+            steps_executed = sum(1 for s in steps if not _is_step_status(s.status, StepStatus.NOT_STARTED))
+        run_ctx.meta["steps_executed"] = steps_executed or 0
+        run_ctx.meta["tool_calls"] = _as_int(summary.get("tool_calls")) or 0
+        run_ctx.meta["tokens_used"] = _as_int(summary.get("tokens_used")) or 0
+
+    @staticmethod
+    def _summary_with_counters(run_ctx: RunContext, summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        merged = dict(summary or {})
+        for key in ("steps_executed", "tool_calls", "tokens_used"):
+            if key in run_ctx.meta:
+                merged[key] = run_ctx.meta.get(key)
+        return merged
+
     def _stage_inputs(self, run_ctx: RunContext) -> None:
         self.memory.ensure_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
         payload = run_ctx.payload or {}
@@ -5140,6 +5603,15 @@ def _summarize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
 
 def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any]) -> List[str]:
     errors: List[str] = []
+    mode = request.mode or UserInputModes.CHOICE_INPUT
+    if mode == UserInputModes.FREE_TEXT_INPUT:
+        text_value = values.get("text")
+        if not isinstance(text_value, str) or not text_value.strip():
+            errors.append("missing_or_empty:text")
+        return errors
+    if mode != UserInputModes.CHOICE_INPUT:
+        errors.append("invalid_mode")
+        return errors
     for key in request.required:
         if key not in values:
             errors.append(f"missing_required:{key}")
@@ -5179,6 +5651,15 @@ def _is_step_status(value: Any, status: StepStatus) -> bool:
     if isinstance(value, str):
         return value == status.value
     return False
+
+
+def _coerce_run_status(value: RunStatus | str) -> RunStatus:
+    if isinstance(value, RunStatus):
+        return value
+    try:
+        return RunStatus(value)
+    except Exception:
+        return RunStatus.RUNNING
 
 # core/orchestrator/error_policy.py
 # ==============================
@@ -5526,6 +6007,7 @@ Intended usage:
 # ==============================
 from __future__ import annotations
 
+from enum import Enum
 from typing import FrozenSet
 
 from core.contracts.run_schema import RunStatus as RunStatus  # re-export
@@ -5566,6 +6048,56 @@ STEP_ACTIVE: FrozenSet[StepStatus] = frozenset(
     }
 )
 
+
+class RunState(str, Enum):
+    """Finite-state machine states for deterministic runs."""
+
+    RUNNING = "RUNNING"
+    PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    FAILED = "FAILED"
+    COMPLETED = "COMPLETED"
+
+
+_RUN_STATUS_TO_STATE = {
+    RunStatus.RUNNING: RunState.RUNNING,
+    RunStatus.PENDING_USER_INPUT: RunState.PENDING_USER_INPUT,
+    RunStatus.PENDING_HUMAN: RunState.PENDING_APPROVAL,
+    RunStatus.FAILED: RunState.FAILED,
+    RunStatus.COMPLETED: RunState.COMPLETED,
+    RunStatus.CANCELLED: RunState.FAILED,
+}
+
+_ALLOWED_TRANSITIONS = {
+    RunState.RUNNING: {RunState.PENDING_USER_INPUT, RunState.PENDING_APPROVAL, RunState.FAILED, RunState.COMPLETED},
+    RunState.PENDING_USER_INPUT: {RunState.RUNNING, RunState.FAILED},
+    RunState.PENDING_APPROVAL: {RunState.RUNNING, RunState.FAILED},
+    RunState.FAILED: set(),
+    RunState.COMPLETED: set(),
+}
+
+
+def to_run_state(status: RunStatus | str) -> RunState:
+    if isinstance(status, RunStatus):
+        return _RUN_STATUS_TO_STATE.get(status, RunState.FAILED)
+    try:
+        return _RUN_STATUS_TO_STATE.get(RunStatus(status), RunState.FAILED)
+    except Exception:
+        return RunState.FAILED
+
+
+def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -> bool:
+    current_state = to_run_state(current)
+    target_state = to_run_state(target)
+    if current_state == target_state:
+        return True
+    return target_state in _ALLOWED_TRANSITIONS.get(current_state, set())
+
+
+def require_valid_transition(current: RunStatus | str, target: RunStatus | str) -> None:
+    if not is_valid_run_transition(current, target):
+        raise ValueError(f"Invalid run state transition: {to_run_state(current).value} -> {to_run_state(target).value}")
+
 # core/orchestrator/step_executor.py
 # ==============================
 # Step Executor
@@ -5577,7 +6109,9 @@ from typing import Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
+from core.governance.hooks import GovernanceHooks
 from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
+from core.contracts.plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
@@ -5595,10 +6129,12 @@ class StepExecutor:
         self,
         *,
         tool_executor: ToolExecutor,
+        governance: GovernanceHooks,
         agent_registry: AgentRegistry = AgentRegistry,
         sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self.tool_executor = tool_executor
+        self.governance = governance
         self.agent_registry = agent_registry
         self.sleep_fn = sleep_fn
 
@@ -5628,6 +6164,9 @@ class StepExecutor:
                 run_ctx.artifacts[f"tool.{step_def.tool}.meta"] = tool_result.meta.model_dump(mode="json")
             return tool_result.model_dump(mode="json")
 
+        if step_def.type == StepType.USER_INPUT:
+            raise ValueError("user_input steps are orchestrator-managed; use OrchestratorEngine to pause/resume.")
+
         if step_def.type == StepType.AGENT:
             if not step_def.agent:
                 raise ValueError("agent step missing 'agent' field")
@@ -5635,6 +6174,17 @@ class StepExecutor:
             result: AgentResult = agent.run(step_ctx)
             if not result.ok:
                 raise RuntimeError(result.error.message if result.error else "agent_failed")
+            decision = self.governance.validate_agent_output(
+                agent_name=step_def.agent,
+                output=result.data or {},
+                ctx=step_ctx,
+            )
+            if not decision.allowed:
+                step_ctx.emit(
+                    "agent_output_denied",
+                    {"agent": step_def.agent, "reason": decision.reason, "details": decision.details},
+                )
+                raise RuntimeError(decision.reason or "agent_output_denied")
             step_ctx.emit(
                 "agent.executed",
                 {
@@ -5644,6 +6194,42 @@ class StepExecutor:
             )
             run_ctx.artifacts[f"agent.{step_def.agent}.output"] = result.data
             run_ctx.artifacts[f"agent.{step_def.agent}.meta"] = result.meta.model_dump(mode="json")
+            return result.model_dump(mode="json")
+
+        if step_def.type == StepType.PLAN_PROPOSAL:
+            if not step_def.agent:
+                raise ValueError("plan_proposal step missing 'agent' field")
+            agent = self.agent_registry.resolve(step_def.agent)
+            result = agent.run(step_ctx)
+            if not result.ok:
+                raise RuntimeError(result.error.message if result.error else "plan_proposal_failed")
+            decision = self.governance.validate_agent_output(
+                agent_name=step_def.agent,
+                output=result.data or {},
+                ctx=step_ctx,
+            )
+            if not decision.allowed:
+                step_ctx.emit(
+                    "agent_output_denied",
+                    {"agent": step_def.agent, "reason": decision.reason, "details": decision.details},
+                )
+                raise RuntimeError(decision.reason or "agent_output_denied")
+            step_ctx.emit(
+                "agent.executed",
+                {
+                    "agent": step_def.agent,
+                    "result": result.model_dump(mode="json"),
+                },
+            )
+            try:
+                plan = PlanProposal.model_validate(result.data or {})
+            except Exception as exc:
+                step_ctx.emit("plan_validation_failed", {"error": str(exc)})
+                raise RuntimeError("plan_validation_failed")
+            plan_payload = plan.model_dump(mode="json")
+            run_ctx.artifacts["plan.proposal"] = plan_payload
+            step_ctx.emit("plan_proposed", {"plan": _summarize_plan(plan)})
+            result = result.model_copy(update={"data": plan_payload})
             return result.model_dump(mode="json")
 
         if step_def.type == StepType.SUBFLOW:
@@ -5703,6 +6289,18 @@ def build_step_context(run_ctx: RunContext, *, step_id: Optional[str], step_def:
         target=step_def.agent or step_def.tool,
     )
 
+
+def _summarize_plan(plan: PlanProposal) -> Dict[str, Any]:
+    step_ids = [step.step_id for step in plan.steps]
+    return {
+        "summary": plan.summary,
+        "steps_count": len(plan.steps),
+        "step_ids": step_ids[:10],
+        "required_tools": plan.required_tools,
+        "approvals_count": len(plan.approvals),
+        "estimated_cost": plan.estimated_cost.model_dump(mode="json"),
+    }
+
 # core/orchestrator/templating.py
 # ==============================
 # Template Rendering
@@ -5712,6 +6310,9 @@ Shared template rendering helpers for orchestrator/agents.
 
 Supports strict rendering for message templates and lenient rendering for tool params.
 """
+
+# Public surface; keep deterministic and minimal.
+__all__ = ["render_template", "render_messages", "render_params"]
 
 from __future__ import annotations
 
@@ -6169,8 +6770,8 @@ def _strip_large_fields(value: Any) -> Any:
 """
 Global tool registry.
 
-Design:
-- Registry stores name -> tool factory or instance
+    Design:
+    - Registry stores name -> tool factory (no shared instances)
 - Products can register their tools during boot (gateway startup, or product loader)
 - Resolution is by string name used in StepDef.tool
 """
@@ -6218,14 +6819,8 @@ class ToolRegistry:
             raise ValueError(f"Tool already registered: {name}")
 
         if isinstance(factory, BaseTool):
-            inst = factory
-
-            def _factory(inst: BaseTool = inst) -> BaseTool:
-                return inst
-
-            actual_factory: ToolFactory = _factory
-        else:
-            actual_factory = factory
+            raise ValueError("ToolRegistry.register requires a factory to avoid shared state across runs.")
+        actual_factory = factory
 
         cls._tools[norm] = ToolRegistration(name=norm, factory=actual_factory, meta=meta or {})
 
@@ -6265,6 +6860,16 @@ Responsibilities (v1):
 - Enumerate flows under products/<name>/flows/*.yaml
 - Import products/<name>/registry.py safely and call register(registries)
 """
+
+# Public surface for product discovery/registration; keep minimal and stable.
+__all__ = [
+    "discover_products",
+    "register_enabled_products",
+    "ProductCatalog",
+    "ProductMeta",
+    "ProductLoadError",
+    "ProductRegistries",
+]
 
 from __future__ import annotations
 
@@ -6521,8 +7126,10 @@ def register_enabled_products(
 
 
 def _register_core_agents(agent_registry: Any) -> None:
-    if not agent_registry.has("llm_reasoner"):
-        agent_registry.register(build_llm_reasoner().name, build_llm_reasoner)
+    has_fn = getattr(agent_registry, "has", None)
+    if callable(has_fn):
+        if not has_fn("llm_reasoner"):
+            agent_registry.register(build_llm_reasoner().name, build_llm_reasoner)
 
 
 # ==============================

@@ -4,23 +4,25 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import json
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
 from core.agents.base import BaseAgent
 from core.config.loader import load_settings
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult, AgentKind
+from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.hooks import GovernanceHooks
-from core.models.providers.openai_provider import OpenAIRequest
-from core.models.router import ModelRouter
+from ..models.providers.openai_provider import OpenAIRequest
+from ..models.router import ModelRouter
 from core.orchestrator.context import StepContext
-from core.agents.renderer import render_messages
+from core.orchestrator.templating import render_messages
 
 
 class LlmReasonerParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    purpose: Optional[str] = Field(default=None, description="Routing hint for model selection.")
+    purpose: ReasoningPurpose = Field(..., description="Required reasoning purpose for model selection.")
     system: Optional[str] = Field(default=None, description="System instruction for the model.")
     prompt: Optional[str] = Field(default=None, description="Primary user instruction.")
     messages: List[Dict[str, Any]] = Field(default_factory=list, description="Optional pre-built message list.")
@@ -78,7 +80,7 @@ class LlmReasoner(BaseAgent):
                 "model_call_attempt_started",
                 {
                     "model": model_name,
-                    "purpose": params.purpose,
+                    "purpose": params.purpose.value,
                     "allowed": decision.allowed,
                     "reason": decision.reason,
                 },
@@ -93,7 +95,12 @@ class LlmReasoner(BaseAgent):
                 messages=messages,
                 temperature=params.temperature,
                 max_tokens=params.max_tokens,
-                metadata={"product": step_context.product, "flow": step_context.flow, "step_id": step_context.step_id},
+                metadata={
+                    "product": step_context.product,
+                    "flow": step_context.flow,
+                    "step_id": step_context.step_id,
+                    "reasoning_purpose": params.purpose.value,
+                },
             )
             resp = router.completion_openai(
                 request=req,
@@ -110,16 +117,50 @@ class LlmReasoner(BaseAgent):
                 err = AgentError(code=AgentErrorCode.MODEL_ERROR, message=message, details=resp.error or {})
                 step_context.emit(
                     "model_call_failed",
-                    {"model": model_name, "reason": err.message, "error": resp.error or {}},
+                    {
+                        "model": model_name,
+                        "purpose": params.purpose.value,
+                        "reason": err.message,
+                        "error": resp.error or {},
+                    },
                 )
                 return AgentResult(ok=False, data=None, error=err, meta=meta)
 
             usage = resp.usage or {}
             meta.token_estimate = usage.get("total_tokens")
+            tokens_used = usage.get("total_tokens")
+            if tokens_used is None:
+                tokens_used = params.max_tokens or 0
+            try:
+                tokens_used_int = int(tokens_used)
+            except Exception:
+                tokens_used_int = 0
+            run_tokens = int(step_context.run.meta.get("tokens_used", 0))
+            run_tokens += tokens_used_int
+            step_context.run.meta["tokens_used"] = run_tokens
+            run_budget = governance.settings.policies.max_tokens_per_run
+            if run_budget is not None and run_tokens > run_budget:
+                step_context.emit(
+                    "model_call_budget_exceeded",
+                    {
+                        "model": resp.model,
+                        "purpose": params.purpose.value,
+                        "used": run_tokens,
+                        "limit": run_budget,
+                    },
+                )
+                err = AgentError(
+                    code=AgentErrorCode.POLICY_BLOCKED,
+                    message="run_token_budget_exceeded",
+                    details={"used": run_tokens, "limit": run_budget},
+                )
+                meta.redacted = True
+                return AgentResult(ok=False, data=None, error=err, meta=meta)
             step_context.emit(
                 "model_call_succeeded",
                 {
                     "model": resp.model,
+                    "purpose": params.purpose.value,
                     "usage": usage,
                     "provider": resp.meta.get("provider") if isinstance(resp.meta, dict) else None,
                 },
@@ -131,6 +172,9 @@ class LlmReasoner(BaseAgent):
                 "provider": resp.meta.get("provider") if isinstance(resp.meta, dict) else None,
             }
             return AgentResult(ok=True, data=data, error=None, meta=meta)
+        except ValidationError as exc:
+            err = AgentError(code=AgentErrorCode.INVALID_INPUT, message="invalid_llm_reasoner_params", details=exc.errors())
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
         except Exception as exc:
             err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
             return AgentResult(ok=False, data=None, error=err, meta=meta)
@@ -149,3 +193,125 @@ class LlmReasoner(BaseAgent):
 
 def build() -> LlmReasoner:
     return LlmReasoner()
+
+
+class RoleReasonerParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str
+    temperature: float = Field(default=0.2)
+    max_tokens: Optional[int] = Field(default=None)
+    override_model: Optional[str] = Field(default=None)
+
+
+class InsightReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    highlights: List[str] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+
+
+class PrioritizedItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    priority: int
+    rationale: str
+
+
+class PrioritizationReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priorities: List[PrioritizedItem]
+
+
+class ExplanationReasonerOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explanation: str
+    assumptions: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
+
+class _RoleReasoner(BaseAgent):
+    name: str = "role_reasoner"
+    purpose: ReasoningPurpose = ReasoningPurpose.EXPLANATION
+    output_model: type[BaseModel]
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        meta = AgentMeta(
+            agent_name=self.name,
+            kind=AgentKind.OTHER,
+            tags={"product": step_context.product, "flow": step_context.flow},
+        )
+        try:
+            if not step_context.step:
+                raise ValueError("missing_step_definition")
+            params = RoleReasonerParams.model_validate(step_context.step.params or {})
+            llm_params = LlmReasonerParams(
+                purpose=self.purpose,
+                system=self._system_prompt(),
+                prompt=params.prompt,
+                temperature=params.temperature,
+                max_tokens=params.max_tokens,
+                override_model=params.override_model,
+            )
+            updated_step = step_context.step.model_copy(update={"params": llm_params.model_dump(mode="json")})
+            llm_ctx = step_context.run.new_step(step_def=updated_step)
+            llm_result = LlmReasoner().run(llm_ctx)
+            if not llm_result.ok:
+                return llm_result
+            content = (llm_result.data or {}).get("content")
+            payload = _parse_json_payload(content)
+            output = self.output_model.model_validate(payload)
+            meta = llm_result.meta.model_copy(update={"agent_name": self.name})
+            return AgentResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.CONTRACT_VIOLATION, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+
+    def _system_prompt(self) -> str:
+        fields = list(getattr(self.output_model, "model_fields", {}).keys())
+        return f"Return JSON only with keys: {', '.join(fields)}."
+
+
+class InsightReasoner(_RoleReasoner):
+    name = "insight_reasoner"
+    purpose = ReasoningPurpose.INSIGHT
+    output_model = InsightReasonerOutput
+
+
+class PrioritizationReasoner(_RoleReasoner):
+    name = "prioritization_reasoner"
+    purpose = ReasoningPurpose.PRIORITIZATION
+    output_model = PrioritizationReasonerOutput
+
+
+class ExplanationReasoner(_RoleReasoner):
+    name = "explanation_reasoner"
+    purpose = ReasoningPurpose.EXPLANATION
+    output_model = ExplanationReasonerOutput
+
+
+def build_insight_reasoner() -> InsightReasoner:
+    return InsightReasoner()
+
+
+def build_prioritization_reasoner() -> PrioritizationReasoner:
+    return PrioritizationReasoner()
+
+
+def build_explanation_reasoner() -> ExplanationReasoner:
+    return ExplanationReasoner()
+
+
+def _parse_json_payload(content: Any) -> Dict[str, Any]:
+    if isinstance(content, dict):
+        return content
+    if isinstance(content, str):
+        try:
+            return json.loads(content)
+        except Exception as exc:
+            raise ValueError("invalid_json_output") from exc
+    raise ValueError("missing_json_output")

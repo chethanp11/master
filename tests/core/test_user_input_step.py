@@ -11,7 +11,8 @@ def test_user_input_free_text_requires_text() -> None:
     request = UserInputRequest(
         schema_version="1.0",
         form_id="notes",
-        title="Notes",
+        prompt="Notes",
+        input_type="text",
         mode=UserInputModes.FREE_TEXT_INPUT,
     )
     errors = _validate_user_input_values(request, {"text": ""})
@@ -25,7 +26,8 @@ def test_user_input_choice_input_validates_required() -> None:
     request = UserInputRequest(
         schema_version="1.0",
         form_id="choice",
-        title="Choice",
+        prompt="Choice",
+        input_type="select",
         mode=UserInputModes.CHOICE_INPUT,
         schema={
             "type": "object",

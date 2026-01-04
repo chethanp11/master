@@ -4,11 +4,15 @@
 """
 File-backed observability outputs owned by core/memory.
 
+Internal-only: MemoryRouter is the sole caller; avoid new direct imports.
+
 Layout per run:
 - observability/<product>/<run_id>/input/*
 - observability/<product>/<run_id>/runtime/events.jsonl
 - observability/<product>/<run_id>/output/*
 """
+
+__all__ = ["ObservabilityStore"]
 
 from __future__ import annotations
 
@@ -22,9 +26,9 @@ from typing import Any, Dict, List, Optional
 
 
 class ObservabilityStore:
-    def __init__(self, *, repo_root: Path) -> None:
+    def __init__(self, *, repo_root: Path, observability_root: Optional[Path] = None) -> None:
         self.repo_root = repo_root
-        self.root = repo_root / "observability"
+        self.root = observability_root or (repo_root / "observability")
         self.products_root = repo_root / "products"
 
     def ensure_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:

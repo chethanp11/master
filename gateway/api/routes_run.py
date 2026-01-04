@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
@@ -200,7 +201,10 @@ def get_output_file(
     filename: str,
     settings=Depends(get_settings),
 ) -> FileResponse:
-    base = settings.repo_root_path() / "observability" / product / run_id / "output"
+    repo_root = settings.repo_root_path()
+    observability_dir = Path(settings.app.paths.observability_dir)
+    observability_root = observability_dir if observability_dir.is_absolute() else (repo_root / observability_dir)
+    base = observability_root / product / run_id / "output"
     target = (base / filename).resolve()
     if not str(target).startswith(str(base.resolve())):
         _error(http_status=status.HTTP_400_BAD_REQUEST, code="invalid_path", message="Invalid output path.")
@@ -236,21 +240,22 @@ async def run_flow(
 
 
 @router.get("/run/{run_id}")
-def get_run(
+async def get_run(
     run_id: str,
     engine: OrchestratorEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
-    res = engine.get_run(run_id=run_id)
+    res = await run_in_threadpool(engine.get_run, run_id=run_id)
     return _respond(res, meta={"run_id": run_id})
 
 
 @router.post("/resume_run/{run_id}")
-def resume_run(
+async def resume_run(
     run_id: str,
     req: ResumeRequest,
     engine: OrchestratorEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
-    res = engine.resume_run(
+    res = await run_in_threadpool(
+        engine.resume_run,
         run_id=run_id,
         approval_payload=req.approval_payload,
         user_input_response=req.user_input_response,

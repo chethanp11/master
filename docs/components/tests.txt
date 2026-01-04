@@ -1,3 +1,263 @@
+# captured_at: 2026-01-04T12:52:14.760645+00:00
+
+# tests/architecture/test_architecture_invariants.py
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Sequence, Tuple
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "storage", "secrets", "tests"}
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if not path.is_file():
+            continue
+        if any(part in EXCLUDED_DIRS for part in path.parts):
+            continue
+        yield path
+
+
+def _read_imports(path: Path) -> List[str]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    imports: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.append(node.module)
+    return imports
+
+
+def _find_offenses(
+    files: Sequence[Path],
+    *,
+    forbidden_prefixes: Sequence[str],
+    allow_prefixes: Sequence[str] = (),
+    allow_modules: Sequence[str] = (),
+) -> List[Tuple[Path, str]]:
+    offenses: List[Tuple[Path, str]] = []
+    for path in files:
+        for module in _read_imports(path):
+            if module in allow_modules or any(module.startswith(prefix) for prefix in allow_prefixes):
+                continue
+            if any(module.startswith(prefix) for prefix in forbidden_prefixes):
+                offenses.append((path, module))
+    return offenses
+
+
+def _format_offenses(label: str, offenses: List[Tuple[Path, str]]) -> str:
+    lines = [f"{label} import violations:"]
+    for path, module in sorted(offenses, key=lambda item: (str(item[0]), item[1])):
+        lines.append(f"- {path}: {module}")
+    return "\n".join(lines)
+
+
+def test_products_do_not_import_forbidden_core_modules() -> None:
+    products_root = REPO_ROOT / "products"
+    files = list(_iter_python_files(products_root))
+    offenses = _find_offenses(
+        files,
+        forbidden_prefixes=(
+            "core.models",
+            "core.memory",
+            "core.orchestrator",
+            "core.agents.llm_reasoner",
+        ),
+        allow_modules=("core.orchestrator.context",),
+    )
+    assert not offenses, _format_offenses("Products", offenses)
+
+
+def test_tools_do_not_import_agents_or_models() -> None:
+    tool_roots = [REPO_ROOT / "core" / "tools", REPO_ROOT / "products"]
+    files: List[Path] = []
+    for root in tool_roots:
+        if not root.exists():
+            continue
+        for path in _iter_python_files(root):
+            if "tools" in path.parts:
+                files.append(path)
+    offenses = _find_offenses(
+        files,
+        forbidden_prefixes=("core.agents", "core.models"),
+    )
+    assert not offenses, _format_offenses("Tools", offenses)
+
+
+def test_agents_do_not_import_memory_backends_or_tool_executor() -> None:
+    agent_roots = [REPO_ROOT / "core" / "agents", REPO_ROOT / "products"]
+    files: List[Path] = []
+    for root in agent_roots:
+        if not root.exists():
+            continue
+        for path in _iter_python_files(root):
+            if "agents" in path.parts:
+                files.append(path)
+    offenses = _find_offenses(
+        files,
+        forbidden_prefixes=(
+            "core.memory.sqlite_backend",
+            "core.memory.in_memory",
+            "core.tools.executor",
+        ),
+    )
+    assert not offenses, _format_offenses("Agents", offenses)
+
+
+def test_ui_does_not_import_core_runtime_layers() -> None:
+    ui_root = REPO_ROOT / "gateway" / "ui"
+    files = list(_iter_python_files(ui_root))
+    offenses = _find_offenses(
+        files,
+        forbidden_prefixes=(
+            "core.orchestrator",
+            "core.memory",
+            "core.models",
+            "core.tools",
+            "core.governance",
+            "core.agents",
+        ),
+        allow_prefixes=("core.config", "core.contracts"),
+    )
+    assert not offenses, _format_offenses("UI", offenses)
+
+# tests/architecture/test_master_v1_invariants.py
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Optional, Sequence, Tuple
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "storage", "secrets", "tests"}
+
+
+def _iter_python_files(root: Path) -> List[Path]:
+    paths: List[Path] = []
+    if not root.exists():
+        return paths
+    for path in root.rglob("*.py"):
+        if not path.is_file():
+            continue
+        if any(part in EXCLUDED_DIRS for part in path.parts):
+            continue
+        paths.append(path)
+    return sorted(paths, key=lambda item: str(item))
+
+
+def _read_imports(path: Path) -> List[str]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    imports: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if not module:
+                continue
+            for alias in node.names:
+                if alias.name == "*":
+                    imports.append(module)
+                else:
+                    imports.append(f"{module}.{alias.name}")
+    return imports
+
+
+def _first_violation(
+    files: Sequence[Path],
+    *,
+    forbidden_prefixes: Sequence[str],
+    forbidden_modules: Sequence[str] = (),
+    allow_prefixes: Sequence[str] = (),
+) -> Optional[Tuple[Path, str]]:
+    for path in files:
+        for module in _read_imports(path):
+            if any(module.startswith(prefix) for prefix in allow_prefixes):
+                continue
+            if module in forbidden_modules or any(module.startswith(prefix) for prefix in forbidden_prefixes):
+                return path, module
+    return None
+
+
+def _format_violation(label: str, violation: Optional[Tuple[Path, str]]) -> str:
+    if not violation:
+        return f"{label} import violation"
+    path, module = violation
+    rel_path = path.relative_to(REPO_ROOT)
+    return f"{label} import violation: {rel_path}: {module}"
+
+
+def _iter_tool_files(repo_root: Path) -> Iterable[Path]:
+    tool_roots = [repo_root / "core" / "tools", repo_root / "products"]
+    for root in tool_roots:
+        for path in _iter_python_files(root):
+            if "tools" in path.parts:
+                yield path
+
+
+def _iter_agent_files(repo_root: Path) -> Iterable[Path]:
+    agent_roots = [repo_root / "core" / "agents", repo_root / "products"]
+    for root in agent_roots:
+        for path in _iter_python_files(root):
+            if "agents" in path.parts:
+                yield path
+
+
+def test_products_do_not_import_forbidden_core_modules() -> None:
+    files = _iter_python_files(REPO_ROOT / "products")
+    violation = _first_violation(
+        files,
+        forbidden_prefixes=(
+            "core.models",
+            "core.memory",
+            "core.orchestrator",
+            "core.agents.llm_reasoner",
+        ),
+    )
+    assert not violation, _format_violation("Products", violation)
+
+
+def test_tools_do_not_import_agents_or_models() -> None:
+    files = list(_iter_tool_files(REPO_ROOT))
+    violation = _first_violation(
+        files,
+        forbidden_prefixes=("core.agents", "core.models"),
+    )
+    assert not violation, _format_violation("Tools", violation)
+
+
+def test_agents_do_not_import_memory_backends_or_tool_executor() -> None:
+    files = list(_iter_agent_files(REPO_ROOT))
+    violation = _first_violation(
+        files,
+        forbidden_prefixes=(
+            "core.memory.in_memory",
+            "core.memory.sqlite_backend",
+            "core.tools.executor",
+        ),
+    )
+    assert not violation, _format_violation("Agents", violation)
+
+
+def test_ui_does_not_import_core_beyond_api_surface() -> None:
+    files = _iter_python_files(REPO_ROOT / "gateway" / "ui")
+    violation = _first_violation(
+        files,
+        forbidden_prefixes=("core.",),
+        allow_prefixes=("core.config", "core.contracts"),
+    )
+    assert not violation, _format_violation("UI", violation)
+
 # tests/conftest.py
 # ==============================
 # Testing Fixtures
@@ -126,6 +386,70 @@ def app_client(orchestrator: OrchestratorEngine) -> TestClient:
     client = TestClient(app)
     return client
 
+# tests/core/test_agent_output_guardrails.py
+# ==============================
+# Tests: Agent Output Guardrails
+# ==============================
+from __future__ import annotations
+
+import pytest
+
+from core.agents.base import BaseAgent
+from core.agents.registry import AgentRegistry
+from core.config.schema import Settings
+from core.contracts.agent_schema import AgentMeta, AgentResult, validate_agent_output_payload
+from core.contracts.flow_schema import BackendType, StepDef, StepType
+from core.governance.hooks import GovernanceHooks
+from core.orchestrator.context import RunContext
+from core.orchestrator.step_executor import StepExecutor
+
+
+class _NoopToolExecutor:
+    def execute(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("tool executor should not be called")
+
+
+class _ControlAgent(BaseAgent):
+    name = "control_agent"
+
+    def __init__(self, payload):  # type: ignore[no-untyped-def]
+        super().__init__()
+        self._payload = payload
+
+    def run(self, step_context):  # type: ignore[no-untyped-def]
+        return AgentResult(ok=True, data=self._payload, error=None, meta=AgentMeta(agent_name=self.name))
+
+
+def test_agent_output_schema_rejects_control_fields() -> None:
+    with pytest.raises(ValueError):
+        validate_agent_output_payload({"next_step": "s2"})
+
+    with pytest.raises(ValueError):
+        validate_agent_output_payload({"data": {"branch_hint": "s3"}})
+
+
+def test_step_executor_blocks_agent_control_output() -> None:
+    settings = Settings()
+    governance = GovernanceHooks(settings=settings)
+    step_executor = StepExecutor(tool_executor=_NoopToolExecutor(), governance=governance, agent_registry=AgentRegistry)
+
+    AgentRegistry.clear()
+    try:
+        AgentRegistry.register("control_agent", lambda: _ControlAgent({"next_step": "s2"}))
+        run_ctx = RunContext(run_id="run_1", product="test_product", flow="test_flow")
+        step_def = StepDef(
+            id="step_1",
+            type=StepType.AGENT,
+            agent="control_agent",
+            backend=BackendType.LOCAL,
+        )
+        with pytest.raises(RuntimeError) as exc:
+            step_executor.execute(run_ctx=run_ctx, step_def=step_def)
+        assert "agent_output_control_fields" in str(exc.value)
+        assert "agent.control_agent.output" not in run_ctx.artifacts
+    finally:
+        AgentRegistry.clear()
+
 # tests/core/test_agents_core.py
 # ==============================
 # Tests: Agents (Base + Registry + Minimal Agent Run)
@@ -167,19 +491,17 @@ class _EchoAgent(BaseAgent):
 
 def test_agent_registry_register_and_resolve() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent()
-    AgentRegistry.register(a.name, a)
-    resolved = AgentRegistry.resolve(a.name)
+    AgentRegistry.register("echo_agent", lambda: _EchoAgent())
+    resolved = AgentRegistry.resolve("echo_agent")
     assert resolved is not None
     assert resolved.name == "echo_agent"
 
 
 def test_agent_registry_duplicate_registration_raises() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent("dup_agent")
-    AgentRegistry.register(a.name, a)
+    AgentRegistry.register("dup_agent", lambda: _EchoAgent("dup_agent"))
     try:
-        AgentRegistry.register(a.name, a)
+        AgentRegistry.register("dup_agent", lambda: _EchoAgent("dup_agent"))
         assert False, "Expected duplicate registration to raise"
     except ValueError:
         assert True
@@ -187,8 +509,7 @@ def test_agent_registry_duplicate_registration_raises() -> None:
 
 def test_agent_run_returns_agent_result() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent()
-    AgentRegistry.register(a.name, a)
+    AgentRegistry.register("echo_agent", lambda: _EchoAgent())
 
     run = RunContext(
         run_id="r1",
@@ -199,7 +520,7 @@ def test_agent_run_returns_agent_result() -> None:
         artifacts={"k1": {"v": 1}},
         meta={},
     )
-    step = run.new_step(step_id="s_agent", step_type="agent", backend="local", target=a.name)
+    step = run.new_step(step_id="s_agent", step_type="agent", backend="local", target="echo_agent")
 
     resolved = AgentRegistry.resolve("echo_agent")
     assert resolved is not None
@@ -209,6 +530,108 @@ def test_agent_run_returns_agent_result() -> None:
     assert res.data is not None
     assert res.data["echo"] == "hi"
     assert "k1" in res.data["artifact_keys"]
+
+# tests/core/test_concurrency_smoke.py
+# ==============================
+# Tests: Concurrency Smoke
+# ==============================
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from core.agents.registry import AgentRegistry
+from core.config.schema import Settings
+from core.contracts.tool_schema import ToolMeta, ToolResult
+from core.governance.hooks import GovernanceHooks
+from core.governance.security import SecurityRedactor
+from core.memory.in_memory import InMemoryBackend
+from core.memory.router import MemoryRouter
+from core.memory.tracing import Tracer
+from core.orchestrator.engine import OrchestratorEngine
+from core.orchestrator.flow_loader import FlowLoader
+from core.orchestrator.step_executor import StepExecutor
+from core.tools.base import BaseTool
+from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
+
+
+class _RunIdTool(BaseTool):
+    name = "run_id_tool"
+
+    def run(self, params, ctx):  # type: ignore[no-untyped-def]
+        meta = ToolMeta(tool_name=self.name, backend="local")
+        payload = {"summary": ctx.run_id, "details": {"run_id": ctx.run_id, "marker": params.get("marker")}}
+        return ToolResult.ok(data=payload, meta=meta)
+
+
+def _write_flow(tmp_path: Path) -> Path:
+    flows_dir = tmp_path / "products" / "test_product" / "flows"
+    flows_dir.mkdir(parents=True, exist_ok=True)
+    flow_path = flows_dir / "test_flow.yaml"
+    flow_path.write_text(
+        "\n".join(
+            [
+                'id: "test_flow"',
+                'version: "1.0.0"',
+                "steps:",
+                '  - id: "run_tool"',
+                '    type: "tool"',
+                '    backend: "local"',
+                '    tool: "run_id_tool"',
+                "    params:",
+                '      marker: "{{payload.marker}}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return flow_path
+
+
+def _build_engine(tmp_path: Path) -> OrchestratorEngine:
+    flow_path = _write_flow(tmp_path)
+    flow_loader = FlowLoader(products_root=flow_path.parents[2])
+    memory = MemoryRouter(backend=InMemoryBackend())
+    tracer = Tracer(memory=memory, mirror_to_log=False)
+    settings = Settings()
+    governance = GovernanceHooks(settings=settings)
+    tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=SecurityRedactor())
+    step_executor = StepExecutor(tool_executor=tool_executor, governance=governance, agent_registry=AgentRegistry)
+    return OrchestratorEngine(
+        flow_loader=flow_loader,
+        step_executor=step_executor,
+        memory=memory,
+        tracer=tracer,
+        governance=governance,
+    )
+
+
+def test_parallel_runs_isolated(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("run_id_tool", lambda: _RunIdTool())
+        engine = _build_engine(tmp_path)
+
+        def _run(marker: str):
+            res = engine.run_flow(product="test_product", flow="test_flow", payload={"marker": marker})
+            assert res.ok
+            return res.data["run_id"], marker
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(_run, "a"), executor.submit(_run, "b")]
+            results = [f.result() for f in futures]
+
+        for run_id, marker in results:
+            bundle = engine.memory.get_run(run_id)
+            assert bundle is not None
+            output = bundle.run.output or {}
+            assert output.get("run_id") == run_id
+            assert output.get("marker") == marker
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
 
 # tests/core/test_config_precedence_extended.py
 # ==============================
@@ -489,6 +912,131 @@ def test_policy_engine_enforces_model_allowlist() -> None:
     assert allowed.allow is True
     assert denied.allow is False
 
+# tests/core/test_governance_limits.py
+# ==============================
+# Governance Limits Tests
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.config.schema import AppConfig, PathsConfig, PoliciesConfig, Settings
+from core.contracts.reasoning_schema import ReasoningPurpose
+from core.governance.hooks import GovernanceHooks
+from core.memory.in_memory import InMemoryBackend
+from core.memory.router import MemoryRouter
+from core.memory.tracing import Tracer
+from core.orchestrator.context import RunContext
+from core.orchestrator.engine import OrchestratorEngine
+
+
+def _settings_with_policies(repo_root: Path, *, policies: PoliciesConfig) -> Settings:
+    app = AppConfig(paths=PathsConfig(repo_root=repo_root.as_posix()))
+    return Settings(app=app, policies=policies)
+
+
+def test_max_payload_bytes_exceeded(tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    policies = PoliciesConfig(max_payload_bytes=10)
+    settings = _settings_with_policies(repo_root, policies=policies)
+    memory = MemoryRouter(backend=InMemoryBackend())
+    tracer = Tracer(memory=memory)
+    engine = OrchestratorEngine.from_settings(settings=settings, memory=memory, tracer=tracer, sleep_fn=lambda _: None)
+
+    res = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "too-large-payload"})
+    assert res.ok is False
+    assert res.error is not None
+    assert res.error.code == "payload_limit_exceeded"
+
+    runs = memory.list_runs()
+    assert runs
+    assert runs[0].status == "FAILED"
+    assert runs[0].summary.get("error", {}).get("code") == "payload_limit_exceeded"
+
+
+def test_max_steps_exceeded(tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    policies = PoliciesConfig(max_steps=1)
+    settings = _settings_with_policies(repo_root, policies=policies)
+    memory = MemoryRouter(backend=InMemoryBackend())
+    tracer = Tracer(memory=memory)
+    engine = OrchestratorEngine.from_settings(settings=settings, memory=memory, tracer=tracer, sleep_fn=lambda _: None)
+
+    res = engine.run_flow(product="hello_world", flow="hello_world", payload={"keyword": "hello"})
+    assert res.ok is False
+    assert res.error is not None
+    assert res.error.code == "max_steps_exceeded"
+
+    runs = memory.list_runs()
+    assert runs
+    assert runs[0].status == "FAILED"
+    assert runs[0].summary.get("error", {}).get("code") == "max_steps_exceeded"
+
+
+def test_max_tool_calls_exceeded() -> None:
+    policies = PoliciesConfig(max_tool_calls=1)
+    settings = Settings(policies=policies)
+    hooks = GovernanceHooks(settings=settings)
+    run_ctx = RunContext(run_id="run_1", product="demo", flow="demo", payload={})
+    step_ctx = run_ctx.new_step(step_id="tool_step", step_type="tool")
+
+    decision1 = hooks.before_tool_call(tool_name="tool_a", params={}, ctx=step_ctx)
+    assert decision1.allowed is True
+
+    decision2 = hooks.before_tool_call(tool_name="tool_b", params={}, ctx=step_ctx)
+    assert decision2.allowed is False
+    assert decision2.reason == "tool_call_limit_exceeded"
+
+
+def test_max_tokens_exceeded() -> None:
+    policies = PoliciesConfig(model_max_tokens=5)
+    settings = Settings(policies=policies)
+    hooks = GovernanceHooks(settings=settings)
+    run_ctx = RunContext(run_id="run_1", product="demo", flow="demo", payload={})
+    step_ctx = run_ctx.new_step(step_id="agent_step", step_type="agent")
+
+    decision = hooks.before_model_call(
+        model_name="gpt-4o-mini",
+        purpose=ReasoningPurpose.EXPLANATION,
+        messages={"messages": [{"role": "user", "content": "hi"}]},
+        max_tokens=10,
+        ctx=step_ctx,
+    )
+    assert decision.allowed is False
+    assert decision.reason == "model_token_limit_exceeded"
+
+
+def test_max_steps_per_run_exceeded() -> None:
+    policies = PoliciesConfig(max_steps=1)
+    settings = Settings(policies=policies)
+    hooks = GovernanceHooks(settings=settings)
+    run_ctx = RunContext(run_id="run_1", product="demo", flow="demo", payload={})
+    run_ctx.meta["steps_executed"] = 1
+    step_ctx = run_ctx.new_step(step_id="agent_step", step_type="agent")
+
+    decision = hooks.before_step(step_ctx=step_ctx)
+    assert decision.allowed is False
+    assert decision.reason == "step_limit_exceeded"
+
+
+def test_run_token_budget_exceeded() -> None:
+    policies = PoliciesConfig(max_tokens_per_run=5)
+    settings = Settings(policies=policies)
+    hooks = GovernanceHooks(settings=settings)
+    run_ctx = RunContext(run_id="run_1", product="demo", flow="demo", payload={})
+    run_ctx.meta["tokens_used"] = 4
+    step_ctx = run_ctx.new_step(step_id="agent_step", step_type="agent")
+
+    decision = hooks.before_model_call(
+        model_name="gpt-4o-mini",
+        purpose=ReasoningPurpose.EXPLANATION,
+        messages={"messages": [{"role": "user", "content": "hi"}]},
+        max_tokens=2,
+        ctx=step_ctx,
+    )
+    assert decision.allowed is False
+    assert decision.reason == "run_token_budget_exceeded"
+
 # tests/core/test_guardrails_repo_scan.py
 # ==============================
 # Guardrail Validations
@@ -569,13 +1117,69 @@ def test_sqlite_imports_constrained_to_persistence_modules() -> None:
     files = _iter_python_files()
     allowed = {
         REPO_ROOT / "core" / "memory" / "sqlite_backend.py",
-        REPO_ROOT / "core" / "knowledge" / "vector_store.py",
     }
     pattern = r"\bsqlite3\b"
     offenders = _find_offenses(pattern, files, allow=list(allowed))
     assert not offenders, (
         "Direct sqlite3 usage must be contained within persistence helpers. Offending files: {offenders}"
     )
+
+# tests/core/test_hf_storage_remap.py
+# ==============================
+# Hugging Face Storage Remap Tests
+# ==============================
+from __future__ import annotations
+
+import textwrap
+
+from core.config.loader import load_settings
+
+
+def _write_yaml(path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(body), encoding="utf-8")
+
+
+def _base_configs(root) -> None:
+    _write_yaml(root / "configs" / "app.yaml", "app: {}\n")
+    _write_yaml(root / "configs" / "models.yaml", "models: {}\n")
+    _write_yaml(root / "configs" / "policies.yaml", "policies: {}\n")
+    _write_yaml(root / "configs" / "logging.yaml", "logging: {}\n")
+    _write_yaml(root / "configs" / "products.yaml", "products: {}\n")
+
+
+def test_hf_env_applies_persistent_paths_when_unset(tmp_path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _base_configs(repo_root)
+
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir="configs",
+        env={"HF_HOME": "/data"},
+    )
+
+    assert settings.app.paths.storage_dir == "/data/storage"
+    assert settings.app.paths.observability_dir == "/data/observability"
+
+
+def test_hf_env_respects_env_overrides(tmp_path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _base_configs(repo_root)
+
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir="configs",
+        env={
+            "HF_HOME": "/data",
+            "MASTER__APP__PATHS__STORAGE_DIR": "/custom/storage",
+            "MASTER__APP__PATHS__OBSERVABILITY_DIR": "/custom/observability",
+        },
+    )
+
+    assert settings.app.paths.storage_dir == "/custom/storage"
+    assert settings.app.paths.observability_dir == "/custom/observability"
 
 # tests/core/test_hitl_idempotency.py
 # ==============================
@@ -647,66 +1251,6 @@ def test_hitl_idempotency(orchestrator, trace_sink: List[dict]) -> None:
     approve_after_reject = orchestrator.resume_run(run_id=run_b, approval_payload={"approved": True}, decision="APPROVED")
     assert not approve_after_reject.ok
     assert approve_after_reject.error and approve_after_reject.error.code == "invalid_state"
-
-# tests/core/test_knowledge_core.py
-# ==============================
-# Tests: Knowledge Core
-# ==============================
-from __future__ import annotations
-
-from pathlib import Path
-
-from core.knowledge.base import IngestChunk, Query
-from core.knowledge.vector_store import SqliteVectorStore
-
-
-def _chunk(collection: str, doc: str, idx: int, text: str, **metadata) -> IngestChunk:
-    return IngestChunk(
-        collection=collection,
-        doc_id=doc,
-        chunk_id=f"{doc}:::{idx}",
-        text=text,
-        source=f"file://{doc}",
-        metadata=metadata,
-    )
-
-
-def test_vector_store_upsert_query_delete(tmp_path: Path) -> None:
-    store = SqliteVectorStore(str(tmp_path / "knowledge.sqlite"))
-    items = [
-        _chunk("hello_world", "doc_a", 0, "Alpha beta gamma", topic="guide", product="hello_world"),
-        _chunk("hello_world", "doc_a", 1, "Beta delta epsilon"),
-        _chunk("hello_world", "doc_b", 0, "Gamma only text", topic="notes"),
-    ]
-
-    res = store.upsert(items)
-    assert res.ok
-    assert res.inserted == len(items)
-
-    q = Query(collection="hello_world", text="beta", top_k=5)
-    matches = store.query(q)
-    assert matches
-    assert matches[0].source.endswith("doc_a")
-
-    filtered = store.query(Query(collection="hello_world", text="gamma", filters={"topic": "notes"}))
-    assert len(filtered) == 1
-    assert filtered[0].metadata["topic"] == "notes"
-
-    # Upsert same chunk with new text -> counts as update
-    updated_chunk = items[0].model_copy(update={"text": "Alpha refreshed"})
-    res2 = store.upsert([updated_chunk])
-    assert res2.updated == 1
-    stats = store.stats(collection="hello_world")
-    assert stats.total_chunks == len(items)
-
-    # Delete by doc_id
-    removed = store.delete(collection="hello_world", doc_ids=["doc_b"])
-    assert removed == 1
-    stats2 = store.stats(collection="hello_world")
-    assert stats2.total_chunks == len(items) - 1
-
-    store.clear()
-    assert store.stats().total_chunks == 0
 
 # tests/core/test_log_redaction.py
 # ==============================
@@ -840,7 +1384,7 @@ def test_engine_runs_and_pauses_on_hitl(tmp_path: Path) -> None:
 # ==============================
 from __future__ import annotations
 
-from core.orchestrator.state import RunStatus, StepStatus
+from core.orchestrator.state import RunStatus, StepStatus, RunState, is_valid_run_transition, to_run_state
 
 
 def test_run_status_has_pending_human() -> None:
@@ -861,6 +1405,162 @@ def test_status_string_roundtrip() -> None:
     # Ensure enum values are stable strings (used in DB/status API).
     assert str(RunStatus.RUNNING.value) == "RUNNING"
     assert str(StepStatus.COMPLETED.value) == "COMPLETED"
+
+
+def test_run_state_mapping() -> None:
+    assert to_run_state(RunStatus.PENDING_HUMAN) == RunState.PENDING_APPROVAL
+    assert to_run_state(RunStatus.PENDING_USER_INPUT) == RunState.PENDING_USER_INPUT
+
+
+def test_run_state_transitions() -> None:
+    assert is_valid_run_transition(RunStatus.RUNNING, RunStatus.PENDING_HUMAN)
+    assert is_valid_run_transition(RunStatus.PENDING_HUMAN, RunStatus.RUNNING)
+    assert is_valid_run_transition(RunStatus.PENDING_USER_INPUT, RunStatus.RUNNING)
+    assert not is_valid_run_transition(RunStatus.COMPLETED, RunStatus.RUNNING)
+
+# tests/core/test_output_governance.py
+# ==============================
+# Tests: Output Governance Enforcement
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.agents.registry import AgentRegistry
+from core.config.schema import PoliciesConfig, Settings
+from core.contracts.run_schema import RunStatus
+from core.contracts.tool_schema import ToolMeta, ToolResult
+from core.governance.hooks import GovernanceHooks
+from core.governance.security import SecurityRedactor
+from core.memory.in_memory import InMemoryBackend
+from core.memory.router import MemoryRouter
+from core.memory.tracing import Tracer
+from core.orchestrator.engine import OrchestratorEngine
+from core.orchestrator.flow_loader import FlowLoader
+from core.orchestrator.step_executor import StepExecutor
+from core.tools.base import BaseTool
+from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
+
+
+class _BigOutputTool(BaseTool):
+    name = "big_output_tool"
+
+    def run(self, params, ctx):  # type: ignore[no-untyped-def]
+        meta = ToolMeta(tool_name=self.name, backend="local")
+        return ToolResult.ok(data={"summary": "x" * 200, "details": {"ok": True}}, meta=meta)
+
+
+class _OutputFilesTool(BaseTool):
+    name = "output_files_tool"
+
+    def run(self, params, ctx):  # type: ignore[no-untyped-def]
+        meta = ToolMeta(tool_name=self.name, backend="local")
+        return ToolResult.ok(
+            data={
+                "summary": "ok",
+                "details": {"ok": True},
+                "output_files": [{"name": "big.txt", "content_base64": "x" * 200}],
+            },
+            meta=meta,
+        )
+
+
+def _write_flow(tmp_path: Path, *, tool_name: str) -> Path:
+    flows_dir = tmp_path / "products" / "test_product" / "flows"
+    flows_dir.mkdir(parents=True, exist_ok=True)
+    flow_path = flows_dir / "test_flow.yaml"
+    flow_path.write_text(
+        "\n".join(
+            [
+                'id: "test_flow"',
+                'version: "1.0.0"',
+                "steps:",
+                '  - id: "run_tool"',
+                '    type: "tool"',
+                '    backend: "local"',
+                f'    tool: "{tool_name}"',
+                "    params: {}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return flow_path
+
+
+def _build_engine(tmp_path: Path, *, settings: Settings, tool_name: str) -> OrchestratorEngine:
+    flow_path = _write_flow(tmp_path, tool_name=tool_name)
+    flow_loader = FlowLoader(products_root=flow_path.parents[2])
+    memory = MemoryRouter(backend=InMemoryBackend())
+    tracer = Tracer(memory=memory, mirror_to_log=False)
+    governance = GovernanceHooks(settings=settings)
+    tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=SecurityRedactor())
+    step_executor = StepExecutor(tool_executor=tool_executor, governance=governance, agent_registry=AgentRegistry)
+    return OrchestratorEngine(
+        flow_loader=flow_loader,
+        step_executor=step_executor,
+        memory=memory,
+        tracer=tracer,
+        governance=governance,
+    )
+
+
+def test_output_payload_limit_blocks_run(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("big_output_tool", lambda: _BigOutputTool())
+        settings = Settings(policies=PoliciesConfig(max_payload_bytes=50))
+        engine = _build_engine(tmp_path, settings=settings, tool_name="big_output_tool")
+
+        res = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        assert res.ok
+        assert res.data["status"] == RunStatus.FAILED.value
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+def test_output_files_limit_blocks_run(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("output_files_tool", lambda: _OutputFilesTool())
+        settings = Settings(policies=PoliciesConfig(max_payload_bytes=50))
+        engine = _build_engine(tmp_path, settings=settings, tool_name="output_files_tool")
+
+        res = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        assert res.ok
+        assert res.data["status"] == RunStatus.FAILED.value
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# tests/core/test_plan_schema.py
+# ==============================
+# Tests: Plan Proposal Schema
+# ==============================
+from __future__ import annotations
+
+from core.contracts.plan_schema import EstimatedCost, PlanApproval, PlanProposal, PlanStep
+
+
+def test_plan_proposal_schema_validates() -> None:
+    plan = PlanProposal(
+        schema_version="1.0",
+        summary="Proposed execution plan",
+        steps=[
+            PlanStep(step_id="s1", description="Read input", step_type="tool", tool="data_reader"),
+            PlanStep(step_id="s2", description="Summarize", step_type="agent", agent="llm_reasoner"),
+        ],
+        required_tools=["data_reader"],
+        approvals=[PlanApproval(step_id="s2", reason="Review narrative")],
+        estimated_cost=EstimatedCost(currency="USD", amount=0.12, tokens=1200),
+    )
+    payload = plan.model_dump(mode="json")
+    assert payload["summary"] == "Proposed execution plan"
+    assert payload["estimated_cost"]["currency"] == "USD"
 
 # tests/core/test_product_loader.py
 # ==============================
@@ -1031,8 +1731,7 @@ def _executor(settings: Settings, registry: ToolRegistry) -> ToolExecutor:
 def test_tool_registry_registers_and_resolves() -> None:
     ToolRegistry.clear()
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    registry.register(name="echo_tool", factory=lambda: RecordingTool())
     resolved = registry.resolve("echo_tool")
     assert isinstance(resolved, EchoTool)
 
@@ -1041,8 +1740,14 @@ def test_tool_executor_runs_tool_and_redacts_traces() -> None:
     ToolRegistry.clear()
     settings = Settings()
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    tools = []
+
+    def _factory() -> RecordingTool:
+        tool = RecordingTool()
+        tools.append(tool)
+        return tool
+
+    registry.register(name="echo_tool", factory=_factory)
     events: List[Tuple[str, dict]] = []
     ctx = _build_step_ctx(events=events)
 
@@ -1050,7 +1755,7 @@ def test_tool_executor_runs_tool_and_redacts_traces() -> None:
     result = executor.execute(tool_name="echo_tool", params={"message": "secret sk-abc"}, ctx=ctx)
 
     assert result.ok is True
-    assert tool.calls == 1
+    assert tools and tools[0].calls == 1
     assert result.data and "secret" in result.data["echo"]
     payloads = [payload for event, payload in events if event == "tool.executed"]
     assert payloads
@@ -1064,8 +1769,14 @@ def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
     settings = Settings()
     settings.policies.blocked_tools = ["echo_tool"]
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    tools = []
+
+    def _factory() -> RecordingTool:
+        tool = RecordingTool()
+        tools.append(tool)
+        return tool
+
+    registry.register(name="echo_tool", factory=_factory)
     events: List[Tuple[str, dict]] = []
     ctx = _build_step_ctx(events=events)
 
@@ -1073,7 +1784,7 @@ def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
     result = executor.execute(tool_name="echo_tool", params={"message": "hi"}, ctx=ctx)
 
     assert result.ok is False
-    assert tool.calls == 0
+    assert tools and tools[0].calls == 0
     assert any(event == "governance.decision" for event, _ in events)
 
 # tests/core/test_trace_contract.py
@@ -1120,11 +1831,238 @@ def test_trace_contract(orchestrator, trace_sink: List[dict]) -> None:
         assert event.get("ts") and isinstance(event["ts"], int)
         assert event.get("event_type")
 
+# tests/core/test_user_input_pause_resume.py
+# ==============================
+# Tests: User Input Pause/Resume
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from core.agents.registry import AgentRegistry
+from core.config.schema import PoliciesConfig, Settings
+from core.contracts.run_schema import RunStatus, StepStatus
+from core.contracts.tool_schema import ToolMeta, ToolResult
+from core.governance.hooks import GovernanceHooks
+from core.governance.security import SecurityRedactor
+from core.memory.in_memory import InMemoryBackend
+from core.memory.router import MemoryRouter
+from core.memory.tracing import Tracer
+from core.orchestrator.engine import OrchestratorEngine
+from core.orchestrator.flow_loader import FlowLoader
+from core.orchestrator.step_executor import StepExecutor
+from core.tools.base import BaseTool
+from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
+
+
+class _EchoTool(BaseTool):
+    name = "echo_tool"
+
+    def run(self, params, ctx):  # type: ignore[no-untyped-def]
+        meta = ToolMeta(tool_name=self.name, backend="local")
+        return ToolResult.ok(data={"summary": "ok", "details": params}, meta=meta)
+
+
+def _write_flow(tmp_path: Path) -> Path:
+    flows_dir = tmp_path / "products" / "test_product" / "flows"
+    flows_dir.mkdir(parents=True, exist_ok=True)
+    flow_path = flows_dir / "test_flow.yaml"
+    flow_path.write_text(
+        "\n".join(
+            [
+                'id: "test_flow"',
+                'version: "1.0.0"',
+                "steps:",
+                '  - id: "input"',
+                '    type: "user_input"',
+                "    params:",
+                '      schema_version: "1.0"',
+                '      form_id: "notes"',
+                '      prompt: "Notes"',
+                '      input_type: "text"',
+                '      mode: "free_text_input"',
+                "      schema:",
+                '        type: "object"',
+                "        properties:",
+                "          text:",
+                '            type: "string"',
+                "      required:",
+                '        - "text"',
+                '  - id: "echo"',
+                '    type: "tool"',
+                '    backend: "local"',
+                '    tool: "echo_tool"',
+                "    params:",
+                '      text: "{{artifacts.user_input.notes.values.text}}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return flow_path
+
+
+def _build_engine(tmp_path: Path, *, settings: Settings | None = None) -> OrchestratorEngine:
+    flow_path = _write_flow(tmp_path)
+    flow_loader = FlowLoader(products_root=flow_path.parents[2])
+    memory = MemoryRouter(backend=InMemoryBackend())
+    tracer = Tracer(memory=memory, mirror_to_log=False)
+    settings = settings or Settings()
+    governance = GovernanceHooks(settings=settings)
+    tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=SecurityRedactor())
+    step_executor = StepExecutor(tool_executor=tool_executor, governance=governance, agent_registry=AgentRegistry)
+    return OrchestratorEngine(
+        flow_loader=flow_loader,
+        step_executor=step_executor,
+        memory=memory,
+        tracer=tracer,
+        governance=governance,
+    )
+
+
+def test_user_input_pause_and_resume(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("echo_tool", lambda: _EchoTool())
+        engine = _build_engine(tmp_path)
+
+        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        assert started.ok, started.error
+        assert started.data["status"] == RunStatus.PENDING_USER_INPUT.value
+        run_id = started.data["run_id"]
+
+        bundle = engine.memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+        step = next(s for s in bundle.steps if s.step_id == "input")
+        assert step.status == StepStatus.PENDING_USER_INPUT
+
+        resumed = engine.resume_run(
+            run_id=run_id,
+            user_input_response={"form_id": "notes", "values": {"text": "hello"}},
+        )
+        assert resumed.ok, resumed.error
+        assert resumed.data["status"] == RunStatus.COMPLETED.value
+
+        bundle = engine.memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.status == RunStatus.COMPLETED
+        step = next(s for s in bundle.steps if s.step_id == "input")
+        assert step.status == StepStatus.COMPLETED
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+def test_user_input_invalid_response_rejected(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("echo_tool", lambda: _EchoTool())
+        engine = _build_engine(tmp_path)
+
+        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        assert started.ok, started.error
+        run_id = started.data["run_id"]
+
+        rejected = engine.resume_run(
+            run_id=run_id,
+            user_input_response={"form_id": "notes", "values": {"text": ""}},
+        )
+        assert not rejected.ok
+        assert rejected.error is not None
+        assert rejected.error.code == "invalid_input"
+
+        bundle = engine.memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+        step = next(s for s in bundle.steps if s.step_id == "input")
+        assert step.status == StepStatus.PENDING_USER_INPUT
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+
+def test_user_input_payload_limit_blocked(tmp_path: Path) -> None:
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    try:
+        ToolRegistry.register("echo_tool", lambda: _EchoTool())
+        settings = Settings(policies=PoliciesConfig(max_payload_bytes=50))
+        engine = _build_engine(tmp_path, settings=settings)
+
+        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        assert started.ok, started.error
+        run_id = started.data["run_id"]
+
+        rejected = engine.resume_run(
+            run_id=run_id,
+            user_input_response={"form_id": "notes", "values": {"text": "x" * 200}},
+        )
+        assert not rejected.ok
+        assert rejected.error is not None
+        assert rejected.error.code == "policy_blocked"
+
+        bundle = engine.memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+    finally:
+        AgentRegistry.clear()
+        ToolRegistry.clear()
+
+# tests/core/test_user_input_step.py
+# ==============================
+# Tests: User Input Modes
+# ==============================
+from __future__ import annotations
+
+from core.contracts.user_input_schema import UserInputModes, UserInputRequest
+from core.orchestrator.engine import _validate_user_input_values
+
+
+def test_user_input_free_text_requires_text() -> None:
+    request = UserInputRequest(
+        schema_version="1.0",
+        form_id="notes",
+        prompt="Notes",
+        input_type="text",
+        mode=UserInputModes.FREE_TEXT_INPUT,
+    )
+    errors = _validate_user_input_values(request, {"text": ""})
+    assert "missing_or_empty:text" in errors
+
+    ok_errors = _validate_user_input_values(request, {"text": "hello"})
+    assert ok_errors == []
+
+
+def test_user_input_choice_input_validates_required() -> None:
+    request = UserInputRequest(
+        schema_version="1.0",
+        form_id="choice",
+        prompt="Choice",
+        input_type="select",
+        mode=UserInputModes.CHOICE_INPUT,
+        schema={
+            "type": "object",
+            "properties": {
+                "chart_type": {"type": "string", "enum": ["bar", "line"]},
+            },
+        },
+        required=["chart_type"],
+    )
+    errors = _validate_user_input_values(request, {})
+    assert "missing_required:chart_type" in errors
+
 # tests/generate_component_txt.py
 #!/usr/bin/env python3
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
@@ -1132,11 +2070,18 @@ from typing import Iterable, List
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = REPO_ROOT / "docs" / "components"
 EXTENSIONS = {".py", ".yaml", ".yml"}
+EXCLUDE_DIRS: set[str] = set()
+EXCLUDE_FILES: set[str] = {".DS_Store"}
 
 
 def _iter_components(root: Path) -> Iterable[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
+            continue
+        if path.name in EXCLUDE_FILES:
+            continue
+        if path.parent == root:
+            yield path
             continue
         if path.suffix.lower() in EXTENSIONS:
             yield path
@@ -1145,14 +2090,17 @@ def _iter_components(root: Path) -> Iterable[Path]:
 def _top_level_dir(path: Path) -> str:
     rel = path.relative_to(REPO_ROOT)
     parts = rel.parts
-    return parts[0] if parts else ""
+    return parts[0] if len(parts) > 1 else "root"
 
 
 def _write_bundle(name: str, files: List[Path]) -> None:
     if not files:
         return
     output_path = OUTPUT_DIR / f"{name}.txt"
+    timestamp = _timestamp()
     lines: List[str] = []
+    lines.append(f"# captured_at: {timestamp}")
+    lines.append("")
     for file_path in sorted(files):
         rel = file_path.relative_to(REPO_ROOT)
         lines.append(f"# {rel}")
@@ -1160,9 +2108,33 @@ def _write_bundle(name: str, files: List[Path]) -> None:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
             content = file_path.read_text(encoding="utf-8", errors="replace")
+        if "\x00" in content:
+            continue
+        if _is_secrets_path(file_path):
+            content = _redact_secrets(content)
         lines.append(content.rstrip())
         lines.append("")
     output_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _timestamp() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _is_secrets_path(path: Path) -> bool:
+    return "secrets" in path.parts
+
+
+def _redact_secrets(content: str) -> str:
+    redacted_lines: List[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or ":" not in line:
+            redacted_lines.append(line)
+            continue
+        prefix, _sep, _rest = line.partition(":")
+        redacted_lines.append(f"{prefix}: ***REDACTED***")
+    return "\n".join(redacted_lines)
 
 
 def main() -> None:
@@ -1170,7 +2142,7 @@ def main() -> None:
     bundles: dict[str, List[Path]] = {}
     for component in _iter_components(REPO_ROOT):
         top = _top_level_dir(component)
-        if not top or top.startswith("."):
+        if not top or top.startswith(".") or top in EXCLUDE_DIRS:
             continue
         bundles.setdefault(top, []).append(component)
     for name, files in sorted(bundles.items()):
@@ -1197,7 +2169,7 @@ def hello_world_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     Shared env fixture for integration tests that rely on sqlite-backed memory.
 
     This fixture ensures we use deterministic sqlite paths (for runs, approvals, and
-    knowledge ingestion) without duplicating environment overrides in every test.
+    ingestion) without duplicating environment overrides in every test.
     """
     repo_root = Path(__file__).resolve().parents[2]
     storage_dir = tmp_path / "storage"
@@ -1208,6 +2180,94 @@ def hello_world_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
 
     return sqlite_path
+
+# tests/integration/test_api_responsiveness.py
+# ==============================
+# Integration: API Responsiveness
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+import threading
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from core.contracts.run_schema import RunOperationResult
+from core.agents.registry import AgentRegistry
+from core.tools.registry import ToolRegistry
+from gateway.api.http_app import create_app
+import gateway.api.deps as deps
+
+
+def _reset_deps() -> None:
+    for dep in (
+        deps.get_engine,
+        deps.get_settings,
+        deps.get_memory_router,
+        deps.get_tracer,
+        deps.get_product_catalog,
+    ):
+        cache_clear = getattr(dep, "cache_clear", None)
+        if callable(cache_clear):
+            cache_clear()
+
+
+class _SlowEngine:
+    def __init__(self, *, started: threading.Event, finished: threading.Event, delay_seconds: float) -> None:
+        self._started = started
+        self._finished = finished
+        self._delay = delay_seconds
+
+    def run_flow(self, *, product: str, flow: str, payload: dict, requested_by: str | None = None) -> RunOperationResult:
+        self._started.set()
+        time.sleep(self._delay)
+        self._finished.set()
+        return RunOperationResult.success({"run_id": "slow_run", "status": "PENDING_HUMAN"})
+
+
+@pytest.mark.integration
+def test_health_responsive_during_slow_run(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    sqlite_path = tmp_path / "api.sqlite"
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+    monkeypatch.setenv("MASTER__SECRETS__MEMORY_DB_PATH", sqlite_path.as_posix())
+
+    started = threading.Event()
+    finished = threading.Event()
+    slow_engine = _SlowEngine(started=started, finished=finished, delay_seconds=0.6)
+
+    _reset_deps()
+    AgentRegistry.clear()
+    ToolRegistry.clear()
+    app = create_app()
+    app.dependency_overrides[deps.get_engine] = lambda: slow_engine
+    client = TestClient(app)
+
+    def _run_request() -> None:
+        resp = client.post("/api/run/hello_world/hello_world", json={"payload": {"keyword": "slow"}})
+        body = resp.json()
+        assert body["ok"] is True
+
+    run_thread = threading.Thread(target=_run_request)
+    run_thread.start()
+
+    assert started.wait(timeout=2.0)
+
+    start = time.monotonic()
+    health = client.get("/health")
+    elapsed = time.monotonic() - start
+
+    assert health.status_code == 200
+    assert elapsed < 0.3
+    assert not finished.is_set()
+
+    run_thread.join(timeout=2.0)
+    assert finished.is_set()
+    client.close()
 
 # tests/integration/test_api_runs.py
 # ==============================
@@ -1229,11 +2289,16 @@ import gateway.api.deps as deps
 
 
 def _reset_deps() -> None:
-    deps.get_engine.cache_clear()
-    deps.get_settings.cache_clear()
-    deps.get_memory_router.cache_clear()
-    deps.get_tracer.cache_clear()
-    deps.get_product_catalog.cache_clear()
+    for dep in (
+        deps.get_engine,
+        deps.get_settings,
+        deps.get_memory_router,
+        deps.get_tracer,
+        deps.get_product_catalog,
+    ):
+        cache_clear = getattr(dep, "cache_clear", None)
+        if callable(cache_clear):
+            cache_clear()
 
 
 @pytest.fixture()
@@ -1870,6 +2935,90 @@ def test_sample_flow_hello_world(tmp_path: Path, hello_world_test_env: Path) -> 
         AgentRegistry.clear()
         ToolRegistry.clear()
 
+# tests/integration/test_session_isolation.py
+# ==============================
+# Integration: Session Isolation
+# ==============================
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Dict
+
+import pytest
+
+from core.config.loader import load_settings
+from core.memory.router import MemoryRouter
+from core.memory.sqlite_backend import SQLiteBackend
+from core.memory.tracing import Tracer
+from core.orchestrator.engine import OrchestratorEngine
+
+
+@pytest.mark.integration
+def test_concurrent_runs_isolated(tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    sqlite_path = tmp_path / "api.sqlite"
+    storage_dir = tmp_path / "storage"
+    env = {
+        "MASTER__APP__PATHS__REPO_ROOT": repo_root.as_posix(),
+        "MASTER__APP__PATHS__STORAGE_DIR": storage_dir.as_posix(),
+        "MASTER__SECRETS__MEMORY_DB_PATH": sqlite_path.as_posix(),
+    }
+    settings = load_settings(repo_root=str(repo_root), env=env)
+    backend = SQLiteBackend(db_path=sqlite_path.as_posix())
+    backend.ensure_schema()
+    memory = MemoryRouter(backend, repo_root=None)
+    tracer = Tracer.from_settings(settings=settings, memory=memory)
+
+    payloads = [{"keyword": "alpha"}, {"keyword": "beta"}]
+
+    def _start_run(payload: Dict[str, str]) -> str:
+        engine = OrchestratorEngine.from_settings(settings=settings, memory=memory, tracer=tracer)
+        result = engine.run_flow(product="hello_world", flow="hello_world", payload=payload)
+        assert result.ok is True
+        return result.data["run_id"]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        run_ids = list(executor.map(_start_run, payloads))
+
+    assert len(set(run_ids)) == 2
+
+    for payload, run_id in zip(payloads, run_ids):
+        bundle = memory.get_run(run_id)
+        assert bundle is not None
+        assert bundle.run.input == payload
+
+# tests/integration/test_smoke.py
+# ==============================
+# Integration: Minimal Smoke Test
+# ==============================
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.config.loader import load_settings
+from core.orchestrator.engine import OrchestratorEngine
+from core.utils.product_loader import discover_products, register_enabled_products
+
+
+def test_smoke_engine_init(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    sqlite_path = tmp_path / "smoke.sqlite"
+    storage_dir = tmp_path / "storage"
+
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir=str(repo_root / "configs"),
+        env={
+            "MASTER__APP__PATHS__STORAGE_DIR": storage_dir.as_posix(),
+            "MASTER__SECRETS__MEMORY_DB_PATH": sqlite_path.as_posix(),
+        },
+    )
+    catalog = discover_products(settings, repo_root=repo_root)
+    register_enabled_products(catalog, settings=settings)
+    engine = OrchestratorEngine.from_settings(settings)
+    assert engine is not None
+
 # tests/integration/test_ui_smoke.py
 from typing import Any
 
@@ -1954,6 +3103,358 @@ def test_product_summary_render(monkeypatch):
     assert any(call[0] == "subheader" for call in stub_st.calls)
     assert any("Hello World" in call[1] for call in stub_st.calls if call[0] == "expander_open")
 
+# tests/integration/test_v1_runtime_does_not_require_knowledge.py
+from __future__ import annotations
+
+import importlib
+import sys
+from pathlib import Path
+
+
+def _import(module_name: str) -> None:
+    importlib.import_module(module_name)
+
+
+def _knowledge_modules(loaded: set[str]) -> set[str]:
+    return {
+        name
+        for name in loaded
+        if name == "core.knowledge" or name.startswith("core.knowledge.")
+    }
+
+
+def test_v1_runtime_imports_do_not_require_knowledge(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_dir = tmp_path / "storage"
+
+    monkeypatch.setenv("MASTER__APP__PATHS__REPO_ROOT", repo_root.as_posix())
+    monkeypatch.setenv("MASTER__APP__PATHS__STORAGE_DIR", storage_dir.as_posix())
+
+    before_modules = set(sys.modules)
+
+    _import("gateway.api.http_app")
+    _import("gateway.ui.platform_app")
+
+    new_modules = set(sys.modules) - before_modules
+    knowledge_loaded = _knowledge_modules(new_modules)
+
+    assert not knowledge_loaded, f"Unexpected knowledge modules loaded: {sorted(knowledge_loaded)}"
+    assert not (storage_dir / "vectors").exists(), "Vector store initialized during import"
+
+# tests/unit/test_agents_no_memory_backend_imports.py
+# ==============================
+# Tests: Agents must not import memory backends
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+
+FORBIDDEN_PREFIXES = (
+    "core.memory.sqlite_backend",
+    "core.memory.observability_store",
+    "core.memory.router",
+)
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if path.is_file():
+            yield path
+
+
+def _check_file(path: Path) -> List[Tuple[str, str]]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    offenders: List[Tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name
+                if any(name.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                    offenders.append((str(path), name))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if module and any(module.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                offenders.append((str(path), module))
+    return offenders
+
+
+def test_agents_do_not_import_memory_backends() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    agent_roots = [
+        repo_root / "core" / "agents",
+        repo_root / "products",
+    ]
+    offenders: List[Tuple[str, str]] = []
+    for root in agent_roots:
+        if not root.exists():
+            continue
+        for path in _iter_python_files(root):
+            if "agents" not in path.parts:
+                continue
+            offenders.extend(_check_file(path))
+    if offenders:
+        details = "\n".join(f"{path}: {module}" for path, module in offenders)
+        raise AssertionError(f"Forbidden memory backend imports found in agent code:\n{details}")
+
+# tests/unit/test_architecture_guardrails.py
+# ==============================
+# Tests: Architecture Guardrails
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+
+FORBIDDEN_PREFIXES = (
+    "core.models.providers",
+    "core.models.router",
+    "core.tools.executor",
+    "core.memory",
+)
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if path.is_file():
+            yield path
+
+
+def _check_file(path: Path) -> List[Tuple[str, str]]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    offenders: List[Tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name
+                if any(name.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                    offenders.append((str(path), name))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if module and any(module.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                offenders.append((str(path), module))
+    return offenders
+
+
+def test_products_do_not_import_forbidden_core_modules() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    products_root = repo_root / "products"
+    offenders: List[Tuple[str, str]] = []
+    for path in _iter_python_files(products_root):
+        offenders.extend(_check_file(path))
+    if offenders:
+        details = "\n".join(f"{path}: {module}" for path, module in offenders)
+        raise AssertionError(f"Forbidden imports found in products/:\n{details}")
+
+# tests/unit/test_core_agent_roles.py
+# ==============================
+# Tests: Core role agents
+# ==============================
+from __future__ import annotations
+
+import json
+
+from core.agents.llm_reasoner import (
+    ExplanationReasoner,
+    InsightReasoner,
+    PrioritizationReasoner,
+)
+from core.agents.registry import AgentRegistry
+from core.contracts.agent_schema import AgentMeta, AgentResult, AgentKind
+from core.contracts.flow_schema import StepDef, StepType
+from core.orchestrator.context import RunContext
+
+
+def _make_step_ctx(agent_name: str, params: dict) -> "object":
+    step_def = StepDef(id="step", type=StepType.AGENT, agent=agent_name, params=params)
+    run_ctx = RunContext(run_id="run_1", product="demo", flow="demo", payload={})
+    return run_ctx.new_step(step_def=step_def)
+
+
+def _fake_llm_result(payload: dict) -> AgentResult:
+    meta = AgentMeta(agent_name="llm_reasoner", kind=AgentKind.OTHER, tags={})
+    return AgentResult(ok=True, data={"content": json.dumps(payload)}, error=None, meta=meta)
+
+
+def test_registry_registers_core_role_agents() -> None:
+    AgentRegistry.clear()
+    assert AgentRegistry.has("insight_reasoner")
+    assert AgentRegistry.has("prioritization_reasoner")
+    assert AgentRegistry.has("explanation_reasoner")
+
+
+def test_insight_reasoner_parses_output(monkeypatch) -> None:
+    payload = {"summary": "ok", "highlights": ["a"], "risks": []}
+    monkeypatch.setattr(
+        "core.agents.llm_reasoner.LlmReasoner.run",
+        lambda self, ctx: _fake_llm_result(payload),
+    )
+    agent = InsightReasoner()
+    result = agent.run(_make_step_ctx(agent.name, {"prompt": "test"}))
+    assert result.ok
+    assert result.data["summary"] == "ok"
+
+
+def test_prioritization_reasoner_parses_output(monkeypatch) -> None:
+    payload = {"priorities": [{"item": "A", "priority": 1, "rationale": "top"}]}
+    monkeypatch.setattr(
+        "core.agents.llm_reasoner.LlmReasoner.run",
+        lambda self, ctx: _fake_llm_result(payload),
+    )
+    agent = PrioritizationReasoner()
+    result = agent.run(_make_step_ctx(agent.name, {"prompt": "test"}))
+    assert result.ok
+    assert result.data["priorities"][0]["item"] == "A"
+
+
+def test_explanation_reasoner_parses_output(monkeypatch) -> None:
+    payload = {"explanation": "because", "assumptions": [], "limitations": []}
+    monkeypatch.setattr(
+        "core.agents.llm_reasoner.LlmReasoner.run",
+        lambda self, ctx: _fake_llm_result(payload),
+    )
+    agent = ExplanationReasoner()
+    result = agent.run(_make_step_ctx(agent.name, {"prompt": "test"}))
+    assert result.ok
+    assert result.data["explanation"] == "because"
+
+# tests/unit/test_flow_no_subflow.py
+# ==============================
+# Tests: Disallow subflow steps in v1
+# ==============================
+from __future__ import annotations
+
+import pytest
+
+from core.contracts.flow_schema import FlowDef
+
+
+def test_flow_subflow_is_rejected() -> None:
+    with pytest.raises(Exception):
+        FlowDef.model_validate(
+            {
+                "id": "demo",
+                "version": "1.0.0",
+                "steps": [
+                    {
+                        "id": "call_flow",
+                        "type": "subflow",
+                        "subflow": "other_flow",
+                    }
+                ],
+            }
+        )
+
+# tests/unit/test_flow_user_input_schema.py
+# ==============================
+# Tests: Flow schema user_input steps
+# ==============================
+from __future__ import annotations
+
+import pytest
+
+from core.contracts.flow_schema import FlowDef
+
+
+def test_flow_with_user_input_parses() -> None:
+    flow = FlowDef.model_validate(
+        {
+            "id": "demo",
+            "version": "1.0.0",
+            "steps": [
+                {
+                    "id": "input",
+                    "type": "user_input",
+                    "params": {
+                        "schema_version": "1.0",
+                        "form_id": "demo_input",
+                        "prompt": "Choose an option",
+                        "input_type": "select",
+                        "choices": [{"label": "A", "value": "a"}],
+                        "defaults": {"choice": "a"},
+                        "schema": {"type": "object", "properties": {"choice": {"type": "string"}}},
+                    },
+                }
+            ],
+        }
+    )
+    assert flow.id == "demo"
+    assert flow.steps[0].type.value == "user_input"
+
+
+def test_flow_user_input_missing_prompt_fails() -> None:
+    with pytest.raises(Exception):
+        FlowDef.model_validate(
+            {
+                "id": "demo",
+                "version": "1.0.0",
+                "steps": [
+                    {
+                        "id": "input",
+                        "type": "user_input",
+                        "params": {
+                            "schema_version": "1.0",
+                            "form_id": "demo_input",
+                            "input_type": "text",
+                        },
+                    }
+                ],
+            }
+        )
+
+# tests/unit/test_orchestrator_no_product_imports.py
+# ==============================
+# Tests: Orchestrator must not import products
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+
+FORBIDDEN_PREFIXES = ("products.",)
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if path.is_file():
+            yield path
+
+
+def _check_file(path: Path) -> List[Tuple[str, str]]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    offenders: List[Tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name
+                if any(name.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                    offenders.append((str(path), name))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if module and any(module.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                offenders.append((str(path), module))
+    return offenders
+
+
+def test_orchestrator_does_not_import_products() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    orchestrator_root = repo_root / "core" / "orchestrator"
+    offenders: List[Tuple[str, str]] = []
+    for path in _iter_python_files(orchestrator_root):
+        offenders.extend(_check_file(path))
+    if offenders:
+        details = "\n".join(f"{path}: {module}" for path, module in offenders)
+        raise AssertionError(f"Forbidden product imports found in core/orchestrator:\n{details}")
+
 # tests/unit/test_prompt_renderer.py
 # ==============================
 # Prompt Renderer Tests
@@ -1962,7 +3463,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.agents.renderer import render_messages, render_template
+from core.orchestrator.templating import render_messages, render_template
 
 
 def test_render_template_resolves_artifacts() -> None:
@@ -1999,3 +3500,417 @@ def test_render_messages_handles_list() -> None:
     rendered = render_messages(messages, context)
     assert rendered[0]["content"] == "System hi"
     assert rendered[1]["content"] == "Dataset ok"
+
+# tests/unit/test_sqlite_backend_concurrency.py
+from __future__ import annotations
+
+import threading
+
+from core.contracts.run_schema import RunRecord
+from core.memory.sqlite_backend import SQLiteBackend
+
+
+def test_sqlite_backend_concurrent_writes(tmp_path) -> None:
+    db_path = tmp_path / "runs.sqlite3"
+    backend = SQLiteBackend(db_path=str(db_path), initialize=True)
+
+    thread_count = 6
+    runs_per_thread = 10
+    total_runs = thread_count * runs_per_thread
+    barrier = threading.Barrier(thread_count)
+    errors = []
+    lock = threading.Lock()
+
+    def worker(thread_id: int) -> None:
+        try:
+            barrier.wait()
+            for idx in range(runs_per_thread):
+                run = RunRecord(
+                    run_id=f"run-{thread_id}-{idx}",
+                    product="demo",
+                    flow="flow",
+                    autonomy_level="semi_auto",
+                )
+                backend.create_run(run)
+        except Exception as exc:  # pragma: no cover - failure path
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(thread_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors, f"Concurrent writes raised errors: {errors}"
+
+    runs = backend.list_runs(limit=total_runs + 5)
+    run_ids = {run.run_id for run in runs}
+    expected_ids = {f"run-{thread_id}-{idx}" for thread_id in range(thread_count) for idx in range(runs_per_thread)}
+    assert run_ids == expected_ids
+
+
+def test_sqlite_backend_uses_wal(tmp_path) -> None:
+    db_path = tmp_path / "wal.sqlite3"
+    backend = SQLiteBackend(db_path=str(db_path), initialize=True)
+    con = backend._connect()
+    try:
+        journal_mode = con.execute("PRAGMA journal_mode;").fetchone()[0]
+        busy_timeout = con.execute("PRAGMA busy_timeout;").fetchone()[0]
+        assert str(journal_mode).lower() == "wal"
+        assert int(busy_timeout) > 0
+    finally:
+        con.close()
+
+# tests/unit/test_tool_no_llm_imports.py
+# ==============================
+# Tests: Tools must not import LLM providers
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+
+FORBIDDEN_PREFIXES = (
+    "core.agents.llm_reasoner",
+    "core.models.router",
+    "core.models.providers",
+    "openai",
+)
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if path.is_file():
+            yield path
+
+
+def _check_file(path: Path) -> List[Tuple[str, str]]:
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    offenders: List[Tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name
+                if any(name.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                    offenders.append((str(path), name))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module
+            if module and any(module.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
+                offenders.append((str(path), module))
+    return offenders
+
+
+def test_tools_do_not_import_llm_providers() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    tool_roots = [
+        repo_root / "core" / "tools",
+        repo_root / "products",
+    ]
+    offenders: List[Tuple[str, str]] = []
+    for root in tool_roots:
+        if not root.exists():
+            continue
+        for path in _iter_python_files(root):
+            if "tools" not in path.parts:
+                continue
+            offenders.extend(_check_file(path))
+    if offenders:
+        details = "\n".join(f"{path}: {module}" for path, module in offenders)
+        raise AssertionError(f"Forbidden LLM imports found in tool code:\n{details}")
+
+# tests/unit/test_v1_invariants.py
+# ==============================
+# Tests: V1 Invariants (Consolidated)
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Dict, Iterable, List, Tuple
+
+from tests.unit import test_agents_no_memory_backend_imports as agent_mem_guard
+from tests.unit import test_architecture_guardrails as product_guard
+from tests.unit import test_orchestrator_no_product_imports as orchestrator_guard
+from tests.unit import test_tool_no_llm_imports as tool_llm_guard
+
+
+_EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "storage", "secrets", "tests"}
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if not path.is_file():
+            continue
+        if any(part in _EXCLUDED_DIRS for part in path.parts):
+            continue
+        yield path
+
+
+def _format_report(sections: Dict[str, List[str]]) -> str:
+    lines: List[str] = ["V1 invariant violations:"]
+    for section, items in sections.items():
+        if not items:
+            continue
+        lines.append(f"\n== {section} ==")
+        lines.extend(f"- {item}" for item in sorted(items))
+    return "\n".join(lines)
+
+
+def _dedupe_sections(sections: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    seen = set()
+    out: Dict[str, List[str]] = {}
+    for section, items in sections.items():
+        filtered: List[str] = []
+        for item in items:
+            if item in seen:
+                continue
+            seen.add(item)
+            filtered.append(item)
+        out[section] = filtered
+    return out
+
+
+def _scan_openai_imports(repo_root: Path) -> List[str]:
+    offenders: List[str] = []
+    providers_root = repo_root / "core" / "models" / "providers"
+    for path in _iter_python_files(repo_root):
+        if providers_root in path.parents:
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("openai"):
+                        offenders.append(f"{path}: {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module.startswith("openai"):
+                    offenders.append(f"{path}: {module}")
+    return offenders
+
+
+def _scan_products_boundary(repo_root: Path) -> List[str]:
+    offenders: List[str] = []
+    products_root = repo_root / "products"
+    for path in product_guard._iter_python_files(products_root):
+        offenders.extend(f"{p}: {m}" for p, m in product_guard._check_file(path))
+    return offenders
+
+
+def _scan_tools_boundary(repo_root: Path) -> List[str]:
+    offenders: List[str] = []
+    tool_roots = [repo_root / "core" / "tools", repo_root / "products"]
+    for root in tool_roots:
+        if not root.exists():
+            continue
+        for path in tool_llm_guard._iter_python_files(root):
+            if "tools" not in path.parts:
+                continue
+            offenders.extend(f"{p}: {m}" for p, m in tool_llm_guard._check_file(path))
+    return offenders
+
+
+def _scan_agents_boundary(repo_root: Path) -> List[str]:
+    offenders: List[str] = []
+    agent_roots = [repo_root / "core" / "agents", repo_root / "products"]
+    for root in agent_roots:
+        if not root.exists():
+            continue
+        for path in agent_mem_guard._iter_python_files(root):
+            if "agents" not in path.parts:
+                continue
+            offenders.extend(f"{p}: {m}" for p, m in agent_mem_guard._check_file(path))
+    return offenders
+
+
+def _scan_orchestrator_boundary(repo_root: Path) -> List[str]:
+    offenders: List[str] = []
+    orchestrator_root = repo_root / "core" / "orchestrator"
+    for path in orchestrator_guard._iter_python_files(orchestrator_root):
+        offenders.extend(f"{p}: {m}" for p, m in orchestrator_guard._check_file(path))
+    return offenders
+
+
+def test_v1_invariants() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    sections = _dedupe_sections(
+        {
+        "Imports boundary checks (products)": _scan_products_boundary(repo_root),
+        "Imports boundary checks (tools)": _scan_tools_boundary(repo_root),
+        "Imports boundary checks (agents)": _scan_agents_boundary(repo_root),
+        "Imports boundary checks (orchestrator)": _scan_orchestrator_boundary(repo_root),
+        "Forbidden vendor SDK usage outside core/models/providers": _scan_openai_imports(repo_root),
+        "Forbidden persistence outside core/memory (agents/products)": _scan_agents_boundary(repo_root),
+        }
+    )
+    violations = [item for items in sections.values() for item in items]
+    if violations:
+        raise AssertionError(_format_report(sections))
+
+# tests/unit/test_v1_negative_guardrails.py
+# ==============================
+# Tests: V1 Negative Guardrails
+# ==============================
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+
+_EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "storage", "secrets", "tests"}
+
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if not path.is_file():
+            continue
+        if any(part in _EXCLUDED_DIRS for part in path.parts):
+            continue
+        yield path
+
+
+def _scan_agent_to_agent_calls(root: Path) -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files(root):
+        if "agents" not in path.parts:
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "core.agents.registry":
+                offenders.append(f"{path}: imports AgentRegistry")
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Attribute) and func.attr == "resolve":
+                    if isinstance(func.value, ast.Name) and func.value.id == "AgentRegistry":
+                        offenders.append(f"{path}: AgentRegistry.resolve()")
+    return offenders
+
+
+def _scan_dynamic_flow_mutation(root: Path) -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files(root):
+        if "orchestrator" not in path.parts and "products" not in path.parts:
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AugAssign)) and isinstance(node.target if isinstance(node, ast.AugAssign) else node.targets[0], ast.Attribute):
+                target = node.target if isinstance(node, ast.AugAssign) else node.targets[0]
+                if isinstance(target, ast.Attribute) and target.attr == "steps":
+                    offenders.append(f"{path}: assigns to steps")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "steps":
+                    if node.func.attr in {"append", "extend", "insert", "pop", "remove", "clear"}:
+                        offenders.append(f"{path}: mutates steps via {node.func.attr}")
+    return offenders
+
+
+def _scan_autonomous_retries(root: Path) -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files(root):
+        if not any(part in path.parts for part in ("agents", "tools", "products")):
+            continue
+        if path.name in {"step_executor.py", "error_policy.py"}:
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("tenacity"):
+                        offenders.append(f"{path}: imports tenacity")
+            if isinstance(node, ast.ImportFrom):
+                if (node.module or "").startswith("tenacity"):
+                    offenders.append(f"{path}: imports tenacity")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id in {"time", "asyncio"}:
+                    if node.func.attr == "sleep":
+                        offenders.append(f"{path}: sleep() usage")
+    return offenders
+
+
+def _scan_hidden_product_state(root: Path) -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files(root):
+        if "products" not in path.parts:
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if not isinstance(target, ast.Name):
+                        continue
+                    name = target.id
+                    if name.isupper():
+                        continue
+                    if isinstance(node.value, (ast.Dict, ast.List, ast.Set)):
+                        offenders.append(f"{path}: mutable module state '{name}'")
+                    if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
+                        if node.value.func.id in {"dict", "list", "set"}:
+                            offenders.append(f"{path}: mutable module state '{name}'")
+    return offenders
+
+
+def _scan_self_modifying_flows(root: Path) -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files(root):
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in {"write_text", "write_bytes"} and node.args:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        if "/flows/" in arg.value and arg.value.endswith((".yaml", ".yml")):
+                            offenders.append(f"{path}: writes flow file {arg.value}")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "open":
+                if node.args:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        if "/flows/" in arg.value and arg.value.endswith((".yaml", ".yml")):
+                            offenders.append(f"{path}: opens flow file {arg.value}")
+    return offenders
+
+
+def _fail_if(offenders: List[str], *, title: str) -> None:
+    if offenders:
+        details = "\n".join(sorted(offenders))
+        raise AssertionError(f"{title}:\n{details}")
+
+
+def test_no_agent_to_agent_calls() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    offenders = _scan_agent_to_agent_calls(repo_root)
+    _fail_if(offenders, title="Agent-to-agent calls are forbidden")
+
+
+def test_no_dynamic_flow_mutation() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    offenders = _scan_dynamic_flow_mutation(repo_root)
+    _fail_if(offenders, title="Dynamic flow mutation is forbidden")
+
+
+def test_no_autonomous_retries_without_policy() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    offenders = _scan_autonomous_retries(repo_root)
+    _fail_if(offenders, title="Autonomous retries without policy are forbidden")
+
+
+def test_no_hidden_state_inside_products() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    offenders = _scan_hidden_product_state(repo_root)
+    _fail_if(offenders, title="Hidden mutable state inside products is forbidden")
+
+
+def test_no_self_modifying_flows() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    offenders = _scan_self_modifying_flows(repo_root)
+    _fail_if(offenders, title="Self-modifying flow files are forbidden")

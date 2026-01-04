@@ -8,6 +8,7 @@ from typing import Callable, Dict, Optional
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
+from core.governance.hooks import GovernanceHooks
 from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
 from core.contracts.plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
@@ -27,10 +28,12 @@ class StepExecutor:
         self,
         *,
         tool_executor: ToolExecutor,
+        governance: GovernanceHooks,
         agent_registry: AgentRegistry = AgentRegistry,
         sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self.tool_executor = tool_executor
+        self.governance = governance
         self.agent_registry = agent_registry
         self.sleep_fn = sleep_fn
 
@@ -60,6 +63,9 @@ class StepExecutor:
                 run_ctx.artifacts[f"tool.{step_def.tool}.meta"] = tool_result.meta.model_dump(mode="json")
             return tool_result.model_dump(mode="json")
 
+        if step_def.type == StepType.USER_INPUT:
+            raise ValueError("user_input steps are orchestrator-managed; use OrchestratorEngine to pause/resume.")
+
         if step_def.type == StepType.AGENT:
             if not step_def.agent:
                 raise ValueError("agent step missing 'agent' field")
@@ -67,6 +73,17 @@ class StepExecutor:
             result: AgentResult = agent.run(step_ctx)
             if not result.ok:
                 raise RuntimeError(result.error.message if result.error else "agent_failed")
+            decision = self.governance.validate_agent_output(
+                agent_name=step_def.agent,
+                output=result.data or {},
+                ctx=step_ctx,
+            )
+            if not decision.allowed:
+                step_ctx.emit(
+                    "agent_output_denied",
+                    {"agent": step_def.agent, "reason": decision.reason, "details": decision.details},
+                )
+                raise RuntimeError(decision.reason or "agent_output_denied")
             step_ctx.emit(
                 "agent.executed",
                 {
@@ -85,6 +102,17 @@ class StepExecutor:
             result = agent.run(step_ctx)
             if not result.ok:
                 raise RuntimeError(result.error.message if result.error else "plan_proposal_failed")
+            decision = self.governance.validate_agent_output(
+                agent_name=step_def.agent,
+                output=result.data or {},
+                ctx=step_ctx,
+            )
+            if not decision.allowed:
+                step_ctx.emit(
+                    "agent_output_denied",
+                    {"agent": step_def.agent, "reason": decision.reason, "details": decision.details},
+                )
+                raise RuntimeError(decision.reason or "agent_output_denied")
             step_ctx.emit(
                 "agent.executed",
                 {

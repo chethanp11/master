@@ -12,9 +12,13 @@ routing:
   by_product: {}
   by_purpose:
     # Purpose is a routing hint passed by agents/tools.
-    reasoning:
+    INSIGHT:
       model: gpt-4o
-    cheap:
+    PRIORITIZATION:
+      model: gpt-4o
+    EXPLANATION:
+      model: gpt-4o-mini
+    UNCERTAINTY:
       model: gpt-4o-mini
 
 openai:

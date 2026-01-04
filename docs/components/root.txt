@@ -1,0 +1,618 @@
+# captured_at: 2026-01-04T12:52:14.758869+00:00
+
+# .codex.md
+# Codex Permanent Instructions (master/)
+
+You are operating inside an enterprise-grade agentic framework.
+
+Always append every user prompt to dev_prompts.md with date and time (ISO 8601). Include:
+- prompt_id (incrementing)
+- current git branch
+- targeted files/tests (if any)
+
+OPERATING MODE (default):
+- Be direct. No fluff. No long essays.
+- Prefer small, test-backed changes over refactors.
+- Preserve public interfaces unless explicitly asked.
+- Keep changes patch-safe and localized.
+- Use type hints everywhere. Use Pydantic at module boundaries (contracts, agent/tool IO, run/step state, config, trace events).
+- Never weaken tests to make them pass. Fix the root cause.
+
+EXECUTION:
+- You CAN execute terminal commands. Use this loop:
+  1) inspect relevant code/tests
+  2) make minimal edits
+  3) run the most targeted pytest command
+  4) log results + rerun until green
+- Do not run the full suite repeatedly during debugging. Run full suite only when a bucket is done.
+
+TESTING DISCIPLINE:
+- Add tests whenever you fix a bug (within the SAME test file/script unless told otherwise).
+- Keep tests deterministic: no real network, no real LLM calls, no real external persistence.
+- Prefer fakes/fixtures over deep mocking.
+- Always log test results:
+  - command executed
+  - pass/fail summary
+  - failing test names (if any)
+  - key assertions verified
+  - runtime duration
+
+ARCHITECTURE LAWS (NON-NEGOTIABLE):
+- No os.environ reads outside core/config/loader.py
+- No vendor/model SDK calls outside core/models/providers/*
+- All model access only via core/models/router.py
+- No tool execution outside core/tools/executor.py
+- No persistence outside core/memory/*
+- Agents are stateless; no direct persistence; no direct inter-agent calls; all via orchestrator context/messages.
+- Emit structured trace events for every step/tool/model call (run_id/step_id/product/flow)
+- Scrub sensitive data before logging/tracing.
+
+SCOPE CONTROL:
+- If the user requests “2 scripts at a time” or similar, create/modify exactly TWO files per run (unless a tiny unavoidable edit is required; explain why).
+- Do not touch unrelated files.
+- If blocked because a feature is missing (e.g., retries), propose the minimum viable implementation + tests to unlock it, then proceed.
+
+STOP CONDITIONS:
+- When the requested tests are green and results logged, STOP and wait for the next instruction.
+
+# .env
+# ==============================
+# master/ .env
+# ==============================
+# NOTE:
+# - This file is NOT checked into git.
+# - Values here override configs/*.yaml.
+# - Secrets should NOT be placed here directly.
+# - Secret *references* may exist here and resolved via secrets/secrets.yaml.
+
+# ==============================
+# Application Basics
+# ==============================
+APP_NAME=master
+APP_ENV=local            # local | dev | stage | prod
+APP_DEBUG=true
+
+# Repo-relative base path (optional override)
+APP_BASE_PATH=.
+
+# ==============================
+# API / UI
+# ==============================
+API_HOST=0.0.0.0
+API_PORT=8000
+
+UI_ENABLED=true
+UI_BASE_URL=http://localhost:8000
+
+# ==============================
+# Database / Storage
+# ==============================
+# These are logical paths; actual credentials resolved via secrets
+MEMORY_BACKEND=sqlite
+SQLITE_DB_PATH=storage/memory/master.db
+
+VECTOR_STORE_BACKEND=local
+VECTOR_STORE_PATH=storage/vectors/
+
+# ==============================
+# Model Routing
+# ==============================
+DEFAULT_MODEL=default
+DEFAULT_EMBEDDING_MODEL=default_embedding
+
+# Logical provider names only
+LLM_PROVIDER=openai
+EMBEDDING_PROVIDER=openai
+
+# ==============================
+# Secrets Resolution
+# ==============================
+# The loader will read actual values from:
+#   1. Environment variables (highest)
+#   2. secrets/secrets.yaml
+#   3. configs/*.yaml
+#
+# These variables act as *keys* to look up secrets.
+
+OPENAI_API_KEY_REF=openai.api_key
+OPENAI_ORG_ID_REF=openai.org_id
+
+# Example for future providers
+ANTHROPIC_API_KEY_REF=anthropic.api_key
+
+# ==============================
+# Governance / Safety
+# ==============================
+ENABLE_PII_REDACTION=true
+ENABLE_TOOL_GOVERNANCE=true
+ENABLE_MODEL_GOVERNANCE=true
+
+# ==============================
+# Logging / Tracing
+# ==============================
+LOG_LEVEL=INFO
+LOG_JSON=true
+LOG_REDACT_SECRETS=true
+
+TRACE_ENABLED=true
+TRACE_SAMPLE_RATE=1.0
+
+# ==============================
+# Limits (soft defaults, overridable per product)
+# ==============================
+MAX_RUN_STEPS=100
+MAX_TOOL_CALLS=200
+MAX_TOTAL_TOKENS=16000
+
+# .env.example
+# .env.example
+# Copy to .env (gitignored). Keep ONLY non-secret runtime flags here.
+# Secrets must go to secrets/secrets.yaml (gitignored).
+
+# ------------------------------
+# Runtime
+# ------------------------------
+MASTER_ENV=local
+MASTER_DEBUG=true
+MASTER_LOG_LEVEL=INFO
+
+# ------------------------------
+# Network
+# ------------------------------
+MASTER_HOST=0.0.0.0
+MASTER_API_PORT=8000
+MASTER_UI_PORT=8501
+
+# ------------------------------
+# Storage (non-secret paths)
+# ------------------------------
+MASTER_STORAGE_DIR=storage
+MASTER_LOGS_DIR=logs
+MASTER_SQLITE_PATH=storage/memory/master.sqlite3
+
+# ------------------------------
+# Config paths (non-secret)
+# ------------------------------
+MASTER_CONFIG_DIR=configs
+MASTER_SECRETS_FILE=secrets/secrets.yaml
+
+# ------------------------------
+# Feature flags (non-secret)
+# ------------------------------
+MASTER_ENABLE_UI=true
+MASTER_ENABLE_API=true
+MASTER_ENABLE_MCP=false
+MASTER_ENABLE_REMOTE_TOOLS=false
+
+# ------------------------------
+# Defaults (non-secret)
+# ------------------------------
+MASTER_DEFAULT_MODEL=default
+MASTER_DEFAULT_EMBEDDINGS_MODEL=default_embeddings
+
+# .gitignore
+# ==============================
+# Python Virtual Environments
+# ==============================
+.venv/
+venv/
+ENV/
+env/
+
+# ==============================
+# Environment Variables
+# ==============================
+.env
+.env.*
+!.env.example
+
+# ==============================
+# Secrets
+# ==============================
+secrets/secrets.yaml
+secrets/*.key
+secrets/*.pem
+secrets/*.crt
+secrets/*.p12
+secrets/*.jks
+
+# ==============================
+# Runtime Storage (generated)
+# ==============================
+storage/
+logs/
+observability/
+
+# ==============================
+# Python Cache / Build Artifacts
+# ==============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ==============================
+# Test Artifacts
+# ==============================
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# ==============================
+# OS / Editor Files
+# ==============================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ==============================
+# Notebooks
+# ==============================
+.ipynb_checkpoints/
+
+# ==============================
+# Misc
+# ==============================
+.cache/
+.mypy_cache/
+.ruff_cache/
+
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+
+COPY . /app
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+EXPOSE 8501
+
+CMD ["python", "-m", "gateway.api.http_app"]
+
+# README.md
+# master — Platform Overview
+
+`master/` is a product-agnostic platform that provides a shared orchestrator, governance, memory, and UI while keeping product logic isolated under `products/`.  
+Products supply manifests, flows, agents, and tools; the platform executes flows, applies governance, handles HITL/user-input pauses, and persists run state.
+
+## Why this platform helps
+- **Single runtime control plane:** Orchestrator, tool executor, memory router, and governance hooks are centralized so flows execute consistently across products.
+- **Product isolation:** Products only live under `products/<name>` and never touch core code, yet they get shared features (API, CLI, UI, tracing, HITL) for free.
+- **Safety by design:** Policies, redaction, and contract envelopes enforce structured results and governance checks before tool/model execution and trace emission.
+- **Golden path ready:** Hello World demonstrates the echo → HITL → summary flow; you can reuse the same test/style for your product, and the Streamlit UI + API expose every flow automatically.
+
+## Advantages at a glance
+1. **Audit-ready execution:** Runs/steps/approvals/trace events persist via `core/memory/sqlite_backend.py` and file-backed observability.
+2. **Plug-and-play products:** Loader discovers `manifest.yaml`, loads `config/product.yaml`, registers agents/tools, and wires them into API/UI.
+3. **Unified tooling:** CLI commands and the Streamlit control center share the same orchestrator and contracts.
+4. **Config-first control:** YAML configs and the loader centralize app/policy/logging settings and secrets.
+
+## Thought process & docs map
+- `docs/core_architecture.md` describes orchestrator/memory/governance/logging layers and the contracts that keep them typed.
+- `docs/component_details.md` catalogs each package path plus storage, gateway, and product subsystems.
+- `docs/product_howto.md` walks you through manifest/config, flows, registry hooks, and regression testing.
+- `docs/overview.md` presents the high-level principles and the hello_world golden path.
+- `docs/governance_and_policies.md` plus `docs/engineering_standards.md` enumerate the safety rules that every commit must respect.
+
+## Getting started
+1. Read the architecture & component docs to understand the runtime boundaries.
+2. Follow the product how-to to scaffold `products/<your-product>/`.
+3. Write flows (tool → HITL → agent), register agents/tools, and add tests.
+4. Use the API/CLI/Streamlit UI to run flows, observe approvals, and resume runs.
+
+## Docs at a glance
+- `docs/core_architecture.md`: Deep dive into orchestrator, memory, governance, observability, and contract layers.
+- `docs/component_details.md`: Component catalog mapping code paths to responsibilities, storage, gateways, and tests.
+- `docs/overview.md`: High-level principles and the hello_world golden-path demo with UI/API interaction notes.
+- `docs/product_howto.md`: Step-by-step guide to scaffolding manifests, flows, agents/tools, registration, and regression testing.
+- `docs/governance_and_policies.md`: Policy enforcement story, redaction rules, hooks, and governance artifacts.
+- `docs/engineering_standards.md`: Platform laws letting you know what you must never break (env reads, persistence, envelope rules).
+
+# dev_prompts.md
+# Dev Prompts Log
+
+- 2026-01-04 17:05:20: going forward save every prompt that is shared here in dev_prompts.md
+- 2026-01-04 17:05:20: with date time
+- 2026-01-04 17:05:56: create txt files again
+- 2026-01-04 17:06:39: components/*.txt
+- 2026-01-04 17:16:27: do i have both renderer and templating?
+- 2026-01-04 17:22:21: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Enforce Master V1 architectural invariants using automated tests.
+
+Task:
+Create a new test suite under tests/architecture/ that FAILS if platform laws are violated.
+
+You MUST enforce:
+- Products MUST NOT import:
+  - core/models/*
+  - core/agents/llm_reasoner.py
+  - core/memory/*
+  - core/orchestrator/*
+- Tools MUST NOT import:
+  - core/agents/*
+  - core/models/*
+- Agents MUST NOT import:
+  - memory backends
+  - tool executors
+- UI MUST NOT import:
+  - core logic beyond API surface
+
+Implementation rules:
+- Use static analysis (AST parsing or ripgrep)
+- Fail fast with clear error messages identifying:
+  - offending file
+  - illegal import
+- Tests must be deterministic and fast
+
+Do NOT:
+- Modify production code
+- Add runtime checks
+- Add new framework features
+
+Stop when:
+- A regression in imports will reliably fail CI
+
+- 2026-01-04 17:37:18: you missed to add latest prompt to dev_prompts.md. how can i make it permanent rule for codex?
+- 2026-01-04 17:43:09: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Guarantee that agents can never influence flow control.
+
+Task:
+Harden orchestrator control boundaries.
+
+Required changes:
+- In StepExecutor:
+  - Agents may return DATA ONLY
+  - Explicitly forbid returning:
+    - next_step
+    - retry instructions
+    - branching hints
+- In contracts:
+  - Agent output schema MUST NOT contain control fields
+- In governance:
+  - Strictly validate agent outputs against schema
+
+Add tests that:
+- Fail if agent output contains control semantics
+- Prove flow branching is controlled ONLY by orchestrator + policies
+
+Do NOT:
+- Add agent-to-agent calls
+- Add dynamic flow mutation
+
+Stop when:
+- Control is structurally impossible to leak into agents
+- 2026-01-04 17:49:31: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Finish formalizing USER_INPUT as a first-class orchestration step.
+
+Task:
+Complete USER_INPUT support across the framework.
+
+Required changes:
+- In flow_schema.py:
+  - Add explicit step type: user_input
+- In executor.py:
+  - Implement semantics:
+    - pause execution
+    - persist run state
+    - resume with schema-validated user input
+- Clearly separate:
+  - HITL = approval
+  - USER_INPUT = data acquisition
+
+Constraints:
+- USER_INPUT must be schema-driven
+- No prompt-based clarification loops
+- No hacks in UI
+
+Add tests for:
+- pause/resume correctness
+- invalid user input rejection
+
+Stop when:
+- Interactive flows are clean, deterministic, and auditable
+- 2026-01-04 17:55:54: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Ensure governance is enforced at ALL lifecycle boundaries.
+
+Task:
+Audit and complete governance hook coverage.
+
+Must enforce at:
+- Model invocation
+- Tool execution
+- User input ingestion
+- Output rendering / export
+
+Add explicit enforcement for:
+- max steps per run
+- max tool calls per run
+- max token budget per run (not just per model)
+
+Constraints:
+- Use existing governance hooks
+- No business logic in UI
+- No product overrides of core policy
+
+Add tests proving:
+- Violations are blocked consistently
+- Limits are enforced deterministically
+
+Stop when:
+- Cost, safety, and compliance are predictable by design
+- 2026-01-04 18:07:13: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Eliminate session bleed and concurrency footguns.
+
+Task:
+Harden framework-level concurrency guarantees.
+
+Required checks:
+- RunContext MUST be request-scoped
+- OrchestratorEngine MUST hold no mutable state
+- SQLite backend MUST be WAL-safe
+- No singleton state leaks across runs
+
+Add concurrency smoke tests:
+- Two parallel runs
+- Same product
+- Same flow
+- No shared state corruption
+
+Constraints:
+- Do not add queues or async frameworks
+- No UI-layer hacks
+
+Stop when:
+- Parallel runs are safe by construction
+- 2026-01-04 18:15:46: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Reduce unnecessary complexity in core.
+
+Task:
+Audit core components for premature abstraction.
+
+Review candidates:
+- product_loader.py complexity vs actual usage
+- observability_store vs memory boundaries
+- templating ownership clarity
+
+Rule:
+If a component:
+- is used in only one place
+- adds indirection without policy value
+- lacks a test asserting necessity
+
+Then:
+- Freeze its surface OR
+- Merge it responsibly
+
+Constraints:
+- Preserve public interfaces
+- Patch-safe edits only
+- No feature expansion
+
+Stop when:
+- Core abstractions earn their existence
+- 2026-01-04 18:19:34: You are Codex. Act as a senior platform engineer working in repo: master/
+
+Objective:
+Prevent silent drift from V1 into V2 behavior.
+
+Task:
+Add negative tests asserting forbidden behaviors.
+
+Must assert:
+- No agent-to-agent calls
+- No dynamic flow mutation
+- No autonomous retries without policy
+- No hidden state inside products
+- No self-modifying flows
+
+Implementation:
+- Tests should FAIL if these patterns appear
+- Prefer static analysis where possible
+
+Constraints:
+- No new features
+- No documentation changes
+- Tests only
+
+Stop when:
+- V1 boundaries are protected by code, not memory
+- 2026-01-04 18:21:59: create components txt file again
+
+# requirements.txt
+altair==5.4.1
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.5.2
+attrs==25.3.0
+blinker==1.8.2
+cachetools==5.5.2
+certifi==2025.11.12
+charset-normalizer==3.4.4
+click==8.1.8
+distro==1.9.0
+exceptiongroup==1.3.1
+fastapi==0.124.4
+gitdb==4.0.12
+GitPython==3.1.45
+greenlet==3.1.1
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.11
+importlib_resources==6.4.5
+iniconfig==2.1.0
+Jinja2==3.1.6
+jiter==0.9.1
+jsonschema==4.23.0
+jsonschema-specifications==2023.12.1
+markdown-it-py==3.0.0
+MarkupSafe==2.1.5
+mdurl==0.1.2
+narwhals==1.42.1
+numpy==1.24.4
+openai==1.109.1
+orjson==3.10.15
+packaging==24.2
+pandas==2.0.3
+pillow==10.4.0
+pkgutil_resolve_name==1.3.10
+pluggy==1.5.0
+protobuf==5.29.5
+pyarrow==17.0.0
+pydantic==2.10.6
+pydantic-settings==2.8.1
+pydantic_core==2.27.2
+pydeck==0.9.1
+Pygments==2.19.2
+pytest==8.3.5
+pytest-asyncio==0.24.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
+pytz==2025.2
+PyYAML==6.0.3
+referencing==0.35.1
+requests==2.32.4
+rich==13.9.4
+rpds-py==0.20.1
+shellingham==1.5.4
+six==1.17.0
+smmap==5.0.2
+sniffio==1.3.1
+SQLAlchemy==2.0.45
+starlette==0.44.0
+streamlit==1.40.1
+structlog==25.5.0
+tenacity==9.0.0
+toml==0.10.2
+tomli==2.3.0
+tornado==6.4.2
+tqdm==4.67.1
+typer==0.20.0
+typing_extensions==4.13.2
+tzdata==2025.3
+urllib3==2.2.3
+uvicorn==0.33.0
+zipp==3.20.2

@@ -43,5 +43,5 @@ def get_engine() -> OrchestratorEngine:
     get_product_catalog()  # keep product registry cached; engine must be per-request for isolation
     mem = get_memory_router()
     tracer = get_tracer()
-    # Avoid caching OrchestratorEngine to prevent state leakage across users/sessions.
+    # Engine is request-scoped to avoid cross-session leakage.
     return OrchestratorEngine.from_settings(settings=settings, memory=mem, tracer=tracer)

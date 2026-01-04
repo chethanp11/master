@@ -37,7 +37,6 @@ flowchart TB
     G[governance]
     M[memory]
     T[tools executor]
-    K[knowledge]
     R[models router]
     L[tracing/observability]
   end
@@ -57,7 +56,6 @@ flowchart TB
   O --> G
   O --> M
   O --> T
-  O --> K
   O --> R
   O --> L
 ```
@@ -134,7 +132,7 @@ Core owns:
 - Memory & persistence
 - Governance & safety
 - Tracing & observability
-- Knowledge (RAG)
+ - LLM invocation via `core/agents/llm_reasoner.py`
 
 Core **must not**:
 - Contain domain logic
@@ -154,6 +152,7 @@ Products **must not**:
 - Implement orchestration logic
 - Bypass governance, memory, or logging
 - Modify core code
+- Call models or vendor SDKs directly
 
 ---
 
@@ -166,6 +165,8 @@ Products **must not**:
 - `POST /api/resume_run/{run_id}`
 - `GET /api/run/{run_id}`
 - `GET /api/output/{product}/{run_id}/{filename}`
+
+Run and resume endpoints execute orchestration work in a threadpool to keep the API responsive during long-running flows.
 
 ### UI
 - Streamlit control center (`gateway/ui/platform_app.py`)
@@ -183,6 +184,7 @@ Products **must not**:
 - Secrets live in `secrets/secrets.yaml`.
 - `.env` is optional and only read by the config loader.
 - All components receive validated `Settings` objects.
+- Paths are resolved through `app.paths.*` (repo_root, storage_dir, observability_dir).
 
 ```mermaid
 flowchart LR
@@ -198,12 +200,11 @@ flowchart LR
 ## 8. Product Discovery
 
 - Products are discovered under `products/`.
-- Each product must provide:
+- Required files:
   - `manifest.yaml`
   - `config/product.yaml`
   - `registry.py`
   - `flows/*.yaml`
-  - Optional UI hints under `config/product.yaml: metadata.ui`
 
 ```mermaid
 flowchart TB
@@ -216,12 +217,11 @@ flowchart TB
 
 ---
 
-## 9. Why This Architecture Scales
+## 9. V1 Acceptance Checklist
 
-- Centralized governance and safety
-- Consistent execution model
-- Low skill barrier for product teams
-- Fast prototyping with enterprise controls
-- Direct path from prototype → production
-
-This is a **platform**, not a bot.
+### Runtime invariants
+- Orchestrator emits trace events for run state transitions.
+- Runs pause only for `user_input` or `human_approval`.
+- No product-specific imports in core orchestrator.
+- Models are accessed only via `core/models/router.py`.
+- Tools are executed only via `core/tools/executor.py`.

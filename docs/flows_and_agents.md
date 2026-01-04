@@ -52,7 +52,6 @@ An **agent** is a unit of goal-driven reasoning.
 
 Agents are:
 - Stateless
-- Deterministic for a given context
 - Goal-driven (not template-driven)
 - Side-effect free
 
@@ -76,7 +75,40 @@ products/hello_world/flows/hello_world.yaml
 
 ---
 
-## 3. Flow Definition Schema (Conceptual)
+## 3. Flow Composition Guardrails (V1)
+
+This section defines the V1 flow composition guardrails.
+
+### Core rule: entrypoint composition only
+
+- Flows do not call other flows.
+- The orchestrator does not dynamically jump across flow boundaries.
+- Products must select which flow to run at the entrypoint (API/CLI/UI).
+
+### Example: multiple flows per product
+
+Product structure:
+
+products/visual_insights/flows/
+  visualization.yaml
+  data_quality.yaml
+
+Entrypoint selection (pseudo-code):
+
+if request.kind == "data_quality":
+    run flow "data_quality"
+else:
+    run flow "visualization"
+
+### Why
+
+- Keeps execution deterministic and auditable.
+- Avoids hidden control flow in YAML.
+- Simplifies pause/resume and approvals.
+
+---
+
+## 4. Flow Definition Schema (Conceptual)
 
 ```yaml
 id: hello_world
@@ -111,9 +143,9 @@ Notes:
 
 ---
 
-## 4. Step Types
+## 5. Step Types
 
-### 4.1 Agent Step
+### Agent Step
 
 - id: step_name
   type: agent
@@ -134,7 +166,7 @@ Agents:
 
 ---
 
-### 4.2 Tool Step
+### Tool Step
 
 - id: call_tool
   type: tool
@@ -151,7 +183,7 @@ Notes:
 
 ---
 
-### 4.3 Human Approval Step (HITL)
+### Human Approval Step (HITL)
 
 - id: approve
   type: human_approval
@@ -166,7 +198,7 @@ Behavior:
 
 ---
 
-### 4.4 User Input Step
+### User Input Step
 
 - id: collect_input
   type: user_input
@@ -192,7 +224,7 @@ Behavior:
 
 ---
 
-### 4.5 Plan Proposal Step
+### Plan Proposal Step
 
 - id: propose_plan
   type: plan_proposal
@@ -206,7 +238,7 @@ Behavior:
 
 ---
 
-## 5. Autonomy Levels
+## 6. Autonomy Levels
 
 Level	Description
 suggest_only	Agents reason and suggest; no execution
@@ -219,7 +251,7 @@ Rules:
 
 ---
 
-## 6. Retry and Error Handling
+## 7. Retry and Error Handling
 
 Retries are flow-driven, never agent-driven.
 
@@ -234,7 +266,7 @@ Rules:
 
 ---
 
-## 7. Agent Location
+## 8. Agent Location
 
 Agents live under:
 
@@ -247,7 +279,7 @@ products/hello_world/agents/simple_agent.py
 
 ---
 
-## 8. Agent Contract
+## 9. Agent Contract
 
 All agents must:
 - Inherit from BaseAgent
@@ -271,25 +303,24 @@ class SimpleAgent(BaseAgent):
 
 ---
 
-## 9. Agent Responsibilities
+## 10. Agent Responsibilities
 
 Agents MAY:
 - Read params, constraints, and artifacts
 - Reason and decide
 - Emit trace events
-- Request tool usage via structured output
 
 Agents MUST NOT:
 - Execute tools directly
 - Call other agents
 - Read/write files
 - Persist state
-- Invoke models directly
+- Call models directly (model access is centralized in `core/agents/llm_reasoner.py` via `core/models/router.py`)
 - Read environment variables
 
 ---
 
-## 10. Agent Registry
+## 11. Agent Registry
 
 Agents are registered at startup:
 - Product agents self-register via controlled import
@@ -301,7 +332,7 @@ Resolution:
 
 ---
 
-## 11. Flow Execution Lifecycle
+## 12. Flow Execution Lifecycle
 	1.	Flow loaded and validated
 	2.	RunContext initialized
 	3.	Step loop begins
@@ -315,30 +346,6 @@ Step parameter rendering supports:
 - `{{payload.<key>}}`
 - `{{artifacts.<key>}}`
 Missing values render as `null` for full-token values and as empty strings for inline tokens.
-
----
-
-## 12. Flow Composition Patterns
-
-### 12.1 Linear Flow
-
-Plan → Execute → Finish
-
-
----
-
-### 12.2 Iterative Flow
-
-Plan → Execute → Validate → Re-plan
-
-(Requires conditional support in orchestrator)
-
----
-
-### 12.3 Approval Gate
-
-Generate → Approve → Execute
-
 
 ---
 
@@ -371,7 +378,4 @@ Required:
 
 ---
 
-This design ensures flows remain auditable, deterministic, and change-safe
-while preserving strong product isolation and long-term evolvability.
-
----
+This design keeps flows auditable and deterministic while preserving product isolation.

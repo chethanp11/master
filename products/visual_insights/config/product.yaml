@@ -12,7 +12,6 @@ limits:
 
 flags:
   enable_tools: true
-  enable_knowledge: true
 
 metadata:
   product_goal:

@@ -16,9 +16,12 @@ blocked_tools: []
 allowed_models: []
 blocked_models: []
 model_max_tokens: 512
+# Max tokens across the entire run (sum of model usage).
+max_tokens_per_run: null
 # Demo safety caps: keep small and deterministic for public Spaces usage.
 max_steps: 10
 max_tool_calls: 10
+max_payload_bytes: 65536
 #
 # Example: enforce a tighter max token budget
 # model_max_tokens: 256

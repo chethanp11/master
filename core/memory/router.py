@@ -22,9 +22,20 @@ from core.memory.sqlite_backend import SQLiteBackend
 
 
 class MemoryRouter(MemoryBackend):
-    def __init__(self, backend: MemoryBackend, *, repo_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        backend: MemoryBackend,
+        *,
+        repo_root: Optional[Path] = None,
+        observability_root: Optional[Path] = None,
+    ) -> None:
         self.backend = backend
-        self._observability = ObservabilityStore(repo_root=repo_root) if repo_root else None
+        # Observability store is internal to the memory layer; keep call sites centralized here.
+        self._observability = (
+            ObservabilityStore(repo_root=repo_root, observability_root=observability_root)
+            if repo_root
+            else None
+        )
 
     def create_run(self, run: RunRecord) -> None:
         self.backend.create_run(run)
@@ -173,6 +184,7 @@ class MemoryRouter(MemoryBackend):
             return path if path.is_absolute() else (repo_root / path)
 
         storage_dir = _resolve(settings.app.paths.storage_dir)
+        observability_dir = _resolve(settings.app.paths.observability_dir)
         memory_dir = storage_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
@@ -182,4 +194,4 @@ class MemoryRouter(MemoryBackend):
 
         backend = SQLiteBackend(db_path=str(db_file))
         backend.ensure_schema()
-        return cls(backend, repo_root=repo_root)
+        return cls(backend, repo_root=repo_root, observability_root=observability_dir)

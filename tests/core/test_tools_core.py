@@ -41,8 +41,7 @@ def _executor(settings: Settings, registry: ToolRegistry) -> ToolExecutor:
 def test_tool_registry_registers_and_resolves() -> None:
     ToolRegistry.clear()
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    registry.register(name="echo_tool", factory=lambda: RecordingTool())
     resolved = registry.resolve("echo_tool")
     assert isinstance(resolved, EchoTool)
 
@@ -51,8 +50,14 @@ def test_tool_executor_runs_tool_and_redacts_traces() -> None:
     ToolRegistry.clear()
     settings = Settings()
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    tools = []
+
+    def _factory() -> RecordingTool:
+        tool = RecordingTool()
+        tools.append(tool)
+        return tool
+
+    registry.register(name="echo_tool", factory=_factory)
     events: List[Tuple[str, dict]] = []
     ctx = _build_step_ctx(events=events)
 
@@ -60,7 +65,7 @@ def test_tool_executor_runs_tool_and_redacts_traces() -> None:
     result = executor.execute(tool_name="echo_tool", params={"message": "secret sk-abc"}, ctx=ctx)
 
     assert result.ok is True
-    assert tool.calls == 1
+    assert tools and tools[0].calls == 1
     assert result.data and "secret" in result.data["echo"]
     payloads = [payload for event, payload in events if event == "tool.executed"]
     assert payloads
@@ -74,8 +79,14 @@ def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
     settings = Settings()
     settings.policies.blocked_tools = ["echo_tool"]
     registry = ToolRegistry()
-    tool = RecordingTool()
-    registry.register(name="echo_tool", factory=lambda: tool)
+    tools = []
+
+    def _factory() -> RecordingTool:
+        tool = RecordingTool()
+        tools.append(tool)
+        return tool
+
+    registry.register(name="echo_tool", factory=_factory)
     events: List[Tuple[str, dict]] = []
     ctx = _build_step_ctx(events=events)
 
@@ -83,5 +94,5 @@ def test_tool_executor_blocks_denied_tool_without_running_code() -> None:
     result = executor.execute(tool_name="echo_tool", params={"message": "hi"}, ctx=ctx)
 
     assert result.ok is False
-    assert tool.calls == 0
+    assert tools and tools[0].calls == 0
     assert any(event == "governance.decision" for event, _ in events)

@@ -77,7 +77,6 @@ def test_sqlite_imports_constrained_to_persistence_modules() -> None:
     files = _iter_python_files()
     allowed = {
         REPO_ROOT / "core" / "memory" / "sqlite_backend.py",
-        REPO_ROOT / "core" / "knowledge" / "vector_store.py",
     }
     pattern = r"\bsqlite3\b"
     offenders = _find_offenses(pattern, files, allow=list(allowed))

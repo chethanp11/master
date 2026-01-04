@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.agents.renderer import render_messages, render_template
+from core.orchestrator.templating import render_messages, render_template
 
 
 def test_render_template_resolves_artifacts() -> None:
@@ -42,3 +42,4 @@ def test_render_messages_handles_list() -> None:
     rendered = render_messages(messages, context)
     assert rendered[0]["content"] == "System hi"
     assert rendered[1]["content"] == "Dataset ok"
+

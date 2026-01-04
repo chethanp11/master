@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -28,6 +28,49 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 # Typing
 # ==============================
 T = TypeVar("T")
+
+CONTROL_FIELDS = frozenset(
+    {
+        "next_step",
+        "retry",
+        "retry_instructions",
+        "branch",
+        "branching",
+        "branch_hint",
+        "branching_hint",
+    }
+)
+
+
+def find_control_fields(payload: Any) -> List[str]:
+    violations: List[str] = []
+
+    def _walk(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                key_str = str(key)
+                key_lower = key_str.lower()
+                current = f"{path}{key_str}"
+                if key_lower in CONTROL_FIELDS:
+                    violations.append(current)
+                _walk(child, f"{current}.")
+        elif isinstance(value, list):
+            for idx, child in enumerate(value):
+                _walk(child, f"{path}[{idx}].")
+
+    _walk(payload, "")
+    return violations
+
+
+def validate_agent_output_payload(payload: Any) -> None:
+    if payload is None:
+        return
+    if not isinstance(payload, dict):
+        raise ValueError("agent_output_not_object")
+    violations = find_control_fields(payload)
+    if violations:
+        joined = ", ".join(violations)
+        raise ValueError(f"agent_output_contains_control_fields: {joined}")
 
 
 # ==============================

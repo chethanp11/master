@@ -81,7 +81,6 @@ Rules:
 - ✅ **ALLOWED ONLY IN**:
 
 core/config/loader.py
-gateway/api/deps.py
 
 Rules:
 - All runtime values come from:

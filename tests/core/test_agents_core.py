@@ -38,19 +38,17 @@ class _EchoAgent(BaseAgent):
 
 def test_agent_registry_register_and_resolve() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent()
-    AgentRegistry.register(a.name, a)
-    resolved = AgentRegistry.resolve(a.name)
+    AgentRegistry.register("echo_agent", lambda: _EchoAgent())
+    resolved = AgentRegistry.resolve("echo_agent")
     assert resolved is not None
     assert resolved.name == "echo_agent"
 
 
 def test_agent_registry_duplicate_registration_raises() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent("dup_agent")
-    AgentRegistry.register(a.name, a)
+    AgentRegistry.register("dup_agent", lambda: _EchoAgent("dup_agent"))
     try:
-        AgentRegistry.register(a.name, a)
+        AgentRegistry.register("dup_agent", lambda: _EchoAgent("dup_agent"))
         assert False, "Expected duplicate registration to raise"
     except ValueError:
         assert True
@@ -58,8 +56,7 @@ def test_agent_registry_duplicate_registration_raises() -> None:
 
 def test_agent_run_returns_agent_result() -> None:
     AgentRegistry.clear()
-    a = _EchoAgent()
-    AgentRegistry.register(a.name, a)
+    AgentRegistry.register("echo_agent", lambda: _EchoAgent())
 
     run = RunContext(
         run_id="r1",
@@ -70,7 +67,7 @@ def test_agent_run_returns_agent_result() -> None:
         artifacts={"k1": {"v": 1}},
         meta={},
     )
-    step = run.new_step(step_id="s_agent", step_type="agent", backend="local", target=a.name)
+    step = run.new_step(step_id="s_agent", step_type="agent", backend="local", target="echo_agent")
 
     resolved = AgentRegistry.resolve("echo_agent")
     assert resolved is not None

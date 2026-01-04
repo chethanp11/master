@@ -60,7 +60,7 @@ steps:
     backend: "local"
     agent: "llm_reasoner"
     params:
-      purpose: "reasoning"
+      purpose: "INSIGHT"
       prompt: "Write a concise narrative for the dashboard. Dataset: {{artifacts.tool.data_reader.output.summary}}. Anomalies: {{artifacts.tool.detect_anomalies.output.summary}} (details: {{artifacts.tool.detect_anomalies.output.anomalies}}). Chart: {{artifacts.tool.recommend_chart.output.chart_type}}. Mention at least one concrete pattern if present."
       max_tokens: 200
 

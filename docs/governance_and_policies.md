@@ -111,6 +111,17 @@ Rules:
 
 ---
 
+### 3.4 Demo Safety Limits
+
+Policies can cap demo usage to prevent runaway cost or abuse:
+- `model_max_tokens` limits per-call model token requests.
+- `max_tokens_per_run` caps total model tokens consumed per run.
+- `max_steps` caps total steps per run.
+- `max_tool_calls` caps tool invocations per run.
+- `max_payload_bytes` caps the size of the initial run payload.
+
+Limits are enforced in the governance hooks and orchestrator. Violations fail the run with a structured error.
+
 ## 4. Human-in-the-Loop (HITL)
 
 ### 4.1 When HITL Is Required
@@ -134,19 +145,6 @@ No further execution occurs until resolution.
 
 ---
 
-## 4.4 User Input Pause
-
-User input pauses are triggered when:
-- A step type is user_input
-
-Behavior:
-	•	Execution pauses immediately
-	•	Run status transitions to PENDING_USER_INPUT
-	•	Run and step context are persisted
-	•	Resume requires validated `user_input_response`
-
----
-
 ### 4.3 Resume Flow
 
 Flow resumption occurs via:
@@ -160,6 +158,19 @@ Rules:
 
 ---
 
+### 4.4 User Input Pause
+
+User input pauses are triggered when:
+- A step type is user_input
+
+Behavior:
+	•	Execution pauses immediately
+	•	Run status transitions to PENDING_USER_INPUT
+	•	Run and step context are persisted
+	•	Resume requires validated `user_input_response`
+
+---
+
 ## 5. Governance Hooks
 
 Governance hooks are mandatory enforcement points executed by the runtime.
@@ -170,6 +181,7 @@ Hook Name	Trigger
 check_autonomy	Run initialization (autonomy policy enforcement)
 before_step	Step execution
 before_tool_call	Tool invocation
+before_model_call	Model invocation
 before_complete	Run finalization
 
 
@@ -204,10 +216,7 @@ Implemented in:
 
 core/governance/security.py
 
-Scrubbing occurs:
-	•	Before persistence
-	•	Before logging
-	•	Before UI rendering
+Scrubbing occurs before persistence and trace/log emission.
 
 ---
 
@@ -219,7 +228,7 @@ Redacted values appear as:
 
 Rules:
 	•	Raw secrets must never be written to disk
-	•	Scrubbing is mandatory and non-configurable
+	•	Redaction patterns are configurable; enforcement is mandatory
 
 ---
 

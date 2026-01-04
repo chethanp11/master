@@ -4,8 +4,8 @@
 """
 Global tool registry.
 
-Design:
-- Registry stores name -> tool factory or instance
+    Design:
+    - Registry stores name -> tool factory (no shared instances)
 - Products can register their tools during boot (gateway startup, or product loader)
 - Resolution is by string name used in StepDef.tool
 """
@@ -53,14 +53,8 @@ class ToolRegistry:
             raise ValueError(f"Tool already registered: {name}")
 
         if isinstance(factory, BaseTool):
-            inst = factory
-
-            def _factory(inst: BaseTool = inst) -> BaseTool:
-                return inst
-
-            actual_factory: ToolFactory = _factory
-        else:
-            actual_factory = factory
+            raise ValueError("ToolRegistry.register requires a factory to avoid shared state across runs.")
+        actual_factory = factory
 
         cls._tools[norm] = ToolRegistration(name=norm, factory=actual_factory, meta=meta or {})
 

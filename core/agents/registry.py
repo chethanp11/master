@@ -4,8 +4,8 @@
 """
 Global agent registry.
 
-Design:
-- Registry stores name -> agent factory or instance
+    Design:
+    - Registry stores name -> agent factory (no shared instances)
 - Products can register their agents during boot (gateway startup, or product loader)
 - Resolution is by string name used in StepDef.agent
 """
@@ -16,6 +16,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 from core.agents.base import BaseAgent
+from core.agents.llm_reasoner import (
+    build as build_llm_reasoner,
+    build_explanation_reasoner,
+    build_insight_reasoner,
+    build_prioritization_reasoner,
+)
 
 
 AgentFactory = Callable[[], BaseAgent]
@@ -41,6 +47,8 @@ class AgentRegistry:
     @classmethod
     def clear(cls) -> None:
         cls._agents.clear()
+        global _CORE_REGISTERED
+        _CORE_REGISTERED = False
 
     @classmethod
     def register(
@@ -56,19 +64,14 @@ class AgentRegistry:
             raise ValueError(f"Agent already registered: {name}")
 
         if isinstance(factory, BaseAgent):
-            inst = factory
-
-            def _factory(inst: BaseAgent = inst) -> BaseAgent:
-                return inst
-
-            actual_factory: AgentFactory = _factory
-        else:
-            actual_factory = factory
+            raise ValueError("AgentRegistry.register requires a factory to avoid shared state across runs.")
+        actual_factory = factory
 
         cls._agents[norm] = AgentRegistration(name=norm, factory=actual_factory, meta=meta or {})
 
     @classmethod
     def resolve(cls, name: str) -> BaseAgent:
+        _register_core_agents()
         norm = _norm(name)
         reg = cls._agents.get(norm)
         if reg is None:
@@ -77,12 +80,33 @@ class AgentRegistry:
 
     @classmethod
     def has(cls, name: str) -> bool:
+        _register_core_agents()
         return _norm(name) in cls._agents
 
     @classmethod
     def list(cls) -> Dict[str, Dict[str, Any]]:
+        _register_core_agents()
         return {k: {"name": v.name, "meta": v.meta} for k, v in cls._agents.items()}
 
 
 def _norm(name: str) -> str:
     return name.strip().lower().replace(" ", "_")
+
+
+_CORE_REGISTERED = False
+
+
+def _register_core_agents() -> None:
+    global _CORE_REGISTERED
+    if _CORE_REGISTERED:
+        return
+    for factory in (
+        build_llm_reasoner,
+        build_insight_reasoner,
+        build_prioritization_reasoner,
+        build_explanation_reasoner,
+    ):
+        name = _norm(factory().name)
+        if name not in AgentRegistry._agents:
+            AgentRegistry.register(name, factory)
+    _CORE_REGISTERED = True

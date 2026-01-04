@@ -17,11 +17,16 @@ import gateway.api.deps as deps
 
 
 def _reset_deps() -> None:
-    deps.get_engine.cache_clear()
-    deps.get_settings.cache_clear()
-    deps.get_memory_router.cache_clear()
-    deps.get_tracer.cache_clear()
-    deps.get_product_catalog.cache_clear()
+    for dep in (
+        deps.get_engine,
+        deps.get_settings,
+        deps.get_memory_router,
+        deps.get_tracer,
+        deps.get_product_catalog,
+    ):
+        cache_clear = getattr(dep, "cache_clear", None)
+        if callable(cache_clear):
+            cache_clear()
 
 
 @pytest.fixture()

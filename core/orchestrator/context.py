@@ -39,6 +39,8 @@ class RunContext(BaseModel):
     Provides:
     - run metadata (ids, payload, artifacts)
     - trace hook used by agents/tools
+
+    RunContext is request-scoped; do not reuse across runs.
     """
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)

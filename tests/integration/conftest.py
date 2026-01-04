@@ -13,7 +13,7 @@ def hello_world_test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     Shared env fixture for integration tests that rely on sqlite-backed memory.
 
     This fixture ensures we use deterministic sqlite paths (for runs, approvals, and
-    knowledge ingestion) without duplicating environment overrides in every test.
+    ingestion) without duplicating environment overrides in every test.
     """
     repo_root = Path(__file__).resolve().parents[2]
     storage_dir = tmp_path / "storage"

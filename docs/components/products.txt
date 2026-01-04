@@ -1,68 +1,7 @@
+# captured_at: 2026-01-04T12:52:14.750050+00:00
+
 # products/__init__.py
 """Product packs namespace package."""
-
-# products/agentaura/__init__.py
-
-
-# products/agentaura/agents/__init__.py
-
-
-# products/agentaura/agents/critic_agent.py
-
-
-# products/agentaura/agents/executor_agent.py
-
-
-# products/agentaura/agents/planner_agent.py
-
-
-# products/agentaura/config/product.yaml
-
-
-# products/agentaura/flows/master_flow.yaml
-
-
-# products/agentaura/flows/other_flow.yaml
-
-
-# products/agentaura/manifest.yaml
-
-
-# products/agentaura/tests/test_agents.py
-
-
-# products/agentaura/tests/test_flows.py
-
-
-# products/agentaura/tests/test_tools.py
-
-
-# products/agentaura/tools/__init__.py
-
-
-# products/agentaura/tools/domain_tools.py
-
-
-# products/agentaura/tools/repo_tools.py
-
-
-# products/code_checker/__init__.py
-
-
-# products/code_checker/config/product.yaml
-
-
-# products/code_checker/manifest.yaml
-
-
-# products/evidence_scanner/__init__.py
-
-
-# products/evidence_scanner/config/product.yaml
-
-
-# products/evidence_scanner/manifest.yaml
-
 
 # products/hello_world/__init__.py
 
@@ -595,7 +534,6 @@ limits:
 
 flags:
   enable_tools: true
-  enable_knowledge: true
 
 metadata:
   product_goal:
@@ -835,7 +773,7 @@ steps:
     backend: "local"
     agent: "llm_reasoner"
     params:
-      purpose: "reasoning"
+      purpose: "INSIGHT"
       prompt: "Write a concise narrative for the dashboard. Dataset: {{artifacts.tool.data_reader.output.summary}}. Anomalies: {{artifacts.tool.detect_anomalies.output.summary}} (details: {{artifacts.tool.detect_anomalies.output.anomalies}}). Chart: {{artifacts.tool.recommend_chart.output.chart_type}}. Mention at least one concrete pattern if present."
       max_tokens: 200
 

@@ -54,7 +54,7 @@ There is no scaffolding script; create the product layout manually following thi
 
 ## 4. Flow Definitions
 
-Flows live under `flows/*.yaml`. Each flow defines a linear/graphical sequence of steps referencing registered agents/tools, `human_approval`, or `user_input`. Example snippet:
+Flows live under `flows/*.yaml`. Each flow defines a linear sequence of steps referencing registered agents/tools, `human_approval`, or `user_input`. Example snippet:
 
 ```yaml
 id: hello_world
@@ -79,13 +79,14 @@ steps:
     agent: simple_agent
 ```
 
-The flow loader normalizes step IDs, enforces retry policies, and wires the step definitions to the registered agents/tools.
+The flow loader normalizes step IDs and loads step definitions for the orchestrator to execute.
 
 ## 5. Agents & Tools
 
 Agents (`BaseAgent`) operate on `StepContext`, inspect payload/artifacts, and return an `AgentResult`. They must not execute tools directly, call vendors, or write to disk.
+If a flow needs LLM output, reference the built-in `llm_reasoner` agent in the flow definition.
 
-Tools (`BaseTool`) validate inputs (Pydantic), perform deterministic actions, and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks, retries, and redaction.
+Tools (`BaseTool`) validate inputs (Pydantic), perform deterministic actions, and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks and redaction. Retry policy is enforced by the orchestrator.
 
 ## 6. Registration
 

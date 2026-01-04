@@ -11,6 +11,16 @@ Responsibilities (v1):
 - Import products/<name>/registry.py safely and call register(registries)
 """
 
+# Public surface for product discovery/registration; keep minimal and stable.
+__all__ = [
+    "discover_products",
+    "register_enabled_products",
+    "ProductCatalog",
+    "ProductMeta",
+    "ProductLoadError",
+    "ProductRegistries",
+]
+
 from __future__ import annotations
 
 import importlib.util
@@ -266,8 +276,10 @@ def register_enabled_products(
 
 
 def _register_core_agents(agent_registry: Any) -> None:
-    if not agent_registry.has("llm_reasoner"):
-        agent_registry.register(build_llm_reasoner().name, build_llm_reasoner)
+    has_fn = getattr(agent_registry, "has", None)
+    if callable(has_fn):
+        if not has_fn("llm_reasoner"):
+            agent_registry.register(build_llm_reasoner().name, build_llm_reasoner)
 
 
 # ==============================
