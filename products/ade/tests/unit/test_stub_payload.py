@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from products.ade.contracts.card import InsightCard, KeyMetric
-from products.ade.contracts.citations import CitationRef, CsvCitation
+from products.ade.schemas.card import InsightCard, KeyMetric
+from products.ade.schemas.citations import CitationRef, CsvCitation
 from products.ade.tools.export_rendering import _build_stub_payload
 
 

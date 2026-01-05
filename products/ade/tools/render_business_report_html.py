@@ -83,6 +83,16 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
             f"<p>{_escape(finding.context)}</p>{refs_html}</div>"
         )
     findings_html = "".join(findings_blocks)
+    what_changed_items = "".join(
+        f"<li>{_escape(finding.headline)}: {_escape(finding.value)}</li>"
+        for finding in report.key_findings[:3]
+    )
+    so_what_items = "".join(
+        f"<li>{_escape(finding.context)}</li>"
+        for finding in report.key_findings[:2]
+        if finding.context
+    )
+    what_next_items = recommendations
 
     line_visual = next((v for v in report.visuals if v.kind == "line"), None)
     heatmap_visual = next((v for v in report.visuals if v.kind == "heatmap"), None)
@@ -193,6 +203,16 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
 
     $confidence_explainer
 
+    <section class="card">
+      <h2>What changed?</h2>
+      <ul>$what_changed_items</ul>
+    </section>
+
+    <section class="card">
+      <h2>So what?</h2>
+      <ul>$so_what_items</ul>
+    </section>
+
     <section>
       <h2>Key findings</h2>
       <div class="grid">$findings_html</div>
@@ -230,8 +250,8 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
     </section>
 
     <section class="card">
-      <h2>Recommendations / next actions</h2>
-      <ul>$recommendations</ul>
+      <h2>What next?</h2>
+      <ul>$what_next_items</ul>
     </section>
 
     <details>
@@ -274,12 +294,14 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
         summary_items=summary_items,
         confidence_explainer=confidence_explainer,
         findings_html=findings_html,
+        what_changed_items=what_changed_items,
+        so_what_items=so_what_items or "<li>Key impacts summarized in findings.</li>",
+        what_next_items=what_next_items,
         line_title=_escape(line_visual.title if line_visual else "Primary chart"),
         heatmap_title=_escape(heatmap_visual.title if heatmap_visual else "Heatmap"),
         heatmap_head=heatmap_head,
         heatmap_body="".join(heatmap_body),
         anomalies_html=anomalies_html,
-        recommendations=recommendations,
         confidence=_escape(report.appendix.confidence),
         downgrade=downgrade,
         assumptions=assumptions,

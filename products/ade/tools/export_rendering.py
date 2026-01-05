@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from products.ade.contracts.card import InsightCard
+from products.ade.schemas.card import InsightCard
 
 
 def _render_cards_pdf(cards: List[InsightCard]) -> bytes:

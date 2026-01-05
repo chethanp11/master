@@ -21,54 +21,64 @@ class PlanProposalAgent(BaseAgent):
     description = "Generates a deterministic plan proposal for ADE flows."
 
     @staticmethod
-    def _resolve_pref(artifacts: Dict[str, Any], key: str, default: Any) -> Any:
-        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
-        if not isinstance(user_inputs, dict):
-            return default
-        entry = user_inputs.get("viz_preferences")
-        if not isinstance(entry, dict):
-            return default
-        values = entry.get("values")
-        if not isinstance(values, dict):
-            return default
-        value = values.get(key)
-        return default if value is None else value
+    def _plan_spec(artifacts: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(artifacts, dict):
+            return {}
+        plan_spec = artifacts.get("agent.plan_agent.output")
+        if not isinstance(plan_spec, dict):
+            return {}
+        return plan_spec
 
     def run(self, step_context: StepContext) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
             plan_input = PlanProposalInput(comment=payload.get("replan_comment", ""))
-            chart_type = str(self._resolve_pref(step_context.run.artifacts, "chart_type", "bar"))
-            metric_focus = str(self._resolve_pref(step_context.run.artifacts, "metric_focus", "mean"))
-            include_hypothesis_checks = bool(
-                self._resolve_pref(step_context.run.artifacts, "include_hypothesis_checks", True)
-            )
-            notes = str(self._resolve_pref(step_context.run.artifacts, "notes", "") or "")
+            plan_spec = self._plan_spec(step_context.run.artifacts)
+            chart_type = str(plan_spec.get("chart_type") or "line")
+            metric_focus = str(plan_spec.get("metric") or "metric")
+            tool_flags = plan_spec.get("tool_flags") if isinstance(plan_spec.get("tool_flags"), dict) else {}
+            notes = str(plan_input.comment or "")
 
             steps: List[PlanStep] = [
                 PlanStep(
+                    step_id="read",
+                    description="Read the target dataset.",
+                    step_type="tool",
+                    tool="data_reader",
+                ),
+                PlanStep(
                     step_id="compute_business_metrics",
-                    description="Compute business metrics for reporting.",
+                    description="Compute metrics required for the business report.",
                     step_type="tool",
                     tool="compute_business_metrics",
                 ),
             ]
-            if include_hypothesis_checks:
-                steps.extend(
-                    [
-                        PlanStep(
-                            step_id="hypothesis_data_outage",
-                            description="Check for recent outage patterns.",
-                            step_type="tool",
-                            tool="hypothesis_test_data_outage",
-                        ),
-                        PlanStep(
-                            step_id="hypothesis_seasonality",
-                            description="Check for seasonal signals.",
-                            step_type="tool",
-                            tool="hypothesis_test_seasonality",
-                        ),
-                    ]
+            if tool_flags.get("detect_anomalies"):
+                steps.append(
+                    PlanStep(
+                        step_id="detect_anomalies",
+                        description="Detect anomalies if investigation requires it.",
+                        step_type="tool",
+                        tool="detect_anomalies",
+                    )
+                )
+            if tool_flags.get("hypothesis_data_outage"):
+                steps.append(
+                    PlanStep(
+                        step_id="hypothesis_data_outage",
+                        description="Check for recent outage patterns.",
+                        step_type="tool",
+                        tool="hypothesis_test_data_outage",
+                    )
+                )
+            if tool_flags.get("hypothesis_seasonality"):
+                steps.append(
+                    PlanStep(
+                        step_id="hypothesis_seasonality",
+                        description="Check for seasonal signals.",
+                        step_type="tool",
+                        tool="hypothesis_test_seasonality",
+                    )
                 )
             steps.extend(
                 [
@@ -79,14 +89,8 @@ class PlanProposalAgent(BaseAgent):
                         tool="build_chart_spec",
                     ),
                     PlanStep(
-                        step_id="assemble_evidence_bundle",
-                        description="Assemble deterministic evidence bundle.",
-                        step_type="tool",
-                        tool="assemble_evidence_bundle",
-                    ),
-                    PlanStep(
                         step_id="assemble_decision_packet",
-                        description="Assemble decision packet with evidence and narratives.",
+                        description="Assemble decision packet with evidence and reasoning.",
                         step_type="tool",
                         tool="assemble_decision_packet",
                     ),
@@ -103,6 +107,12 @@ class PlanProposalAgent(BaseAgent):
                         tool="render_business_report_html",
                     ),
                     PlanStep(
+                        step_id="build_reasoning_narrative",
+                        description="Build reasoning narrative from run events.",
+                        step_type="tool",
+                        tool="build_reasoning_narrative",
+                    ),
+                    PlanStep(
                         step_id="render_decision_packet_html",
                         description="Render decision packet to HTML.",
                         step_type="tool",
@@ -111,11 +121,7 @@ class PlanProposalAgent(BaseAgent):
                 ]
             )
 
-            checks_summary = "hypothesis checks enabled" if include_hypothesis_checks else "hypothesis checks skipped"
-            summary = (
-                f"Plan uses chart '{chart_type}' and focuses on '{metric_focus}'. "
-                f"{checks_summary}. {notes}".strip()
-            )
+            summary = f"Plan uses chart '{chart_type}' and focuses on '{metric_focus}'. {notes}".strip()
             plan = PlanProposal(
                 summary=summary,
                 steps=steps,

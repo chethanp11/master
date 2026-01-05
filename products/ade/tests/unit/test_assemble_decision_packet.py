@@ -1,4 +1,4 @@
-from products.ade.contracts.decision_section import DecisionSection
+from products.ade.schemas.decision_section import DecisionSection
 from products.ade.tools.assemble_decision_packet import (
     AssembleDecisionPacketInput,
     assemble_decision_packet,

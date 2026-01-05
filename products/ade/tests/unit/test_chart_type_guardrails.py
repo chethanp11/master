@@ -1,8 +1,8 @@
 import pytest
 
-from products.ade.contracts.card import KeyMetric
-from products.ade.contracts.citations import CitationRef, CsvCitation
-from products.ade.contracts.slices import FilterSpec
+from products.ade.schemas.card import KeyMetric
+from products.ade.schemas.citations import CitationRef, CsvCitation
+from products.ade.schemas.slices import FilterSpec
 from products.ade.tools.assemble_insight_card import (
     AssembleInsightCardInput,
     assemble_insight_card,

@@ -27,8 +27,8 @@ class DataReaderTool(BaseTool):
     def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         try:
             validated = ReadParams.model_validate(params or {})
-            input_dir = (ctx.run.meta or {}).get("input_dir")
-            if not input_dir:
+            dataset_path = _resolve_dataset_path(validated.dataset, ctx)
+            if dataset_path is None:
                 meta = ToolMeta(tool_name=self.name, backend="local")
                 return ToolResult(
                     ok=False,
@@ -39,7 +39,6 @@ class DataReaderTool(BaseTool):
                     ),
                     meta=meta,
                 )
-            dataset_path = Path(str(input_dir)) / validated.dataset
             columns: List[str] = []
             rows: List[List[Any]] = []
             row_count = 0
@@ -127,6 +126,16 @@ class DataReaderTool(BaseTool):
 
 def build() -> DataReaderTool:
     return DataReaderTool()
+
+
+def _resolve_dataset_path(dataset: str, ctx: StepContext) -> Optional[Path]:
+    if dataset == "branded_cards_transactions":
+        product_root = Path(__file__).resolve().parents[1]
+        return product_root / "data" / "branded_cards_transactions.csv"
+    input_dir = (ctx.run.meta or {}).get("input_dir")
+    if not input_dir:
+        return None
+    return Path(str(input_dir)) / dataset
 
 
 def _is_number(value: str) -> bool:

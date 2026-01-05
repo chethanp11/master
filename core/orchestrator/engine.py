@@ -270,8 +270,19 @@ class OrchestratorEngine:
             step_def = next((s for s in flow_def.steps if (s.id or "") == pending_step.step_id), None)
             if step_def is None:
                 return RunOperationResult.failure(code="invalid_state", message="Pending user input step not found.")
-            request = UserInputRequest.model_validate(step_def.params or {})
             run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+            context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+            rendered_params = render_params(step_def.params or {}, context)
+            required = rendered_params.get("required")
+            if isinstance(required, list):
+                flattened = []
+                for item in required:
+                    if isinstance(item, list):
+                        flattened.extend(item)
+                    else:
+                        flattened.append(item)
+                rendered_params["required"] = flattened
+            request = UserInputRequest.model_validate(rendered_params)
             prompt_payload = _build_user_input_prompt(run_ctx=run_ctx, step_id=pending_step.step_id, request=request).model_dump(
                 mode="json"
             )
@@ -585,6 +596,15 @@ class OrchestratorEngine:
         try:
             context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
             rendered_params = render_params(step_def.params or {}, context)
+            required = rendered_params.get("required")
+            if isinstance(required, list):
+                flattened = []
+                for item in required:
+                    if isinstance(item, list):
+                        flattened.extend(item)
+                    else:
+                        flattened.append(item)
+                rendered_params["required"] = flattened
             request = UserInputRequest.model_validate(rendered_params)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
@@ -778,6 +798,37 @@ class OrchestratorEngine:
                     and (prev_def.params or {}).get("mode") == UserInputModes.FREE_TEXT_INPUT
                     and step_def.type in {StepType.AGENT, StepType.TOOL}
                 ):
+                    prev_constraints = (prev_def.params or {}).get("constraints")
+                    if isinstance(prev_constraints, dict):
+                        allow_agents = prev_constraints.get("allow_next_agents") or []
+                        allow_tools = prev_constraints.get("allow_next_tools") or []
+                        if step_def.type == StepType.AGENT and step_def.agent in allow_agents:
+                            pass
+                        elif step_def.type == StepType.TOOL and step_def.tool in allow_tools:
+                            pass
+                        else:
+                            self._transition_run_status(
+                                run_id=run_ctx.run_id,
+                                product=run_ctx.product,
+                                flow=run_ctx.flow,
+                                current_status=current_status,
+                                target_status=RunStatus.FAILED,
+                                step_id=step_id,
+                                summary={"failed_step_id": step_id},
+                                reason="free_text_guard_blocked",
+                            )
+                            current_status = RunStatus.FAILED
+                            self._emit_event(
+                                kind="free_text_guard_blocked",
+                                run_id=run_ctx.run_id,
+                                step_id=step_id,
+                                product=run_ctx.product,
+                                flow=run_ctx.flow,
+                                payload={"message": "Free-text input cannot directly trigger tools or agents."},
+                            )
+                            self._persist_run_output(run_ctx)
+                            return RunStatus.FAILED.value
+                    else:
                     self._transition_run_status(
                         run_id=run_ctx.run_id,
                         product=run_ctx.product,
@@ -941,6 +992,15 @@ class OrchestratorEngine:
             if step_def.type == StepType.USER_INPUT:
                 context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
                 rendered_params = render_params(step_def.params or {}, context)
+                required = rendered_params.get("required")
+                if isinstance(required, list):
+                    flattened = []
+                    for item in required:
+                        if isinstance(item, list):
+                            flattened.extend(item)
+                        else:
+                            flattened.append(item)
+                    rendered_params["required"] = flattened
                 step_def = step_def.model_copy(update={"params": rendered_params})
                 try:
                     request = UserInputRequest.model_validate(step_def.params or {})
@@ -975,6 +1035,44 @@ class OrchestratorEngine:
                     )
                     self._persist_run_output(run_ctx)
                     return RunStatus.FAILED.value
+
+                constraints = request.constraints if isinstance(request.constraints, dict) else {}
+                pause_if = constraints.get("pause_if")
+                if pause_if is False:
+                    empty_values = {"text": ""}
+                    user_input_payload = {
+                        "form_id": request.form_id,
+                        "values": empty_values,
+                        "comment": "",
+                        "metadata": {},
+                    }
+                    self.memory.update_step(
+                        run_ctx.run_id,
+                        step_id,
+                        {
+                            "status": StepStatus.COMPLETED.value,
+                            "finished_at": int(time.time()),
+                            "output": {"user_input": user_input_payload, "skipped": True},
+                        },
+                    )
+                    _store_user_input_artifacts(run_ctx, request.form_id, empty_values, "")
+                    self._emit_event(
+                        kind="user_input_skipped",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"form_id": request.form_id, "reason": "pause_if_false"},
+                    )
+                    self._emit_event(
+                        kind="step_completed",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"ok": True},
+                    )
+                    continue
 
                 prompt = _build_user_input_prompt(run_ctx=run_ctx, step_id=step_id, request=request)
                 schema_summary = _summarize_schema(request.schema)

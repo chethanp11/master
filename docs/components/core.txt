@@ -1,4 +1,4 @@
-# captured_at: 2026-01-05T07:45:17.818571+00:00
+# captured_at: 2026-01-05T08:52:58.657401+00:00
 
 # core/__init__.py
 
@@ -5104,6 +5104,7 @@ from core.orchestrator.flow_loader import FlowLoader
 from core.orchestrator.hitl import HitlService
 from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
+from core.orchestrator.templating import render_params
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 from core.utils.reasoning_exporter import build_reasoning_markdown
@@ -5332,8 +5333,19 @@ class OrchestratorEngine:
             step_def = next((s for s in flow_def.steps if (s.id or "") == pending_step.step_id), None)
             if step_def is None:
                 return RunOperationResult.failure(code="invalid_state", message="Pending user input step not found.")
-            request = UserInputRequest.model_validate(step_def.params or {})
             run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+            context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+            rendered_params = render_params(step_def.params or {}, context)
+            required = rendered_params.get("required")
+            if isinstance(required, list):
+                flattened = []
+                for item in required:
+                    if isinstance(item, list):
+                        flattened.extend(item)
+                    else:
+                        flattened.append(item)
+                rendered_params["required"] = flattened
+            request = UserInputRequest.model_validate(rendered_params)
             prompt_payload = _build_user_input_prompt(run_ctx=run_ctx, step_id=pending_step.step_id, request=request).model_dump(
                 mode="json"
             )
@@ -5419,6 +5431,13 @@ class OrchestratorEngine:
 
         if step_status == StepStatus.FAILED:
             if comment:
+                rejected_count = sum(
+                    1 for a in bundle.approvals if a.step_id == approval.step_id and a.status == "REJECTED"
+                )
+                if not payload.get("approved") or decision.upper() != "APPROVED":
+                    rejected_count += 1
+                if rejected_count >= 2:
+                    return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
                 replan_payload = dict(bundle.run.input or {})
                 replan_payload.update(
                     {
@@ -5632,8 +5651,24 @@ class OrchestratorEngine:
         if step_def is None:
             return RunOperationResult.failure(code="invalid_state", message="Pending step not found in flow.")
 
+        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
+        run_ctx.trace = self._trace_hook(run_ctx)
+        self._rehydrate_artifacts(bundle.steps, run_ctx)
+
         try:
-            request = UserInputRequest.model_validate(step_def.params or {})
+            context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+            rendered_params = render_params(step_def.params or {}, context)
+            required = rendered_params.get("required")
+            if isinstance(required, list):
+                flattened = []
+                for item in required:
+                    if isinstance(item, list):
+                        flattened.extend(item)
+                    else:
+                        flattened.append(item)
+                rendered_params["required"] = flattened
+            request = UserInputRequest.model_validate(rendered_params)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
 
@@ -5649,10 +5684,6 @@ class OrchestratorEngine:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
         if response.metadata and "metadata" not in response.values:
             response.values["metadata"] = response.metadata
-
-        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
-        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
-        run_ctx.trace = self._trace_hook(run_ctx)
 
         step_ctx = run_ctx.new_step(
             step_def=step_def,
@@ -5991,6 +6022,18 @@ class OrchestratorEngine:
                 return RunStatus.PENDING_HUMAN.value
 
             if step_def.type == StepType.USER_INPUT:
+                context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+                rendered_params = render_params(step_def.params or {}, context)
+                required = rendered_params.get("required")
+                if isinstance(required, list):
+                    flattened = []
+                    for item in required:
+                        if isinstance(item, list):
+                            flattened.extend(item)
+                        else:
+                            flattened.append(item)
+                    rendered_params["required"] = flattened
+                step_def = step_def.model_copy(update={"params": rendered_params})
                 try:
                     request = UserInputRequest.model_validate(step_def.params or {})
                 except Exception as exc:

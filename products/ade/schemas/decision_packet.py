@@ -1,11 +1,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from products.ade.contracts.decision_section import DecisionSection
+from products.ade.schemas.decision_section import DecisionSection
 
 
 class DecisionPacket(BaseModel):
@@ -18,3 +18,4 @@ class DecisionPacket(BaseModel):
     limitations: List[str]
     sections: List[DecisionSection]
     trace_refs: List[Dict[str, Any]]
+    reasoning_narrative: Optional[str] = None

@@ -29,6 +29,7 @@ class DetectAnomaliesInput(BaseModel):
     method: Literal["zscore"] = "zscore"
     z_threshold: float = 3.0
     min_points: int = 8
+    enabled: bool = True
 
     @validator("series")
     def must_have_points(cls, value: List[Point]) -> List[Point]:
@@ -59,6 +60,8 @@ class TableData(BaseModel):
 
 
 def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
+    if not payload.enabled:
+        return DetectAnomaliesOutput(anomalies=[], summary="skipped_by_plan")
     series = payload.series
     if not series and payload.data is not None:
         return _detect_anomalies_from_table(payload.data, payload)

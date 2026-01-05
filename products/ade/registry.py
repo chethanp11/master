@@ -36,6 +36,8 @@ from __future__ import annotations
 
 from core.utils.product_loader import ProductRegistries
 from products.ade.agents.dashboard_agent import build as build_agent
+from products.ade.agents.intent_agent import build as build_intent_agent
+from products.ade.agents.plan_agent import build as build_plan_agent
 from products.ade.agents.plan_proposal_agent import build as build_plan_proposal_agent
 from products.ade.agents.planning_agent import build as build_planning_agent
 from products.ade.agents.sufficiency_evaluator import build as build_sufficiency_evaluator
@@ -43,6 +45,7 @@ from products.ade.tools.assemble_decision_packet import build as build_assemble_
 from products.ade.tools.assemble_evidence_bundle import build as build_assemble_evidence_bundle
 from products.ade.tools.assemble_business_report import build as build_assemble_business_report
 from products.ade.tools.assemble_insight_card import build as build_assemble_insight_card
+from products.ade.tools.build_reasoning_narrative import build as build_build_reasoning_narrative
 from products.ade.tools.build_chart_spec import build as build_chart_spec
 from products.ade.tools.compute_business_metrics import build as build_compute_business_metrics
 from products.ade.tools.data_reader import build as build_data_reader
@@ -58,6 +61,8 @@ from products.ade.tools.recommend_chart import build as build_recommend_chart
 
 def register(registries: ProductRegistries) -> None:
     registries.agent_registry.register(build_agent().name, build_agent)
+    registries.agent_registry.register(build_intent_agent().name, build_intent_agent)
+    registries.agent_registry.register(build_plan_agent().name, build_plan_agent)
     registries.agent_registry.register(build_plan_proposal_agent().name, build_plan_proposal_agent)
     registries.agent_registry.register(build_planning_agent().name, build_planning_agent)
     registries.agent_registry.register(build_sufficiency_evaluator().name, build_sufficiency_evaluator)
@@ -69,6 +74,7 @@ def register(registries: ProductRegistries) -> None:
     registries.tool_registry.register(build_assemble_insight_card().name, build_assemble_insight_card)
     registries.tool_registry.register(build_assemble_decision_packet().name, build_assemble_decision_packet)
     registries.tool_registry.register(build_assemble_evidence_bundle().name, build_assemble_evidence_bundle)
+    registries.tool_registry.register(build_build_reasoning_narrative().name, build_build_reasoning_narrative)
     registries.tool_registry.register(build_compute_business_metrics().name, build_compute_business_metrics)
     registries.tool_registry.register(build_assemble_business_report().name, build_assemble_business_report)
     registries.tool_registry.register(build_export_pdf().name, build_export_pdf)

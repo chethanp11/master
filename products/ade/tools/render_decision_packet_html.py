@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-from products.ade.contracts.decision_packet import DecisionPacket
+from products.ade.schemas.decision_packet import DecisionPacket
 
 
 class RenderDecisionPacketInput(BaseModel):
@@ -24,6 +24,7 @@ class RenderDecisionPacketOutput(BaseModel):
 
     html: str
     output_files: List[Dict[str, Any]] = Field(default_factory=list)
+    reasoning_narrative: str = ""
 
 
 def _escape(text: str) -> str:
@@ -83,6 +84,14 @@ def _extract_user_inputs(trace_refs: List[Any]) -> Dict[str, Any]:
 
 def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDecisionPacketOutput:
     packet = payload.packet
+    reasoning_html = ""
+    if packet.reasoning_narrative:
+        lines = "".join(
+            f"<li>{_escape(item.strip('- ').strip())}</li>"
+            for item in packet.reasoning_narrative.splitlines()
+            if item.strip()
+        )
+        reasoning_html = f"<section class=\"section\"><h2>Reasoning narrative</h2><ul>{lines}</ul></section>"
     sections_html = []
     for section in packet.sections:
         visuals = section.visuals or []
@@ -162,6 +171,7 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
       <ul>{trace_refs}</ul>
     </div>
   </div>
+  {reasoning_html}
   {''.join(sections_html)}
 </body>
 </html>"""
@@ -176,7 +186,11 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
                 "role": "supporting",
             }
         )
-    return RenderDecisionPacketOutput(html=html, output_files=output_files)
+    return RenderDecisionPacketOutput(
+        html=html,
+        output_files=output_files,
+        reasoning_narrative=packet.reasoning_narrative or "",
+    )
 
 
 class RenderDecisionPacketHtmlTool(BaseTool):

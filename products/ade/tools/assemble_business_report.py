@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-from products.ade.contracts.decision_packet import DecisionPacket
+from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.business_report import (
     AnomalyRow,
     Appendix,

@@ -59,13 +59,8 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         first_input = engine.resume_run(
             run_id=first_run_id,
             user_input_response={
-                "form_id": "viz_preferences",
-                "values": {
-                    "chart_type": "line",
-                    "metric_focus": "mean",
-                    "include_hypothesis_checks": True,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert first_input.ok, first_input.error
@@ -83,13 +78,8 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         second_input = engine.resume_run(
             run_id=second_run_id,
             user_input_response={
-                "form_id": "viz_preferences",
-                "values": {
-                    "chart_type": "line",
-                    "metric_focus": "mean",
-                    "include_hypothesis_checks": True,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert second_input.ok, second_input.error

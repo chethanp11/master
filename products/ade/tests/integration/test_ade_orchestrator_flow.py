@@ -64,13 +64,8 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
         user_input = engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "form_id": "viz_preferences",
-                "values": {
-                    "chart_type": "line",
-                    "metric_focus": "mean",
-                    "include_hypothesis_checks": True,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert user_input.ok, user_input.error
@@ -89,14 +84,15 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
         assemble_step = next(s for s in steps if s["step_id"] == "assemble_decision_packet")
         packet = assemble_step["output"]["data"]["decision_packet"]
         assert packet["sections"]
+        assert packet.get("reasoning_narrative")
 
         response_path = repo_root / "observability" / "ade" / run_id / "output" / "response.json"
         assert response_path.exists()
         response = json.loads(response_path.read_text(encoding="utf-8"))
-        assert "output_files" not in (response.get("result") or {})
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
         assert "decision_packet.html" in stored_names
+        assert "business_report.html" in stored_names
         assert response.get("response_version") == "1.0"
         assert len(set(stored_names)) == len(stored_names)
 

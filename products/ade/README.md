@@ -11,7 +11,7 @@ Analytical Decision Engine (ADE) v1 converts a CSV dataset into a single insight
 
 ## Folder Layout
 - `config/product.yaml` → feature limits, UI intent/inputs, export settings.  
-- `contracts/` → Pydantic models (InsightCard, citations, slices).  
+- `schemas/` → Pydantic models (InsightCard, citations, slices).  
 - `flows/` → YAML flows executed by the orchestrator.  
 - `agents/` → stateless decision makers used by YAML flows (planning + dashboard).  
 - `tools/` → deterministic helpers (anomaly, driver, chart spec, assembly, export).  

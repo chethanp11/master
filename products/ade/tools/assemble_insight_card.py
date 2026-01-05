@@ -9,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-from products.ade.contracts.card import InsightCard, KeyMetric
-from products.ade.contracts.citations import CitationRef
-from products.ade.contracts.slices import DataSlice
+from products.ade.schemas.card import InsightCard, KeyMetric
+from products.ade.schemas.citations import CitationRef
+from products.ade.schemas.slices import DataSlice
 
 ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
 

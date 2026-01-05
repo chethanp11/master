@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-from products.ade.contracts.card import InsightCard
+from products.ade.schemas.card import InsightCard
 from products.ade.tools.export_rendering import _build_html_bytes, _build_stub_payload, _render_cards_pdf
 
 
