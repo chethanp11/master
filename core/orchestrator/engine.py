@@ -4,6 +4,7 @@ from __future__ import annotations
 # Orchestrator Engine
 # ==============================
 
+import base64
 import hashlib
 import json
 import time
@@ -14,6 +15,7 @@ from uuid import uuid4
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
+from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
     RunOperationResult,
     RunRecord,
@@ -39,8 +41,10 @@ from core.orchestrator.flow_loader import FlowLoader
 from core.orchestrator.hitl import HitlService
 from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
+from core.orchestrator.templating import render_params
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
+from core.utils.reasoning_exporter import build_reasoning_markdown
 
 
 def _new_run_id() -> str:
@@ -131,6 +135,7 @@ class OrchestratorEngine:
                         run_id=run_id,
                         product=product,
                         flow=flow,
+                        autonomy_level=str(flow_def.autonomy_level.value),
                         payload=payload,
                         code="payload_limit_exceeded",
                         message="Payload exceeds configured limit.",
@@ -143,6 +148,7 @@ class OrchestratorEngine:
                     run_id=run_id,
                     product=product,
                     flow=flow,
+                    autonomy_level=str(flow_def.autonomy_level.value),
                     payload=payload,
                     code="max_steps_exceeded",
                     message="Flow exceeds configured step limit.",
@@ -335,13 +341,29 @@ class OrchestratorEngine:
                         "decision": decision,
                         "comment": comment,
                         "payload": payload,
-                    }
+                    },
+                    "hitl_resolution": HitlResolution(
+                        request_id=approval.approval_id,
+                        request_type="APPROVAL",
+                        status="ACCEPTED" if step_status == StepStatus.COMPLETED else "REJECTED",
+                        resolved_at=int(time.time()),
+                        decision=decision,
+                        comment=comment,
+                        resolved_by=resolved_by,
+                    ).model_dump(mode="json"),
                 },
             },
         )
 
         if step_status == StepStatus.FAILED:
             if comment:
+                rejected_count = sum(
+                    1 for a in bundle.approvals if a.step_id == approval.step_id and a.status == "REJECTED"
+                )
+                if not payload.get("approved") or decision.upper() != "APPROVED":
+                    rejected_count += 1
+                if rejected_count >= 2:
+                    return RunOperationResult.success({"run_id": run_id, "status": RunStatus.FAILED.value})
                 replan_payload = dict(bundle.run.input or {})
                 replan_payload.update(
                     {
@@ -555,8 +577,15 @@ class OrchestratorEngine:
         if step_def is None:
             return RunOperationResult.failure(code="invalid_state", message="Pending step not found in flow.")
 
+        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
+        run_ctx.trace = self._trace_hook(run_ctx)
+        self._rehydrate_artifacts(bundle.steps, run_ctx)
+
         try:
-            request = UserInputRequest.model_validate(step_def.params or {})
+            context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+            rendered_params = render_params(step_def.params or {}, context)
+            request = UserInputRequest.model_validate(rendered_params)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
 
@@ -572,10 +601,6 @@ class OrchestratorEngine:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
         if response.metadata and "metadata" not in response.values:
             response.values["metadata"] = response.metadata
-
-        run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
-        self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
-        run_ctx.trace = self._trace_hook(run_ctx)
 
         step_ctx = run_ctx.new_step(
             step_def=step_def,
@@ -618,7 +643,18 @@ class OrchestratorEngine:
             {
                 "status": StepStatus.COMPLETED.value,
                 "finished_at": int(time.time()),
-                "output": {"user_input": response.model_dump(mode="json")},
+                "output": {
+                    "user_input": response.model_dump(mode="json"),
+                    "hitl_resolution": HitlResolution(
+                        request_id=request.form_id,
+                        request_type="INPUT",
+                        status="PROVIDED",
+                        resolved_at=int(time.time()),
+                        values=response.values,
+                        comment=response.comment or comment,
+                        resolved_by=resolved_by,
+                    ).model_dump(mode="json"),
+                },
             },
         )
 
@@ -839,12 +875,25 @@ class OrchestratorEngine:
                     requested_by=requested_by,
                     payload=approval_payload,
                 )
+                hitl_request = HitlRequest(
+                    request_id=approval.approval_id,
+                    request_type="APPROVAL",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    created_at=int(time.time()),
+                    payload={"approval_context": approval_payload.get("approval_context")},
+                )
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
                     {
                         "status": StepStatus.PENDING_HUMAN.value,
-                        "output": {"approval_id": approval.approval_id},
+                        "output": {
+                            "approval_id": approval.approval_id,
+                            "hitl_request": hitl_request.model_dump(mode="json"),
+                        },
                     },
                 )
                 current_status = self._transition_run_status(
@@ -868,9 +917,31 @@ class OrchestratorEngine:
                         "approval_context": approval_payload.get("approval_context"),
                     },
                 )
+                self._emit_event(
+                    kind="pending_approval",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "approval_id": approval.approval_id,
+                        "approval_context": approval_payload.get("approval_context"),
+                    },
+                )
+                self._emit_event(
+                    kind="run_pending_human",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"reason": "approval_requested", "approval_id": approval.approval_id},
+                )
                 return RunStatus.PENDING_HUMAN.value
 
             if step_def.type == StepType.USER_INPUT:
+                context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
+                rendered_params = render_params(step_def.params or {}, context)
+                step_def = step_def.model_copy(update={"params": rendered_params})
                 try:
                     request = UserInputRequest.model_validate(step_def.params or {})
                 except Exception as exc:
@@ -907,6 +978,22 @@ class OrchestratorEngine:
 
                 prompt = _build_user_input_prompt(run_ctx=run_ctx, step_id=step_id, request=request)
                 schema_summary = _summarize_schema(request.schema)
+                hitl_request = HitlRequest(
+                    request_id=request.form_id,
+                    request_type="INPUT",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    created_at=int(time.time()),
+                    schema=HitlInputSchema(
+                        schema=request.schema if isinstance(request.schema, dict) else {},
+                        required=request.required,
+                        defaults=request.defaults,
+                        prompt=prompt.model_dump(mode="json"),
+                    ),
+                    payload={"title": request.title, "mode": request.mode, "input_type": request.input_type},
+                )
                 self._emit_event(
                     kind="pending_user_input",
                     run_id=run_ctx.run_id,
@@ -936,7 +1023,10 @@ class OrchestratorEngine:
                     step_id,
                     {
                         "status": StepStatus.PENDING_USER_INPUT.value,
-                        "output": {"user_input_request": {"form_id": request.form_id, "prompt": prompt.model_dump(mode="json")}},
+                        "output": {
+                            "user_input_request": {"form_id": request.form_id, "prompt": prompt.model_dump(mode="json")},
+                            "hitl_request": hitl_request.model_dump(mode="json"),
+                        },
                     },
                 )
                 current_status = self._transition_run_status(
@@ -994,6 +1084,85 @@ class OrchestratorEngine:
                     data = result.get("data")
                     if isinstance(data, dict) and data:
                         last_result_data = data
+                if step_def.type == StepType.PLAN_PROPOSAL:
+                    approval_payload = self._build_plan_proposal_payload(
+                        run_ctx=run_ctx,
+                        step_record=step_record,
+                        step_def=step_def,
+                        plan_result=result if isinstance(result, dict) else {},
+                    )
+                    approval = self.hitl.create_approval(
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        requested_by=requested_by,
+                        payload=approval_payload,
+                    )
+                    hitl_request = HitlRequest(
+                        request_id=approval.approval_id,
+                        request_type="APPROVAL",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        created_at=int(time.time()),
+                        payload={"approval_context": approval_payload.get("approval_context")},
+                    )
+                    self.memory.update_step(
+                        run_ctx.run_id,
+                        step_id,
+                        {
+                            "status": StepStatus.PENDING_HUMAN.value,
+                            "output": {
+                                "approval_id": approval.approval_id,
+                                "plan_proposal": result,
+                                "hitl_request": hitl_request.model_dump(mode="json"),
+                            },
+                        },
+                    )
+                    current_status = self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.PENDING_HUMAN,
+                        step_id=step_id,
+                        summary=self._summary_with_counters(run_ctx, {"current_step_index": idx}),
+                        reason="plan_proposal_requested",
+                    )
+                    self._emit_event(
+                        kind="pending_human",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "approval_id": approval.approval_id,
+                            "approval_context": approval_payload.get("approval_context"),
+                        },
+                    )
+                    self._emit_event(
+                        kind="pending_approval",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "approval_id": approval.approval_id,
+                            "approval_context": approval_payload.get("approval_context"),
+                        },
+                    )
+                    self._emit_event(
+                        kind="run_pending_human",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"reason": "plan_proposal_requested", "approval_id": approval.approval_id},
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunStatus.PENDING_HUMAN.value
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
@@ -1113,8 +1282,34 @@ class OrchestratorEngine:
             flow=run_ctx.flow,
             payload={"ok": True},
         )
+        self._export_reasoning_artifact(run_ctx)
         self._persist_run_output(run_ctx)
         return RunStatus.COMPLETED.value
+
+    def _export_reasoning_artifact(self, run_ctx: RunContext) -> None:
+        paths = self.memory.get_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
+        if not paths:
+            return
+        runtime_dir = paths.get("runtime")
+        if runtime_dir is None:
+            return
+        events_path = runtime_dir / "events.jsonl"
+        content = build_reasoning_markdown(events_path)
+        if not content:
+            return
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        self.memory.write_output_files(
+            product=run_ctx.product,
+            run_id=run_ctx.run_id,
+            files=[
+                {
+                    "name": "reasoning.md",
+                    "content_type": "text/markdown",
+                    "role": "supporting",
+                    "content_base64": encoded,
+                }
+            ],
+        )
 
     def _normalize_run_output(self, data: Dict[str, Any]) -> Dict[str, Any]:
         data = {k: v for k, v in data.items() if k != "output_files"}
@@ -1210,6 +1405,7 @@ class OrchestratorEngine:
         run_id: str,
         product: str,
         flow: str,
+        autonomy_level: Optional[str] = None,
         payload: Dict[str, Any],
         code: str,
         message: str,
@@ -1221,7 +1417,7 @@ class OrchestratorEngine:
             product=product,
             flow=flow,
             status=RunStatus.FAILED,
-            autonomy_level=None,
+            autonomy_level=autonomy_level or "unknown",
             started_at=now,
             finished_at=now,
             input=payload,
@@ -1393,6 +1589,32 @@ class OrchestratorEngine:
             "artifacts": {"keys": sorted(run_ctx.artifacts.keys())},
         }
 
+    def _build_plan_proposal_payload(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_record: StepRecord,
+        step_def: StepDef,
+        plan_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        intent = (
+            run_ctx.payload.get("prompt")
+            or run_ctx.payload.get("intent")
+            or run_ctx.payload.get("instructions")
+            or run_ctx.payload.get("notes")
+            or ""
+        )
+        params = step_def.params or {}
+        approval_context = params.get("approval_context") if isinstance(params, dict) else None
+        plan_payload = plan_result.get("data") if isinstance(plan_result, dict) else None
+        return {
+            "step": step_record.model_dump(),
+            "intent": intent,
+            "approval_context": approval_context,
+            "plan": plan_payload or {},
+            "artifacts": {"keys": sorted(run_ctx.artifacts.keys())},
+        }
+
 # Backwards compatibility for older imports/tests
 Engine = OrchestratorEngine
 
@@ -1475,6 +1697,7 @@ def _build_user_input_prompt(run_ctx: RunContext, step_id: str, request: UserInp
         defaults=request.defaults,
         required=request.required,
         allow_free_text=allow_free_text,
+        schema=request.schema if isinstance(request.schema, dict) else {},
     )
 
 

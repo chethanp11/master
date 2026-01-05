@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T15:55:09.055965+00:00
+# captured_at: 2026-01-05T07:45:17.818571+00:00
 
 # core/__init__.py
 
@@ -33,6 +33,8 @@ Notes:
 """
 
 from __future__ import annotations
+
+
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -76,10 +78,11 @@ class BaseAgent(ABC):
         raise NotImplementedError
 
 # core/agents/llm_reasoner.py
+from __future__ import annotations
+
 # ==============================
 # Core LLM Reasoner Agent
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import json
@@ -409,6 +412,8 @@ Global agent registry.
 
 from __future__ import annotations
 
+
+
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
@@ -531,6 +536,9 @@ Testability:
 - No hardcoded absolute paths.
 """
 
+from __future__ import annotations
+
+
 # High-level load flow:
 # 1. Determine paths and environment variables (env, .env).
 # 2. Load base YAML configs from configs/ directory.
@@ -543,7 +551,6 @@ Testability:
 # 9. Return validated Settings object (and optionally raw merged dict).
 
 
-from __future__ import annotations
 
 import os
 import logging
@@ -922,6 +929,8 @@ env > secrets/secrets.yaml > configs/*.yaml > defaults
 
 from __future__ import annotations
 
+
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -943,6 +952,15 @@ class PathsConfig(BaseModel):
     observability_dir: str = Field(default="observability", description="Observability output directory")
 
 
+class FeatureFlagsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observability_input_mirroring: bool = Field(default=False)
+    enable_sqlite_backend: bool = Field(default=False)
+    enable_vector_backend: bool = Field(default=False)
+    enable_knowledge_index: bool = Field(default=False)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -957,6 +975,7 @@ class AppConfig(BaseModel):
         description="Base URL for Gateway API used by UI clients.",
     )
     paths: PathsConfig = Field(default_factory=PathsConfig)
+    features: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
 
 
 # ==============================
@@ -1115,10 +1134,12 @@ Intended usage:
 - Tracing uses AgentMeta + AgentError
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
@@ -1279,10 +1300,12 @@ Intended usage:
 - orchestrator executes StepDef list/graph
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -1421,11 +1444,59 @@ class FlowDef(BaseModel):
     def name(self) -> str:
         return self.id
 
+# core/contracts/hitl_schema.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+HitlRequestType = Literal["APPROVAL", "INPUT"]
+HitlResolutionStatus = Literal["ACCEPTED", "REJECTED", "PROVIDED", "ABORTED"]
+
+
+class HitlInputSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema: Dict[str, Any] = Field(default_factory=dict)
+    required: List[str] = Field(default_factory=list)
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+    prompt: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HitlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    request_type: HitlRequestType
+    run_id: str
+    step_id: str
+    product: str
+    flow: str
+    status: str = Field(default="PENDING")
+    created_at: int
+    schema: Optional[HitlInputSchema] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HitlResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    request_type: HitlRequestType
+    status: HitlResolutionStatus
+    resolved_at: int
+    decision: Optional[str] = None
+    values: Dict[str, Any] = Field(default_factory=dict)
+    comment: Optional[str] = None
+    resolved_by: Optional[str] = None
+
 # core/contracts/plan_schema.py
+from __future__ import annotations
+
 # ==============================
 # Plan Proposal Contracts
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
@@ -1504,10 +1575,12 @@ Intended usage:
 - Gateway API returns RunRecord summaries safely
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 import time
 from enum import Enum
@@ -1525,6 +1598,7 @@ class RunStatus(str, Enum):
     RUNNING = "RUNNING"
     PENDING_HUMAN = "PENDING_HUMAN"
     PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PAUSED_WAITING_FOR_USER = "PAUSED_WAITING_FOR_USER"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -1537,6 +1611,7 @@ class StepStatus(str, Enum):
     RUNNING = "RUNNING"
     PENDING_HUMAN = "PENDING_HUMAN"
     PENDING_USER_INPUT = "PENDING_USER_INPUT"
+    PAUSED_WAITING_FOR_USER = "PAUSED_WAITING_FOR_USER"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
@@ -1655,10 +1730,12 @@ Intended usage:
 - Tool executor emits trace events using ToolMeta + ToolError + ToolEnvelope
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
@@ -1758,6 +1835,7 @@ class ToolResult(ToolEnvelope[Dict[str, Any]]):
         return cls(ok=False, data=None, error=error, meta=meta)
 
 # core/contracts/user_input_schema.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Literal
@@ -1770,6 +1848,40 @@ UserInputMode = Literal["choice_input", "free_text_input"]
 class UserInputModes:
     CHOICE_INPUT = "choice_input"
     FREE_TEXT_INPUT = "free_text_input"
+
+
+class UserInputOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    option_id: str
+    label: str
+    value: Optional[Any] = None
+    description: Optional[str] = None
+
+
+class UserInputPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = Field(default="1.0")
+    prompt_id: str
+    run_id: str
+    step_id: str
+    title: Optional[str] = None
+    question: str
+    options: List[UserInputOption] = Field(default_factory=list)
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+    required: List[str] = Field(default_factory=list)
+    allow_free_text: bool = Field(default=False)
+    schema: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UserInputAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_id: str
+    selected_option_ids: Optional[List[str]] = None
+    free_text: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class UserInputRequest(BaseModel):
@@ -1811,6 +1923,7 @@ class UserInputResponse(BaseModel):
     form_id: str
     values: Dict[str, Any] = Field(default_factory=dict)
     comment: str = ""
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 # core/governance/__init__.py
 
@@ -1831,6 +1944,8 @@ No persistence here. No logging here. Callers emit trace events.
 """
 
 from __future__ import annotations
+
+
 
 from dataclasses import dataclass
 import json
@@ -2124,6 +2239,8 @@ No persistence. No vendor calls.
 
 from __future__ import annotations
 
+
+
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -2247,6 +2364,8 @@ Scope:
 """
 
 from __future__ import annotations
+
+
 
 import re
 from typing import Any, Dict, Iterable, List, Pattern
@@ -2397,6 +2516,8 @@ Embedding is optional in v1. If embeddings are absent, retrieval can degrade to 
 
 from __future__ import annotations
 
+
+
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -2495,6 +2616,8 @@ v1:
 
 from __future__ import annotations
 
+
+
 from typing import Any, Dict, List, Optional
 
 from core.knowledge.base import Chunk, Query, VectorStore
@@ -2541,6 +2664,8 @@ Keep this module side-effect free (no persistence).
 """
 
 from __future__ import annotations
+
+
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -2650,6 +2775,8 @@ No LLM calls here. No external vector DB dependencies.
 """
 
 from __future__ import annotations
+
+
 
 import json
 import os
@@ -2972,12 +3099,24 @@ Rules:
 
 from __future__ import annotations
 
+
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
+
+
+class MemoryBackendLoadError(Exception):
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {"code": self.code, "message": self.message}
 
 
 class ApprovalRecord(BaseModel):
@@ -3096,6 +3235,8 @@ Not durable. Deterministic. No file I/O.
 
 from __future__ import annotations
 
+
+
 import time
 import threading
 from typing import Any, Dict, List, Optional
@@ -3210,6 +3351,7 @@ class InMemoryBackend(MemoryBackend):
         return 0
 
 # core/memory/observability_store.py
+
 # ==============================
 # Observability Store (Memory Layer)
 # ==============================
@@ -3224,9 +3366,10 @@ Layout per run:
 - observability/<product>/<run_id>/output/*
 """
 
-__all__ = ["ObservabilityStore"]
-
 from __future__ import annotations
+
+
+__all__ = ["ObservabilityStore"]
 
 import base64
 import hashlib
@@ -3238,10 +3381,17 @@ from typing import Any, Dict, List, Optional
 
 
 class ObservabilityStore:
-    def __init__(self, *, repo_root: Path, observability_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        *,
+        repo_root: Path,
+        observability_root: Optional[Path] = None,
+        mirror_inputs: bool = False,
+    ) -> None:
         self.repo_root = repo_root
         self.root = observability_root or (repo_root / "observability")
         self.products_root = repo_root / "products"
+        self.mirror_inputs = mirror_inputs
 
     def ensure_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
         base = self.root / product / run_id
@@ -3254,6 +3404,9 @@ class ObservabilityStore:
         for path in paths.values():
             path.mkdir(parents=True, exist_ok=True)
         return paths
+
+    def ensure_run_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
+        return self.ensure_dirs(product=product, run_id=run_id)
 
     def ensure_staging_dirs(self, *, product: str) -> Dict[str, Path]:
         base = self.products_root / product / "staging"
@@ -3274,6 +3427,8 @@ class ObservabilityStore:
             _clear_dir(paths["output"])
 
     def write_input_payload(self, *, product: str, run_id: str, payload: Dict[str, Any]) -> bool:
+        if not self.mirror_inputs:
+            return False
         paths = self.ensure_dirs(product=product, run_id=run_id)
         input_path = paths["input"] / "input.json"
         if input_path.exists():
@@ -3325,6 +3480,8 @@ class ObservabilityStore:
         run_id: str,
         payload: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
+        if not self.mirror_inputs:
+            return []
         staging_paths = self.ensure_staging_dirs(product=product)
         input_dir = staging_paths["input"]
         attachments: List[Dict[str, Any]] = []
@@ -3367,6 +3524,8 @@ class ObservabilityStore:
         return attachments
 
     def move_staged_inputs_to_run(self, *, product: str, run_id: str) -> None:
+        if not self.mirror_inputs:
+            return
         staging = self.ensure_staging_dirs(product=product)["input"]
         run_input = self.ensure_dirs(product=product, run_id=run_id)["input"]
         for source in staging.iterdir():
@@ -3400,7 +3559,9 @@ class ObservabilityStore:
         paths = self.ensure_dirs(product=product, run_id=run_id)
         runtime_path = paths["runtime"] / "events.jsonl"
         line = json.dumps(payload, ensure_ascii=False)
-        runtime_path.open("a", encoding="utf-8").write(line + "\n")
+        with runtime_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+            handle.flush()
         return runtime_path
 
     def write_output_files(self, *, product: str, run_id: str, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -3558,14 +3719,17 @@ v1:
 
 from __future__ import annotations
 
+
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import importlib
 
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.config.schema import Settings
-from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
+from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle, MemoryBackendLoadError
+from core.memory.in_memory import InMemoryBackend
 from core.memory.observability_store import ObservabilityStore
-from core.memory.sqlite_backend import SQLiteBackend
 
 
 class MemoryRouter(MemoryBackend):
@@ -3575,11 +3739,16 @@ class MemoryRouter(MemoryBackend):
         *,
         repo_root: Optional[Path] = None,
         observability_root: Optional[Path] = None,
+        mirror_inputs: bool = False,
     ) -> None:
         self.backend = backend
         # Observability store is internal to the memory layer; keep call sites centralized here.
         self._observability = (
-            ObservabilityStore(repo_root=repo_root, observability_root=observability_root)
+            ObservabilityStore(
+                repo_root=repo_root,
+                observability_root=observability_root,
+                mirror_inputs=mirror_inputs,
+            )
             if repo_root
             else None
         )
@@ -3674,6 +3843,11 @@ class MemoryRouter(MemoryBackend):
             return {}
         return self._observability.ensure_dirs(product=product, run_id=run_id)
 
+    def ensure_run_dirs(self, *, product: str, run_id: str) -> None:
+        if self._observability is None:
+            return
+        self._observability.ensure_run_dirs(product=product, run_id=run_id)
+
     def clear_staging(self, *, product: str, clear_input: bool = True, clear_output: bool = True) -> None:
         if self._observability is None:
             return
@@ -3735,13 +3909,34 @@ class MemoryRouter(MemoryBackend):
         memory_dir = storage_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
-        db_path = settings.secrets.memory_db_path
-        db_file = _resolve(db_path) if db_path else (memory_dir / "master.sqlite")
-        db_file.parent.mkdir(parents=True, exist_ok=True)
-
-        backend = SQLiteBackend(db_path=str(db_file))
-        backend.ensure_schema()
-        return cls(backend, repo_root=repo_root, observability_root=observability_dir)
+        backend: MemoryBackend
+        if settings.app.features.enable_sqlite_backend:
+            db_path = settings.secrets.memory_db_path
+            db_file = _resolve(db_path) if db_path else (memory_dir / "master.sqlite")
+            db_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                sqlite_module = importlib.import_module("core.memory.sqlite_backend")
+            except ImportError as exc:
+                raise MemoryBackendLoadError(
+                    code="sqlite_backend_unavailable",
+                    message="SQLite backend requested but module is not available.",
+                ) from exc
+            backend_cls = getattr(sqlite_module, "SQLiteBackend", None)
+            if backend_cls is None:
+                raise MemoryBackendLoadError(
+                    code="sqlite_backend_missing",
+                    message="SQLite backend requested but SQLiteBackend class is missing.",
+                )
+            backend = backend_cls(db_path=str(db_file))
+            backend.ensure_schema()
+        else:
+            backend = InMemoryBackend()
+        return cls(
+            backend,
+            repo_root=repo_root,
+            observability_root=observability_dir,
+            mirror_inputs=settings.app.features.observability_input_mirroring,
+        )
 
 # core/memory/sqlite_backend.py
 # ==============================
@@ -3764,6 +3959,8 @@ Notes:
 """
 
 from __future__ import annotations
+
+
 
 import json
 import sqlite3
@@ -4295,6 +4492,8 @@ No direct sqlite calls here.
 
 from __future__ import annotations
 
+
+
 import logging
 from typing import Optional
 
@@ -4376,6 +4575,8 @@ Later:
 """
 
 from __future__ import annotations
+
+
 
 import json
 import urllib.error
@@ -4615,6 +4816,8 @@ Later upgrades can add:
 
 from __future__ import annotations
 
+
+
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -4757,10 +4960,12 @@ Intended usage:
 - Each step receives a StepContext derived from RunContext
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
@@ -4856,21 +5061,24 @@ class StepContext(BaseModel):
         return self.run.flow
 
 # core/orchestrator/engine.py
+from __future__ import annotations
+
 # ==============================
 # Orchestrator Engine
 # ==============================
-from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List, Union
 from uuid import uuid4
 
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
+from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
     RunOperationResult,
     RunRecord,
@@ -4879,7 +5087,14 @@ from core.contracts.run_schema import (
     StepStatus,
     TraceEvent,
 )
-from core.contracts.user_input_schema import UserInputRequest, UserInputResponse, UserInputModes
+from core.contracts.user_input_schema import (
+    UserInputAnswer,
+    UserInputModes,
+    UserInputOption,
+    UserInputPrompt,
+    UserInputRequest,
+    UserInputResponse,
+)
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
@@ -4891,6 +5106,7 @@ from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
+from core.utils.reasoning_exporter import build_reasoning_markdown
 
 
 def _new_run_id() -> str:
@@ -4981,6 +5197,7 @@ class OrchestratorEngine:
                         run_id=run_id,
                         product=product,
                         flow=flow,
+                        autonomy_level=str(flow_def.autonomy_level.value),
                         payload=payload,
                         code="payload_limit_exceeded",
                         message="Payload exceeds configured limit.",
@@ -4993,6 +5210,7 @@ class OrchestratorEngine:
                     run_id=run_id,
                     product=product,
                     flow=flow,
+                    autonomy_level=str(flow_def.autonomy_level.value),
                     payload=payload,
                     code="max_steps_exceeded",
                     message="Flow exceeds configured step limit.",
@@ -5020,6 +5238,9 @@ class OrchestratorEngine:
                     },
                 )
                 self.memory.create_run(run_record)
+                run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+                self._attach_run_dirs(run_ctx)
+                self._stage_inputs(run_ctx)
                 self._emit_event(
                     kind="autonomy_denied",
                     run_id=run_id,
@@ -5031,6 +5252,7 @@ class OrchestratorEngine:
                         "autonomy_level": flow_def.autonomy_level.value,
                     },
                 )
+                self._persist_run_output(run_ctx)
                 return RunOperationResult.failure(
                     code="autonomy_denied",
                     message=autonomy_decision.reason or "Autonomy denied by policy.",
@@ -5088,6 +5310,35 @@ class OrchestratorEngine:
             }
         )
 
+    def get_pending_user_input(self, *, run_id: str) -> RunOperationResult:
+        bundle = self.memory.get_run(run_id)
+        if bundle is None:
+            return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
+        if bundle.run.status not in {RunStatus.PENDING_USER_INPUT, RunStatus.PAUSED_WAITING_FOR_USER}:
+            return RunOperationResult.success({"run_id": run_id, "pending": False, "prompt": None})
+        pending_step = next(
+            (s for s in bundle.steps if _is_step_status(s.status, StepStatus.PENDING_USER_INPUT)),
+            None,
+        )
+        if pending_step is None:
+            return RunOperationResult.success({"run_id": run_id, "pending": False, "prompt": None})
+        prompt_payload = None
+        if isinstance(pending_step.output, dict):
+            request_payload = pending_step.output.get("user_input_request")
+            if isinstance(request_payload, dict):
+                prompt_payload = request_payload.get("prompt")
+        if not isinstance(prompt_payload, dict):
+            flow_def = self.flow_loader.load(product=bundle.run.product, flow=bundle.run.flow)
+            step_def = next((s for s in flow_def.steps if (s.id or "") == pending_step.step_id), None)
+            if step_def is None:
+                return RunOperationResult.failure(code="invalid_state", message="Pending user input step not found.")
+            request = UserInputRequest.model_validate(step_def.params or {})
+            run_ctx = RunContext(run_id=run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
+            prompt_payload = _build_user_input_prompt(run_ctx=run_ctx, step_id=pending_step.step_id, request=request).model_dump(
+                mode="json"
+            )
+        return RunOperationResult.success({"run_id": run_id, "pending": True, "prompt": prompt_payload})
+
     def resume_run(
         self,
         *,
@@ -5102,7 +5353,7 @@ class OrchestratorEngine:
         if bundle is None:
             return RunOperationResult.failure(code="not_found", message=f"Unknown run_id: {run_id}")
 
-        if bundle.run.status == RunStatus.PENDING_USER_INPUT:
+        if bundle.run.status in {RunStatus.PENDING_USER_INPUT, RunStatus.PAUSED_WAITING_FOR_USER}:
             return self._resume_user_input(
                 bundle=bundle,
                 user_input_response=user_input_response,
@@ -5152,7 +5403,16 @@ class OrchestratorEngine:
                         "decision": decision,
                         "comment": comment,
                         "payload": payload,
-                    }
+                    },
+                    "hitl_resolution": HitlResolution(
+                        request_id=approval.approval_id,
+                        request_type="APPROVAL",
+                        status="ACCEPTED" if step_status == StepStatus.COMPLETED else "REJECTED",
+                        resolved_at=int(time.time()),
+                        decision=decision,
+                        comment=comment,
+                        resolved_by=resolved_by,
+                    ).model_dump(mode="json"),
                 },
             },
         )
@@ -5349,8 +5609,13 @@ class OrchestratorEngine:
         comment: Optional[str],
     ) -> RunOperationResult:
         response_payload = user_input_response or {}
+        answer: Optional[UserInputAnswer] = None
+        response: Optional[UserInputResponse] = None
         try:
-            response = UserInputResponse.model_validate(response_payload)
+            if _looks_like_user_input_answer(response_payload):
+                answer = UserInputAnswer.model_validate(response_payload)
+            else:
+                response = UserInputResponse.model_validate(response_payload)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_input", message=str(exc))
 
@@ -5372,8 +5637,18 @@ class OrchestratorEngine:
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
 
+        if response is None and answer is not None:
+            if answer.prompt_id != request.form_id:
+                return RunOperationResult.failure(code="invalid_input", message="prompt_id does not match pending request.")
+            response = _answer_to_response(request, answer, comment=comment)
+
+        if response is None:
+            return RunOperationResult.failure(code="invalid_input", message="Missing user input response.")
+
         if response.form_id != request.form_id:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
+        if response.metadata and "metadata" not in response.values:
+            response.values["metadata"] = response.metadata
 
         run_ctx = RunContext(run_id=bundle.run.run_id, product=bundle.run.product, flow=bundle.run.flow, payload=bundle.run.input or {})
         self._init_run_meta(run_ctx, summary=bundle.run.summary, steps=bundle.steps)
@@ -5420,7 +5695,18 @@ class OrchestratorEngine:
             {
                 "status": StepStatus.COMPLETED.value,
                 "finished_at": int(time.time()),
-                "output": {"user_input": response.model_dump(mode="json")},
+                "output": {
+                    "user_input": response.model_dump(mode="json"),
+                    "hitl_resolution": HitlResolution(
+                        request_id=request.form_id,
+                        request_type="INPUT",
+                        status="PROVIDED",
+                        resolved_at=int(time.time()),
+                        values=response.values,
+                        comment=response.comment or comment,
+                        resolved_by=resolved_by,
+                    ).model_dump(mode="json"),
+                },
             },
         )
 
@@ -5456,6 +5742,14 @@ class OrchestratorEngine:
             summary={"current_step_index": next_index},
             reason="user_input_resumed",
         )
+        self._emit_event(
+            kind="run_resumed",
+            run_id=bundle.run.run_id,
+            step_id=step_id,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
+            payload={"reason": "user_input_resumed"},
+        )
 
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
@@ -5489,8 +5783,8 @@ class OrchestratorEngine:
         run_id: str,
         product: str,
         flow: str,
-        current_status: RunStatus | str,
-        target_status: RunStatus | str,
+        current_status: Union[RunStatus, str],
+        target_status: Union[RunStatus, str],
         step_id: Optional[str],
         summary: Optional[Dict[str, Any]] = None,
         reason: Optional[str] = None,
@@ -5633,12 +5927,25 @@ class OrchestratorEngine:
                     requested_by=requested_by,
                     payload=approval_payload,
                 )
+                hitl_request = HitlRequest(
+                    request_id=approval.approval_id,
+                    request_type="APPROVAL",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    created_at=int(time.time()),
+                    payload={"approval_context": approval_payload.get("approval_context")},
+                )
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
                     {
                         "status": StepStatus.PENDING_HUMAN.value,
-                        "output": {"approval_id": approval.approval_id},
+                        "output": {
+                            "approval_id": approval.approval_id,
+                            "hitl_request": hitl_request.model_dump(mode="json"),
+                        },
                     },
                 )
                 current_status = self._transition_run_status(
@@ -5661,6 +5968,25 @@ class OrchestratorEngine:
                         "approval_id": approval.approval_id,
                         "approval_context": approval_payload.get("approval_context"),
                     },
+                )
+                self._emit_event(
+                    kind="pending_approval",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "approval_id": approval.approval_id,
+                        "approval_context": approval_payload.get("approval_context"),
+                    },
+                )
+                self._emit_event(
+                    kind="run_pending_human",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"reason": "approval_requested", "approval_id": approval.approval_id},
                 )
                 return RunStatus.PENDING_HUMAN.value
 
@@ -5699,7 +6025,32 @@ class OrchestratorEngine:
                     self._persist_run_output(run_ctx)
                     return RunStatus.FAILED.value
 
+                prompt = _build_user_input_prompt(run_ctx=run_ctx, step_id=step_id, request=request)
                 schema_summary = _summarize_schema(request.schema)
+                hitl_request = HitlRequest(
+                    request_id=request.form_id,
+                    request_type="INPUT",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    created_at=int(time.time()),
+                    schema=HitlInputSchema(
+                        schema=request.schema if isinstance(request.schema, dict) else {},
+                        required=request.required,
+                        defaults=request.defaults,
+                        prompt=prompt.model_dump(mode="json"),
+                    ),
+                    payload={"title": request.title, "mode": request.mode, "input_type": request.input_type},
+                )
+                self._emit_event(
+                    kind="pending_user_input",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload=prompt.model_dump(mode="json"),
+                )
                 self._emit_event(
                     kind="user_input_requested",
                     run_id=run_ctx.run_id,
@@ -5713,6 +6064,7 @@ class OrchestratorEngine:
                         "required": request.required,
                         "defaults": request.defaults,
                         "schema_summary": schema_summary,
+                        "prompt": prompt.model_dump(mode="json"),
                     },
                 )
                 self.memory.update_step(
@@ -5720,7 +6072,10 @@ class OrchestratorEngine:
                     step_id,
                     {
                         "status": StepStatus.PENDING_USER_INPUT.value,
-                        "output": {"user_input_request": {"form_id": request.form_id}},
+                        "output": {
+                            "user_input_request": {"form_id": request.form_id, "prompt": prompt.model_dump(mode="json")},
+                            "hitl_request": hitl_request.model_dump(mode="json"),
+                        },
                     },
                 )
                 current_status = self._transition_run_status(
@@ -5728,15 +6083,24 @@ class OrchestratorEngine:
                     product=run_ctx.product,
                     flow=run_ctx.flow,
                     current_status=current_status,
-                    target_status=RunStatus.PENDING_USER_INPUT,
+                    target_status=RunStatus.PAUSED_WAITING_FOR_USER,
                     step_id=step_id,
                     summary=self._summary_with_counters(
                         run_ctx,
-                        {"current_step_index": idx, "form_id": request.form_id},
+                        {"current_step_index": idx, "form_id": request.form_id, "pending_user_input": prompt.model_dump(mode="json")},
                     ),
                     reason="user_input_requested",
                 )
-                return RunStatus.PENDING_USER_INPUT.value
+                self._emit_event(
+                    kind="run_paused",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"reason": "user_input_requested", "form_id": request.form_id},
+                )
+                self._persist_run_output(run_ctx)
+                return RunStatus.PAUSED_WAITING_FOR_USER.value
 
             if step_def.type == StepType.PLAN_PROPOSAL:
                 if step_def.agent is None:
@@ -5769,6 +6133,85 @@ class OrchestratorEngine:
                     data = result.get("data")
                     if isinstance(data, dict) and data:
                         last_result_data = data
+                if step_def.type == StepType.PLAN_PROPOSAL:
+                    approval_payload = self._build_plan_proposal_payload(
+                        run_ctx=run_ctx,
+                        step_record=step_record,
+                        step_def=step_def,
+                        plan_result=result if isinstance(result, dict) else {},
+                    )
+                    approval = self.hitl.create_approval(
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        requested_by=requested_by,
+                        payload=approval_payload,
+                    )
+                    hitl_request = HitlRequest(
+                        request_id=approval.approval_id,
+                        request_type="APPROVAL",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        created_at=int(time.time()),
+                        payload={"approval_context": approval_payload.get("approval_context")},
+                    )
+                    self.memory.update_step(
+                        run_ctx.run_id,
+                        step_id,
+                        {
+                            "status": StepStatus.PENDING_HUMAN.value,
+                            "output": {
+                                "approval_id": approval.approval_id,
+                                "plan_proposal": result,
+                                "hitl_request": hitl_request.model_dump(mode="json"),
+                            },
+                        },
+                    )
+                    current_status = self._transition_run_status(
+                        run_id=run_ctx.run_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        current_status=current_status,
+                        target_status=RunStatus.PENDING_HUMAN,
+                        step_id=step_id,
+                        summary=self._summary_with_counters(run_ctx, {"current_step_index": idx}),
+                        reason="plan_proposal_requested",
+                    )
+                    self._emit_event(
+                        kind="pending_human",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "approval_id": approval.approval_id,
+                            "approval_context": approval_payload.get("approval_context"),
+                        },
+                    )
+                    self._emit_event(
+                        kind="pending_approval",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "approval_id": approval.approval_id,
+                            "approval_context": approval_payload.get("approval_context"),
+                        },
+                    )
+                    self._emit_event(
+                        kind="run_pending_human",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"reason": "plan_proposal_requested", "approval_id": approval.approval_id},
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunStatus.PENDING_HUMAN.value
                 self.memory.update_step(
                     run_ctx.run_id,
                     step_id,
@@ -5888,8 +6331,34 @@ class OrchestratorEngine:
             flow=run_ctx.flow,
             payload={"ok": True},
         )
+        self._export_reasoning_artifact(run_ctx)
         self._persist_run_output(run_ctx)
         return RunStatus.COMPLETED.value
+
+    def _export_reasoning_artifact(self, run_ctx: RunContext) -> None:
+        paths = self.memory.get_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
+        if not paths:
+            return
+        runtime_dir = paths.get("runtime")
+        if runtime_dir is None:
+            return
+        events_path = runtime_dir / "events.jsonl"
+        content = build_reasoning_markdown(events_path)
+        if not content:
+            return
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        self.memory.write_output_files(
+            product=run_ctx.product,
+            run_id=run_ctx.run_id,
+            files=[
+                {
+                    "name": "reasoning.md",
+                    "content_type": "text/markdown",
+                    "role": "supporting",
+                    "content_base64": encoded,
+                }
+            ],
+        )
 
     def _normalize_run_output(self, data: Dict[str, Any]) -> Dict[str, Any]:
         data = {k: v for k, v in data.items() if k != "output_files"}
@@ -5985,6 +6454,7 @@ class OrchestratorEngine:
         run_id: str,
         product: str,
         flow: str,
+        autonomy_level: Optional[str] = None,
         payload: Dict[str, Any],
         code: str,
         message: str,
@@ -5996,13 +6466,16 @@ class OrchestratorEngine:
             product=product,
             flow=flow,
             status=RunStatus.FAILED,
-            autonomy_level=None,
+            autonomy_level=autonomy_level or "unknown",
             started_at=now,
             finished_at=now,
             input=payload,
             summary={"error": {"code": code, "message": message, "details": details}},
         )
         self.memory.create_run(run_record)
+        run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
+        self._attach_run_dirs(run_ctx)
+        self._stage_inputs(run_ctx)
         self._emit_event(
             kind="run_rejected",
             run_id=run_id,
@@ -6011,6 +6484,7 @@ class OrchestratorEngine:
             flow=flow,
             payload={"code": code, "message": message, "details": details},
         )
+        self._persist_run_output(run_ctx)
         error_details = dict(details)
         error_details["run_id"] = run_id
         return RunOperationResult.failure(code=code, message=message, details=error_details)
@@ -6021,14 +6495,19 @@ class OrchestratorEngine:
             return
         run = bundle.run
         status = run.status.value if hasattr(run.status, "value") else str(run.status)
+        pending_statuses = {
+            RunStatus.PENDING_USER_INPUT.value,
+            RunStatus.PAUSED_WAITING_FOR_USER.value,
+            RunStatus.PENDING_HUMAN.value,
+        }
         result = run.output if status == RunStatus.COMPLETED.value else None
         if isinstance(result, dict) and "output_files" in result:
             result = {k: v for k, v in result.items() if k != "output_files"}
+        error = None
         if status == RunStatus.COMPLETED.value and result is None:
             status = RunStatus.FAILED.value
             error = {"code": "missing_output", "message": "Missing run output", "step_id": None, "details": {}}
-        error = None
-        if status != RunStatus.COMPLETED.value:
+        if error is None and status != RunStatus.COMPLETED.value and status not in pending_statuses:
             failed = next((s for s in bundle.steps if s.status == StepStatus.FAILED), None)
             if failed:
                 if failed.error and isinstance(failed.error, dict):
@@ -6126,7 +6605,7 @@ class OrchestratorEngine:
         return merged
 
     def _stage_inputs(self, run_ctx: RunContext) -> None:
-        self.memory.ensure_observability_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
+        self.memory.ensure_run_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
         payload = run_ctx.payload or {}
         self.memory.capture_run_input(product=run_ctx.product, run_id=run_ctx.run_id, payload=payload)
         self.memory.move_staged_inputs_to_run(product=run_ctx.product, run_id=run_ctx.run_id)
@@ -6159,6 +6638,32 @@ class OrchestratorEngine:
             "artifacts": {"keys": sorted(run_ctx.artifacts.keys())},
         }
 
+    def _build_plan_proposal_payload(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_record: StepRecord,
+        step_def: StepDef,
+        plan_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        intent = (
+            run_ctx.payload.get("prompt")
+            or run_ctx.payload.get("intent")
+            or run_ctx.payload.get("instructions")
+            or run_ctx.payload.get("notes")
+            or ""
+        )
+        params = step_def.params or {}
+        approval_context = params.get("approval_context") if isinstance(params, dict) else None
+        plan_payload = plan_result.get("data") if isinstance(plan_result, dict) else None
+        return {
+            "step": step_record.model_dump(),
+            "intent": intent,
+            "approval_context": approval_context,
+            "plan": plan_payload or {},
+            "artifacts": {"keys": sorted(run_ctx.artifacts.keys())},
+        }
+
 # Backwards compatibility for older imports/tests
 Engine = OrchestratorEngine
 
@@ -6174,6 +6679,98 @@ def _summarize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(props, dict):
         prop_keys = list(props.keys())
     return {"properties": prop_keys[:10], "property_count": len(prop_keys), "sha256": digest}
+
+
+def _looks_like_user_input_answer(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return any(key in payload for key in ("prompt_id", "selected_option_ids", "free_text"))
+
+
+def _primary_selection_key(request: UserInputRequest) -> str:
+    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
+    if isinstance(props, dict) and len(props) == 1:
+        return next(iter(props))
+    if isinstance(props, dict):
+        if "selection" in props:
+            return "selection"
+        if "value" in props:
+            return "value"
+    return "selection"
+
+
+def _options_from_request(request: UserInputRequest) -> List[UserInputOption]:
+    options: List[UserInputOption] = []
+    if isinstance(request.choices, list):
+        for item in request.choices:
+            if not isinstance(item, dict):
+                continue
+            option_id = str(item.get("id") or item.get("value") or item.get("label") or "").strip()
+            if not option_id:
+                continue
+            label = str(item.get("label") or item.get("value") or option_id)
+            options.append(
+                UserInputOption(
+                    option_id=option_id,
+                    label=label,
+                    value=item.get("value"),
+                    description=item.get("description"),
+                )
+            )
+        return options
+    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
+    if isinstance(props, dict):
+        for spec in props.values():
+            if not isinstance(spec, dict):
+                continue
+            enum = spec.get("enum")
+            if isinstance(enum, list):
+                for item in enum:
+                    option_id = str(item)
+                    options.append(UserInputOption(option_id=option_id, label=option_id, value=item))
+                break
+    return options
+
+
+def _build_user_input_prompt(run_ctx: RunContext, step_id: str, request: UserInputRequest) -> UserInputPrompt:
+    allow_free_text = request.mode == UserInputModes.FREE_TEXT_INPUT or request.input_type == "text"
+    question = request.prompt or request.title or request.form_id
+    return UserInputPrompt(
+        schema_version=request.schema_version,
+        prompt_id=request.form_id,
+        run_id=run_ctx.run_id,
+        step_id=step_id,
+        title=request.title,
+        question=question,
+        options=_options_from_request(request),
+        defaults=request.defaults,
+        required=request.required,
+        allow_free_text=allow_free_text,
+        schema=request.schema if isinstance(request.schema, dict) else {},
+    )
+
+
+def _answer_to_response(
+    request: UserInputRequest,
+    answer: UserInputAnswer,
+    *,
+    comment: Optional[str],
+) -> UserInputResponse:
+    values: Dict[str, Any] = {}
+    selected = answer.selected_option_ids or []
+    if selected:
+        values[_primary_selection_key(request)] = selected[0]
+    if answer.free_text:
+        values["text"] = answer.free_text
+    if answer.metadata:
+        values["metadata"] = answer.metadata
+    return UserInputResponse(
+        schema_version=request.schema_version,
+        form_id=request.form_id,
+        values=values,
+        comment=comment or "",
+        metadata=answer.metadata,
+    )
 
 
 def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any]) -> List[str]:
@@ -6217,7 +6814,7 @@ def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any
 def _store_user_input_artifacts(run_ctx: RunContext, form_id: str, values: Dict[str, Any], comment: Optional[str]) -> None:
     bucket = run_ctx.artifacts.setdefault("user_input", {})
     if isinstance(bucket, dict):
-        bucket[form_id] = {"values": values, "comment": comment or ""}
+        bucket[form_id] = {"values": values, "comment": comment or "", "metadata": values.get("metadata", {})}
 
 
 def _is_step_status(value: Any, status: StepStatus) -> bool:
@@ -6228,7 +6825,7 @@ def _is_step_status(value: Any, status: StepStatus) -> bool:
     return False
 
 
-def _coerce_run_status(value: RunStatus | str) -> RunStatus:
+def _coerce_run_status(value: Union[RunStatus, str]) -> RunStatus:
     if isinstance(value, RunStatus):
         return value
     try:
@@ -6253,10 +6850,12 @@ Intended usage:
 - Orchestrator uses backoff_seconds(...) to sleep externally (if desired)
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Sequence
@@ -6348,10 +6947,12 @@ Intended usage:
 - Gateway/UI may call this to list flows and validate configs
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -6506,6 +7107,8 @@ Rules:
 
 from __future__ import annotations
 
+
+
 import time
 import uuid
 from typing import Any, Dict, Optional
@@ -6577,13 +7180,15 @@ Intended usage:
 - Gateway/UI reads these statuses for run tracking and approvals
 """
 
+from __future__ import annotations
+
+
 # ==============================
 # Imports
 # ==============================
-from __future__ import annotations
 
 from enum import Enum
-from typing import FrozenSet
+from typing import FrozenSet, Union
 
 from core.contracts.run_schema import RunStatus as RunStatus  # re-export
 from core.contracts.run_schema import StepStatus as StepStatus  # re-export
@@ -6604,6 +7209,7 @@ RUN_ACTIVE: FrozenSet[RunStatus] = frozenset(
         RunStatus.RUNNING,
         RunStatus.PENDING_HUMAN,
         RunStatus.PENDING_USER_INPUT,
+        RunStatus.PAUSED_WAITING_FOR_USER,
     }
 )
 
@@ -6620,6 +7226,7 @@ STEP_ACTIVE: FrozenSet[StepStatus] = frozenset(
         StepStatus.RUNNING,
         StepStatus.PENDING_HUMAN,
         StepStatus.PENDING_USER_INPUT,
+        StepStatus.PAUSED_WAITING_FOR_USER,
     }
 )
 
@@ -6637,6 +7244,7 @@ class RunState(str, Enum):
 _RUN_STATUS_TO_STATE = {
     RunStatus.RUNNING: RunState.RUNNING,
     RunStatus.PENDING_USER_INPUT: RunState.PENDING_USER_INPUT,
+    RunStatus.PAUSED_WAITING_FOR_USER: RunState.PENDING_USER_INPUT,
     RunStatus.PENDING_HUMAN: RunState.PENDING_APPROVAL,
     RunStatus.FAILED: RunState.FAILED,
     RunStatus.COMPLETED: RunState.COMPLETED,
@@ -6652,7 +7260,7 @@ _ALLOWED_TRANSITIONS = {
 }
 
 
-def to_run_state(status: RunStatus | str) -> RunState:
+def to_run_state(status: Union[RunStatus, str]) -> RunState:
     if isinstance(status, RunStatus):
         return _RUN_STATUS_TO_STATE.get(status, RunState.FAILED)
     try:
@@ -6661,7 +7269,7 @@ def to_run_state(status: RunStatus | str) -> RunState:
         return RunState.FAILED
 
 
-def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -> bool:
+def is_valid_run_transition(current: Union[RunStatus, str], target: Union[RunStatus, str]) -> bool:
     current_state = to_run_state(current)
     target_state = to_run_state(target)
     if current_state == target_state:
@@ -6669,15 +7277,16 @@ def is_valid_run_transition(current: RunStatus | str, target: RunStatus | str) -
     return target_state in _ALLOWED_TRANSITIONS.get(current_state, set())
 
 
-def require_valid_transition(current: RunStatus | str, target: RunStatus | str) -> None:
+def require_valid_transition(current: Union[RunStatus, str], target: Union[RunStatus, str]) -> None:
     if not is_valid_run_transition(current, target):
         raise ValueError(f"Invalid run state transition: {to_run_state(current).value} -> {to_run_state(target).value}")
 
 # core/orchestrator/step_executor.py
+from __future__ import annotations
+
 # ==============================
 # Step Executor
 # ==============================
-from __future__ import annotations
 
 import time
 from typing import Callable, Dict, Optional
@@ -6877,6 +7486,7 @@ def _summarize_plan(plan: PlanProposal) -> Dict[str, Any]:
     }
 
 # core/orchestrator/templating.py
+
 # ==============================
 # Template Rendering
 # ==============================
@@ -6886,10 +7496,11 @@ Shared template rendering helpers for orchestrator/agents.
 Supports strict rendering for message templates and lenient rendering for tool params.
 """
 
+from __future__ import annotations
+
+
 # Public surface; keep deterministic and minimal.
 __all__ = ["render_template", "render_messages", "render_params"]
-
-from __future__ import annotations
 
 import json
 import re
@@ -7024,6 +7635,8 @@ Rules:
 
 from __future__ import annotations
 
+
+
 from typing import Any, Dict
 
 from core.contracts.tool_schema import ToolResult
@@ -7051,6 +7664,8 @@ v1:
 """
 
 from __future__ import annotations
+
+
 
 from typing import Any, Dict, List, Optional
 
@@ -7094,6 +7709,8 @@ v1:
 
 from __future__ import annotations
 
+
+
 from typing import Any, Dict, Optional
 
 from core.contracts.tool_schema import ToolError, ToolResult
@@ -7129,6 +7746,8 @@ Rules:
 """
 
 from __future__ import annotations
+
+
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -7188,6 +7807,8 @@ Dependencies:
 """
 
 from __future__ import annotations
+
+
 
 import time
 from typing import Any, Dict, Optional
@@ -7353,6 +7974,8 @@ Global tool registry.
 
 from __future__ import annotations
 
+
+
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
@@ -7436,6 +8059,9 @@ Responsibilities (v1):
 - Import products/<name>/registry.py safely and call register(registries)
 """
 
+from __future__ import annotations
+
+
 # Public surface for product discovery/registration; keep minimal and stable.
 __all__ = [
     "discover_products",
@@ -7446,7 +8072,6 @@ __all__ = [
     "ProductRegistries",
 ]
 
-from __future__ import annotations
 
 import importlib.util
 import logging
@@ -7744,3 +8369,79 @@ def _import_registry_module(meta: ProductMeta) -> ModuleType:
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+# core/utils/reasoning_exporter.py
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+
+def build_reasoning_markdown(events_path: Path) -> str:
+    if not events_path.exists():
+        return ""
+
+    events: List[Dict[str, Any]] = []
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    if not events:
+        return ""
+
+    steps: List[str] = []
+    tools: List[str] = []
+    hitl: List[str] = []
+    decisions: List[str] = []
+
+    for event in events:
+        kind = event.get("kind")
+        step_id = event.get("step_id")
+        payload = event.get("payload") or {}
+
+        if kind == "step_started":
+            step_type = payload.get("type")
+            label = f"{step_id} ({step_type})" if step_type else str(step_id)
+            steps.append(label)
+
+        if kind == "tool_call_attempt_started":
+            tool = payload.get("tool")
+            if tool:
+                tools.append(f"{step_id}: {tool}")
+
+        if kind == "pending_user_input":
+            prompt = payload.get("question") or payload.get("prompt") or payload.get("title")
+            hitl.append(f"INPUT requested: {payload.get('prompt_id') or payload.get('form_id')} - {prompt}")
+        if kind == "user_input_received":
+            hitl.append(f"INPUT provided: {payload.get('values')}")
+        if kind == "pending_approval":
+            hitl.append(f"APPROVAL requested: {payload.get('approval_id')}")
+        if kind == "run_resumed" and "decision" in payload:
+            hitl.append(f"APPROVAL decision: {payload.get('decision')} ({payload.get('comment') or ''})")
+
+        if kind == "run_state_transition":
+            decisions.append(
+                f"{payload.get('from')} -> {payload.get('to')} ({payload.get('reason') or 'state_transition'})"
+            )
+
+    def _section(title: str, items: List[str]) -> str:
+        if not items:
+            return ""
+        lines = [f"## {title}"]
+        lines.extend(f"- {item}" for item in items)
+        return "\n".join(lines)
+
+    sections = [
+        "# Reasoning Summary",
+        _section("Steps Executed", steps),
+        _section("Tool Calls", tools),
+        _section("HITL Interactions", hitl),
+        _section("Decisions", decisions),
+    ]
+
+    return "\n\n".join([section for section in sections if section]) + "\n"

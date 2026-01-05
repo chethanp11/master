@@ -13,7 +13,7 @@ from products.ade.contracts.card import InsightCard, KeyMetric
 from products.ade.contracts.citations import CitationRef
 from products.ade.contracts.slices import DataSlice
 
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
 
 
 class AssembleInsightCardInput(BaseModel):

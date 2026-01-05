@@ -28,7 +28,7 @@ class _BigOutputTool(BaseTool):
 
     def run(self, params, ctx):  # type: ignore[no-untyped-def]
         meta = ToolMeta(tool_name=self.name, backend="local")
-        return ToolResult.ok(data={"summary": "x" * 200, "details": {"ok": True}}, meta=meta)
+        return ToolResult(ok=True, data={"summary": "x" * 200, "details": {"ok": True}}, error=None, meta=meta)
 
 
 class _OutputFilesTool(BaseTool):
@@ -36,12 +36,14 @@ class _OutputFilesTool(BaseTool):
 
     def run(self, params, ctx):  # type: ignore[no-untyped-def]
         meta = ToolMeta(tool_name=self.name, backend="local")
-        return ToolResult.ok(
+        return ToolResult(
+            ok=True,
             data={
                 "summary": "ok",
                 "details": {"ok": True},
                 "output_files": [{"name": "big.txt", "content_base64": "x" * 200}],
             },
+            error=None,
             meta=meta,
         )
 

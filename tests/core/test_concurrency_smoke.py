@@ -29,7 +29,7 @@ class _RunIdTool(BaseTool):
     def run(self, params, ctx):  # type: ignore[no-untyped-def]
         meta = ToolMeta(tool_name=self.name, backend="local")
         payload = {"summary": ctx.run_id, "details": {"run_id": ctx.run_id, "marker": params.get("marker")}}
-        return ToolResult.ok(data=payload, meta=meta)
+        return ToolResult(ok=True, data=payload, error=None, meta=meta)
 
 
 def _write_flow(tmp_path: Path) -> Path:

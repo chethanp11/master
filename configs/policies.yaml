@@ -19,7 +19,7 @@ model_max_tokens: 512
 # Max tokens across the entire run (sum of model usage).
 max_tokens_per_run: null
 # Demo safety caps: keep small and deterministic for public Spaces usage.
-max_steps: 10
+max_steps: 20
 max_tool_calls: 10
 max_payload_bytes: 65536
 #
@@ -34,3 +34,5 @@ by_product:
       - echo_tool
     allowed_models:
       - gpt-4o-mini
+  ade:
+    max_steps: 20

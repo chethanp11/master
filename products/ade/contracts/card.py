@@ -21,7 +21,7 @@ class InsightCard(BaseModel):
 
     card_id: str
     title: str
-    chart_type: Literal["line", "bar", "stacked_bar", "scatter", "table"]
+    chart_type: Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
     chart_spec: Dict[str, Any]
     key_metrics: List[KeyMetric]
     narrative: str

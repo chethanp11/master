@@ -11,15 +11,19 @@ from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.tools.detect_anomalies import Point
 from products.ade.tools.hypothesis_test_data_outage import HypothesisTestOutput
+from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class SeasonalityInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     period: int = 7
     min_points: int = 12
     strength_threshold: float = 0.2
+    enabled: bool = True
 
 
 def _seasonal_strength(values: List[float], period: int) -> float:
@@ -39,6 +43,12 @@ def _seasonal_strength(values: List[float], period: int) -> float:
 
 def hypothesis_test_seasonality(payload: SeasonalityInput) -> HypothesisTestOutput:
     hypothesis_name = "seasonality"
+    if not payload.enabled:
+        return HypothesisTestOutput(
+            hypothesis_name=hypothesis_name,
+            status="skipped",
+            reasoning="skipped_by_user_preference",
+        )
     series = payload.series
     if payload.period <= 1 or payload.min_points <= 0:
         return HypothesisTestOutput(
@@ -76,6 +86,19 @@ class HypothesisTestSeasonalityTool(BaseTool):
         try:
             payload = SeasonalityInput.model_validate(params or {})
             output = hypothesis_test_seasonality(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = HypothesisEvidence(
+                evidence_id=evidence_id(kind="hypothesis", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="hypothesis",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                hypothesis_name=output.hypothesis_name,
+                status=output.status,
+                reasoning=output.reasoning,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

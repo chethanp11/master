@@ -4,7 +4,7 @@ display_name: "Analytical Decision Engine"
 description: "Produces audit-ready analytical decisions with evidence, confidence, and traceability. Visuals are supporting artifacts, not the primary output."
 version: "0.1.0"
 
-default_flow: "visualization"
+default_flow: "ade_v1"
 
 exposed_api:
   enabled: true

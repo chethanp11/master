@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-# ==============================
-# Integration: Observability Artifacts
-# ==============================
-
-import json
 from pathlib import Path
 
 from core.agents.registry import AgentRegistry
-from core.config.schema import Settings
+from core.contracts.run_schema import RunStatus
 from core.contracts.tool_schema import ToolMeta, ToolResult
+from core.config.schema import Settings
 from core.governance.hooks import GovernanceHooks
 from core.governance.security import SecurityRedactor
 from core.memory.in_memory import InMemoryBackend
@@ -34,19 +30,19 @@ class _EchoTool(BaseTool):
 def _write_flow(tmp_path: Path) -> Path:
     flows_dir = tmp_path / "products" / "test_product" / "flows"
     flows_dir.mkdir(parents=True, exist_ok=True)
-    flow_path = flows_dir / "test_flow.yaml"
+    flow_path = flows_dir / "hitl_flow.yaml"
     flow_path.write_text(
         "\n".join(
             [
-                'id: "test_flow"',
+                'id: "hitl_flow"',
                 'version: "1.0.0"',
                 "steps:",
                 '  - id: "input"',
                 '    type: "user_input"',
                 "    params:",
                 '      schema_version: "1.0"',
-                '      form_id: "notes"',
-                '      prompt: "Notes"',
+                '      form_id: "metric"',
+                '      prompt: "Choose metric"',
                 '      input_type: "select"',
                 '      mode: "choice_input"',
                 "      schema:",
@@ -55,16 +51,19 @@ def _write_flow(tmp_path: Path) -> Path:
                 "          selection:",
                 '            type: "string"',
                 "            enum:",
-                '              - "alpha"',
-                '              - "beta"',
+                '              - "mean"',
+                '              - "sum"',
                 "      required:",
                 '        - "selection"',
+                '  - id: "approval"',
+                '    type: "human_approval"',
+                '    message: "Proceed with selected metric?"',
                 '  - id: "echo"',
                 '    type: "tool"',
                 '    backend: "local"',
                 '    tool: "echo_tool"',
                 "    params:",
-                '      text: "{{artifacts.user_input.notes.values.selection}}"',
+                '      metric: "{{artifacts.user_input.metric.values.selection}}"',
                 "",
             ]
         ),
@@ -73,16 +72,10 @@ def _write_flow(tmp_path: Path) -> Path:
     return flow_path
 
 
-def _build_engine(tmp_path: Path, *, mirror_inputs: bool = False) -> OrchestratorEngine:
+def _build_engine(tmp_path: Path) -> OrchestratorEngine:
     flow_path = _write_flow(tmp_path)
     flow_loader = FlowLoader(products_root=flow_path.parents[2])
-    observability_root = tmp_path / "observability"
-    memory = MemoryRouter(
-        backend=InMemoryBackend(),
-        repo_root=tmp_path,
-        observability_root=observability_root,
-        mirror_inputs=mirror_inputs,
-    )
+    memory = MemoryRouter(backend=InMemoryBackend())
     tracer = Tracer(memory=memory, mirror_to_log=False)
     governance = GovernanceHooks(settings=Settings())
     tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=SecurityRedactor())
@@ -96,68 +89,28 @@ def _build_engine(tmp_path: Path, *, mirror_inputs: bool = False) -> Orchestrato
     )
 
 
-def test_observability_artifacts_written(tmp_path: Path) -> None:
+def test_hitl_pause_resume_order(tmp_path: Path) -> None:
     AgentRegistry.clear()
     ToolRegistry.clear()
     try:
         ToolRegistry.register("echo_tool", lambda: _EchoTool())
         engine = _build_engine(tmp_path)
 
-        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
+        started = engine.run_flow(product="test_product", flow="hitl_flow", payload={})
         assert started.ok, started.error
+        assert started.data["status"] == RunStatus.PAUSED_WAITING_FOR_USER.value
         run_id = started.data["run_id"]
 
-        run_dir = tmp_path / "observability" / "test_product" / run_id
-        input_dir = run_dir / "input"
-        runtime_dir = run_dir / "runtime"
-        output_dir = run_dir / "output"
-
-        assert input_dir.exists()
-        assert not (input_dir / "input.json").exists()
-        assert runtime_dir.exists()
-        assert (runtime_dir / "events.jsonl").exists()
-        assert output_dir.exists()
-        assert (output_dir / "response.json").exists()
-
-        response = json.loads((output_dir / "response.json").read_text(encoding="utf-8"))
-        assert response.get("status") == "PAUSED_WAITING_FOR_USER"
-
-        events_text = (runtime_dir / "events.jsonl").read_text(encoding="utf-8")
-        assert "pending_user_input" in events_text
-        assert "run_paused" in events_text
-
-        resumed = engine.resume_run(
+        after_input = engine.resume_run(
             run_id=run_id,
-            user_input_response={"prompt_id": "notes", "selected_option_ids": ["alpha"]},
+            user_input_response={"form_id": "metric", "values": {"selection": "mean"}},
         )
-        assert resumed.ok, resumed.error
+        assert after_input.ok, after_input.error
+        assert after_input.data["status"] == RunStatus.PENDING_HUMAN.value
 
-        response = json.loads((output_dir / "response.json").read_text(encoding="utf-8"))
-        assert response.get("status") == "COMPLETED"
-        reasoning_path = output_dir / "reasoning.md"
-        assert reasoning_path.exists()
-        reasoning_text = reasoning_path.read_text(encoding="utf-8")
-        assert "input (user_input)" in reasoning_text
-        assert "INPUT requested" in reasoning_text
-        assert "INPUT provided" in reasoning_text
-    finally:
-        AgentRegistry.clear()
-        ToolRegistry.clear()
-
-
-def test_observability_input_mirroring_opt_in(tmp_path: Path) -> None:
-    AgentRegistry.clear()
-    ToolRegistry.clear()
-    try:
-        ToolRegistry.register("echo_tool", lambda: _EchoTool())
-        engine = _build_engine(tmp_path, mirror_inputs=True)
-
-        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
-        assert started.ok, started.error
-        run_id = started.data["run_id"]
-
-        input_dir = tmp_path / "observability" / "test_product" / run_id / "input"
-        assert (input_dir / "input.json").exists()
+        after_approval = engine.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert after_approval.ok, after_approval.error
+        assert after_approval.data["status"] == RunStatus.COMPLETED.value
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()

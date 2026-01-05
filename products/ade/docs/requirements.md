@@ -1,44 +1,45 @@
 # Analytical Decision Engine — Requirements (v1)
 
 ## Objective
-Analytical Decision Engine turns a CSV dataset into a single, traceable insight card with a chart, narrative, and exportable artifacts. The workflow is deterministic for tools and governed end-to-end by the core runtime.
+ADE is an analyst-facing business analysis runner. It accepts open-ended analysis questions, executes deterministic tools where possible, and uses LLMs only for interpretation and synthesis. ADE produces a shareable Business Insight HTML and an auditable Evidence Pack derived from events.
 
 ---
 
 ## In-Scope (v1)
 
 ### Supported Inputs
-- CSV files only (uploaded and staged under product input directories).
-- Optional `prompt` text used for chart recommendation and narrative context.
+- Uploaded datasets (CSV) staged under product input directories.
+- Analyst intent as free-text `prompt`.
 
 ### Flow Behavior
-- One flow: `ade_v1`.
-- Step order is fixed by the YAML flow definition.
-- Two approval gates: one before chart configuration and one before export.
-- One user-input form (`chart_config`) to capture chart options and output format.
+- Intent-driven analysis flow with explicit planning.
+- User inputs for clarification when intent is ambiguous.
+- Approvals for decision gates (hypothesis inclusion, charting, final framing).
+- Optional hypothesis checks only if required by the plan.
 
 ### Outputs
-- `InsightCard` object from `assemble_insight_card`.
-- Export artifacts:
-  - JSON stub (`ade_stub.json`)
-  - Optional HTML (`ade.html`)
-  - Optional PDF (`ade.pdf`)
+- Business Insight HTML (primary, shareable, no debug dumps).
+- Evidence Pack (secondary, audit trail derived from events.jsonl).
+- `response.json` with run status and output files.
 
-### Allowed Chart Types
-`line`, `bar`, `stacked_bar`, `scatter`, `table`.
+### Observability
+- `events.jsonl` must be written for every ADE run.
+- Output files stored under `<observability_root>/ade/<run_id>/output/`.
+- Datasets are referenced, not duplicated.
 
 ---
 
 ## Out of Scope (v1)
-- PDF ingestion or retrieval.
-- Multiple insight modes or dynamic flow branching.
-- Additional chart types (maps, heatmaps, networks).
-- Live data connectors or streaming inputs.
-- UI-driven business logic (UI remains a thin client).
+- BI dashboards or fixed analytics pipelines.
+- Live database connectors or streaming inputs.
+- Multi-dataset joins.
+- Auto tool discovery.
+- Agent-to-agent autonomy.
 
 ---
 
 ## Governance & Trust Requirements
-- Trace events are emitted for each step/tool call.
-- Citations in cards reference CSV slices.
-- Redaction is enforced by core governance hooks before trace/log emission.
+- Trace events emitted per step/tool call.
+- User inputs and approvals are logged and replayable.
+- Evidence Pack is derived from events; no chain-of-thought storage.
+- Redaction enforced by core governance hooks before trace/log emission.

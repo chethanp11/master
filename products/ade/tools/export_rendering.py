@@ -108,7 +108,7 @@ def _render_chart(
         _plot_stacked_bar(draw, columns, rows, x_field, y_field, series_field, plot_left, plot_top, plot_right, plot_bottom, font=font)
         return
 
-    if chart_type in {"bar", "line"}:
+    if chart_type in {"bar", "line", "area"}:
         labels = []
         values = []
         for row in rows:

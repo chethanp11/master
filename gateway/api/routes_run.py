@@ -46,6 +46,15 @@ class ResumeRequest(BaseModel):
     user_input_response: Dict[str, Any] = Field(default_factory=dict)
 
 
+class UserInputSubmission(BaseModel):
+    prompt_id: str
+    selected_option_ids: Optional[List[str]] = None
+    free_text: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    values: Optional[Dict[str, Any]] = None
+    comment: Optional[str] = None
+
+
 def _ok(data: Dict[str, Any], *, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {"ok": True, "data": data, "error": None, "meta": meta or {}}
 
@@ -262,14 +271,28 @@ async def get_pending_input(
 @router.post("/runs/{run_id}/user_input")
 async def submit_user_input(
     run_id: str,
-    req: UserInputAnswer,
+    req: UserInputSubmission,
     engine: OrchestratorEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
+    if req.values is not None:
+        user_input_response = {
+            "form_id": req.prompt_id,
+            "values": req.values,
+            "comment": req.comment or "",
+            "metadata": req.metadata,
+        }
+    else:
+        user_input_response = UserInputAnswer(
+            prompt_id=req.prompt_id,
+            selected_option_ids=req.selected_option_ids,
+            free_text=req.free_text,
+            metadata=req.metadata,
+        ).model_dump(mode="json")
     res = await run_in_threadpool(
         engine.resume_run,
         run_id=run_id,
         approval_payload={},
-        user_input_response=req.model_dump(mode="json"),
+        user_input_response=user_input_response,
         decision="APPROVED",
         resolved_by=None,
         comment=None,

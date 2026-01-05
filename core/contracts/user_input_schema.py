@@ -35,6 +35,7 @@ class UserInputPrompt(BaseModel):
     defaults: Dict[str, Any] = Field(default_factory=dict)
     required: List[str] = Field(default_factory=list)
     allow_free_text: bool = Field(default=False)
+    schema: Dict[str, Any] = Field(default_factory=dict)
 
 
 class UserInputAnswer(BaseModel):

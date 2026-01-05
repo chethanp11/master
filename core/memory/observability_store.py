@@ -28,10 +28,17 @@ from typing import Any, Dict, List, Optional
 
 
 class ObservabilityStore:
-    def __init__(self, *, repo_root: Path, observability_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        *,
+        repo_root: Path,
+        observability_root: Optional[Path] = None,
+        mirror_inputs: bool = False,
+    ) -> None:
         self.repo_root = repo_root
         self.root = observability_root or (repo_root / "observability")
         self.products_root = repo_root / "products"
+        self.mirror_inputs = mirror_inputs
 
     def ensure_dirs(self, *, product: str, run_id: str) -> Dict[str, Path]:
         base = self.root / product / run_id
@@ -67,6 +74,8 @@ class ObservabilityStore:
             _clear_dir(paths["output"])
 
     def write_input_payload(self, *, product: str, run_id: str, payload: Dict[str, Any]) -> bool:
+        if not self.mirror_inputs:
+            return False
         paths = self.ensure_dirs(product=product, run_id=run_id)
         input_path = paths["input"] / "input.json"
         if input_path.exists():
@@ -118,6 +127,8 @@ class ObservabilityStore:
         run_id: str,
         payload: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
+        if not self.mirror_inputs:
+            return []
         staging_paths = self.ensure_staging_dirs(product=product)
         input_dir = staging_paths["input"]
         attachments: List[Dict[str, Any]] = []
@@ -160,6 +171,8 @@ class ObservabilityStore:
         return attachments
 
     def move_staged_inputs_to_run(self, *, product: str, run_id: str) -> None:
+        if not self.mirror_inputs:
+            return
         staging = self.ensure_staging_dirs(product=product)["input"]
         run_input = self.ensure_dirs(product=product, run_id=run_id)["input"]
         for source in staging.iterdir():

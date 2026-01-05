@@ -30,7 +30,7 @@ class _EchoTool(BaseTool):
 
     def run(self, params, ctx):  # type: ignore[no-untyped-def]
         meta = ToolMeta(tool_name=self.name, backend="local")
-        return ToolResult.ok(data={"summary": "ok", "details": params}, meta=meta)
+        return ToolResult(ok=True, data={"summary": "ok", "details": params}, error=None, meta=meta)
 
 
 def _write_flow(tmp_path: Path) -> Path:
@@ -49,21 +49,24 @@ def _write_flow(tmp_path: Path) -> Path:
                 '      schema_version: "1.0"',
                 '      form_id: "notes"',
                 '      prompt: "Notes"',
-                '      input_type: "text"',
-                '      mode: "free_text_input"',
+                '      input_type: "select"',
+                '      mode: "choice_input"',
                 "      schema:",
                 '        type: "object"',
                 "        properties:",
-                "          text:",
+                "          selection:",
                 '            type: "string"',
+                "            enum:",
+                '              - "hello"',
+                '              - "world"',
                 "      required:",
-                '        - "text"',
+                '        - "selection"',
                 '  - id: "echo"',
                 '    type: "tool"',
                 '    backend: "local"',
                 '    tool: "echo_tool"',
                 "    params:",
-                '      text: "{{artifacts.user_input.notes.values.text}}"',
+                '      text: "{{artifacts.user_input.notes.values.selection}}"',
                 "",
             ]
         ),
@@ -99,18 +102,20 @@ def test_user_input_pause_and_resume(tmp_path: Path) -> None:
 
         started = engine.run_flow(product="test_product", flow="test_flow", payload={})
         assert started.ok, started.error
-        assert started.data["status"] == RunStatus.PENDING_USER_INPUT.value
+        assert started.data["status"] == RunStatus.PAUSED_WAITING_FOR_USER.value
         run_id = started.data["run_id"]
 
         bundle = engine.memory.get_run(run_id)
         assert bundle is not None
-        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+        assert bundle.run.status == RunStatus.PAUSED_WAITING_FOR_USER
         step = next(s for s in bundle.steps if s.step_id == "input")
         assert step.status == StepStatus.PENDING_USER_INPUT
+        assert isinstance(step.output, dict)
+        assert step.output.get("hitl_request", {}).get("request_type") == "INPUT"
 
         resumed = engine.resume_run(
             run_id=run_id,
-            user_input_response={"form_id": "notes", "values": {"text": "hello"}},
+            user_input_response={"form_id": "notes", "values": {"selection": "hello"}},
         )
         assert resumed.ok, resumed.error
         assert resumed.data["status"] == RunStatus.COMPLETED.value
@@ -120,6 +125,8 @@ def test_user_input_pause_and_resume(tmp_path: Path) -> None:
         assert bundle.run.status == RunStatus.COMPLETED
         step = next(s for s in bundle.steps if s.step_id == "input")
         assert step.status == StepStatus.COMPLETED
+        assert isinstance(step.output, dict)
+        assert step.output.get("hitl_resolution", {}).get("status") == "PROVIDED"
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()
@@ -138,7 +145,7 @@ def test_user_input_invalid_response_rejected(tmp_path: Path) -> None:
 
         rejected = engine.resume_run(
             run_id=run_id,
-            user_input_response={"form_id": "notes", "values": {"text": ""}},
+            user_input_response={"form_id": "notes", "values": {"selection": ""}},
         )
         assert not rejected.ok
         assert rejected.error is not None
@@ -146,7 +153,7 @@ def test_user_input_invalid_response_rejected(tmp_path: Path) -> None:
 
         bundle = engine.memory.get_run(run_id)
         assert bundle is not None
-        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+        assert bundle.run.status == RunStatus.PAUSED_WAITING_FOR_USER
         step = next(s for s in bundle.steps if s.step_id == "input")
         assert step.status == StepStatus.PENDING_USER_INPUT
     finally:
@@ -168,7 +175,7 @@ def test_user_input_payload_limit_blocked(tmp_path: Path) -> None:
 
         rejected = engine.resume_run(
             run_id=run_id,
-            user_input_response={"form_id": "notes", "values": {"text": "x" * 200}},
+            user_input_response={"form_id": "notes", "values": {"selection": "x" * 200}},
         )
         assert not rejected.ok
         assert rejected.error is not None
@@ -176,7 +183,7 @@ def test_user_input_payload_limit_blocked(tmp_path: Path) -> None:
 
         bundle = engine.memory.get_run(run_id)
         assert bundle is not None
-        assert bundle.run.status == RunStatus.PENDING_USER_INPUT
+        assert bundle.run.status == RunStatus.PAUSED_WAITING_FOR_USER
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()

@@ -9,14 +9,18 @@ from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolR
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.tools.detect_anomalies import Point
+from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class DataOutageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     recent_window: int = 5
     outage_threshold: float = 0.6
+    enabled: bool = True
 
 
 class HypothesisTestOutput(BaseModel):
@@ -25,10 +29,17 @@ class HypothesisTestOutput(BaseModel):
     hypothesis_name: str
     status: str
     reasoning: str
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
 
 
 def hypothesis_test_data_outage(payload: DataOutageInput) -> HypothesisTestOutput:
     hypothesis_name = "data_outage"
+    if not payload.enabled:
+        return HypothesisTestOutput(
+            hypothesis_name=hypothesis_name,
+            status="skipped",
+            reasoning="skipped_by_user_preference",
+        )
     series = payload.series
     if payload.recent_window <= 0 or payload.outage_threshold <= 0:
         return HypothesisTestOutput(
@@ -67,6 +78,19 @@ class HypothesisTestDataOutageTool(BaseTool):
         try:
             payload = DataOutageInput.model_validate(params or {})
             output = hypothesis_test_data_outage(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = HypothesisEvidence(
+                evidence_id=evidence_id(kind="hypothesis", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="hypothesis",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                hypothesis_name=output.hypothesis_name,
+                status=output.status,
+                reasoning=output.reasoning,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

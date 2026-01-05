@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
+from products.ade.schemas.evidence import OutlierEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class Point(BaseModel):
@@ -21,6 +23,7 @@ class Point(BaseModel):
 class DetectAnomaliesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     data: Optional["TableData"] = None
     method: Literal["zscore"] = "zscore"
@@ -45,6 +48,7 @@ class DetectAnomaliesOutput(BaseModel):
 
     anomalies: List[Anomaly]
     summary: str
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
 
 
 class TableData(BaseModel):
@@ -84,6 +88,18 @@ class DetectAnomaliesTool(BaseTool):
         try:
             payload = DetectAnomaliesInput.model_validate(params or {})
             output = detect_anomalies(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = OutlierEvidence(
+                evidence_id=evidence_id(kind="outlier", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="outlier",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                candidates=[item.model_dump(mode="json") for item in output.anomalies],
+                method=payload.method,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

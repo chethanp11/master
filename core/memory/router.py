@@ -15,12 +15,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import importlib
 
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 from core.config.schema import Settings
-from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle
+from core.memory.base import ApprovalRecord, MemoryBackend, RunBundle, MemoryBackendLoadError
+from core.memory.in_memory import InMemoryBackend
 from core.memory.observability_store import ObservabilityStore
-from core.memory.sqlite_backend import SQLiteBackend
 
 
 class MemoryRouter(MemoryBackend):
@@ -30,11 +31,16 @@ class MemoryRouter(MemoryBackend):
         *,
         repo_root: Optional[Path] = None,
         observability_root: Optional[Path] = None,
+        mirror_inputs: bool = False,
     ) -> None:
         self.backend = backend
         # Observability store is internal to the memory layer; keep call sites centralized here.
         self._observability = (
-            ObservabilityStore(repo_root=repo_root, observability_root=observability_root)
+            ObservabilityStore(
+                repo_root=repo_root,
+                observability_root=observability_root,
+                mirror_inputs=mirror_inputs,
+            )
             if repo_root
             else None
         )
@@ -195,10 +201,31 @@ class MemoryRouter(MemoryBackend):
         memory_dir = storage_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
-        db_path = settings.secrets.memory_db_path
-        db_file = _resolve(db_path) if db_path else (memory_dir / "master.sqlite")
-        db_file.parent.mkdir(parents=True, exist_ok=True)
-
-        backend = SQLiteBackend(db_path=str(db_file))
-        backend.ensure_schema()
-        return cls(backend, repo_root=repo_root, observability_root=observability_dir)
+        backend: MemoryBackend
+        if settings.app.features.enable_sqlite_backend:
+            db_path = settings.secrets.memory_db_path
+            db_file = _resolve(db_path) if db_path else (memory_dir / "master.sqlite")
+            db_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                sqlite_module = importlib.import_module("core.memory.sqlite_backend")
+            except ImportError as exc:
+                raise MemoryBackendLoadError(
+                    code="sqlite_backend_unavailable",
+                    message="SQLite backend requested but module is not available.",
+                ) from exc
+            backend_cls = getattr(sqlite_module, "SQLiteBackend", None)
+            if backend_cls is None:
+                raise MemoryBackendLoadError(
+                    code="sqlite_backend_missing",
+                    message="SQLite backend requested but SQLiteBackend class is missing.",
+                )
+            backend = backend_cls(db_path=str(db_file))
+            backend.ensure_schema()
+        else:
+            backend = InMemoryBackend()
+        return cls(
+            backend,
+            repo_root=repo_root,
+            observability_root=observability_dir,
+            mirror_inputs=settings.app.features.observability_input_mirroring,
+        )

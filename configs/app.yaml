@@ -6,6 +6,11 @@ app:
   default_product: hello_world
   default_flow: hello_world
   api_base_url: "http://localhost:8000"
+  features:
+    observability_input_mirroring: true
+    enable_sqlite_backend: false
+    enable_vector_backend: false
+    enable_knowledge_index: false
   paths:
     repo_root: .
     configs_dir: configs

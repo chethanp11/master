@@ -1,29 +1,34 @@
 # Analytical Decision Engine — Architecture (v1)
 
-## Decision Chain
-- **User input** → file uploads are staged under `products/ade/staging/input/`, then copied into the run’s observability input directory under the configured observability root.  
-- **Planning agent** runs first but does not alter control flow (flow order is fixed).  
-- **Tools** execute: read → detect anomalies → recommend chart → build chart spec → assemble card.  
-- **LLM step** (`llm_reasoner`) generates a narrative summary from tool outputs.  
-- **Human approvals** gate visualization and export decisions.  
-- **Cards** are emitted as `InsightCard` objects with chart spec, narrative, metrics, and citations.  
-- **Export** writes a stub JSON plus optional HTML/PDF files into the run’s observability output directory.
+## Overview
+ADE is an intent-driven analysis runner for analysts. The orchestrator owns flow control; tools only compute facts. ADE supports HITL inputs and approvals, and produces a business insight HTML plus an evidence pack derived from events.
+
+## Run Lifecycle
+- **Input staging**: files are staged under `products/ade/staging/input/`, then moved into the run’s observability input directory.
+- **Intent understanding**: agent interprets the question and extracts scope (entities, timeframe, metrics).
+- **Clarification**: user inputs are requested when intent is ambiguous or underspecified.
+- **Planning**: an explicit plan is created (steps, tools, decision points).
+- **Execution**: tools run deterministically via the orchestrator; optional hypotheses only when required by plan.
+- **Decision gates**: approvals are required for key choices (hypotheses, charting, final framing).
+- **Synthesis**: LLMs are used only for interpretation and synthesis from tool outputs.
+- **Outputs**: business insight HTML and evidence pack are written to the observability store.
 
 ## Orchestrator Responsibilities
-- Controls the run lifecycle (plan → read → detect_anomalies → recommend_chart → summarize → llm_review → approval → chart_config → build_chart_spec → assemble_card → approval_export → export).  
-- Emits trace events per step/tool call into `<observability_root>/<product>/<run_id>/runtime/events.jsonl`.  
-- Ensures agents stay stateless and rely on `core/tools/executor.py` for tool execution.  
-- Applies guardrails via contracts and tool validation (chart types limited to the allowed set).
+- Controls the run lifecycle and step order based on the flow definition.
+- Emits trace events per step/tool call into `<observability_root>/<product>/<run_id>/runtime/events.jsonl`.
+- Enforces HITL pause/resume and governance checks.
+- Ensures tools execute only through `core/tools/executor.py`.
 
-## Contracts & Data Flow
-- `InsightCard` → final output with chart_type (line/bar/stacked_bar/scatter/table), key metrics, narrative, assumptions, citations, and optional data slices.  
-- Output files are emitted by the export tool and persisted by the observability store.
+## Artifacts and Data Flow
+- **Business Insight HTML**: shareable summary for business stakeholders (no debug dumps).
+- **Evidence Pack**: audit trail reconstructed from `events.jsonl` and structured run state.
+- Output files are persisted by the observability store; datasets are referenced, not duplicated.
 
-## Determinism & LLM Usage
-- Tooling (anomalies, chart spec, assembly) is deterministic and rule-based in v1.  
-- Narrative text is generated via `llm_reasoner`, which routes model calls through `core/models/router.py`.
+## Determinism and LLM Usage
+- Tools are deterministic and compute structured facts.
+- LLMs are used only for interpretation and synthesis, never for tool selection or control flow.
 
-## Data Governance
-- Trace events record each step outcome; export artifacts include the run id in metadata where applicable.  
-- Citations in cards reference CSV slices.  
-- Redaction is enforced in core governance hooks before trace/log emission.
+## Governance
+- Trace events record step outcomes and decisions.
+- User inputs and approvals are logged and replayable.
+- Redaction is enforced by core governance hooks before trace/log emission.

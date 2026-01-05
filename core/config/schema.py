@@ -38,6 +38,15 @@ class PathsConfig(BaseModel):
     observability_dir: str = Field(default="observability", description="Observability output directory")
 
 
+class FeatureFlagsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observability_input_mirroring: bool = Field(default=False)
+    enable_sqlite_backend: bool = Field(default=False)
+    enable_vector_backend: bool = Field(default=False)
+    enable_knowledge_index: bool = Field(default=False)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,6 +61,7 @@ class AppConfig(BaseModel):
         description="Base URL for Gateway API used by UI clients.",
     )
     paths: PathsConfig = Field(default_factory=PathsConfig)
+    features: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
 
 
 # ==============================

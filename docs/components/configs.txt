@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T15:55:09.054047+00:00
+# captured_at: 2026-01-05T07:45:17.816856+00:00
 
 # configs/app.yaml
 app:
@@ -9,6 +9,11 @@ app:
   default_product: hello_world
   default_flow: hello_world
   api_base_url: "http://localhost:8000"
+  features:
+    observability_input_mirroring: true
+    enable_sqlite_backend: false
+    enable_vector_backend: false
+    enable_knowledge_index: false
   paths:
     repo_root: .
     configs_dir: configs
@@ -82,7 +87,7 @@ model_max_tokens: 512
 # Max tokens across the entire run (sum of model usage).
 max_tokens_per_run: null
 # Demo safety caps: keep small and deterministic for public Spaces usage.
-max_steps: 10
+max_steps: 20
 max_tool_calls: 10
 max_payload_bytes: 65536
 #
@@ -97,6 +102,8 @@ by_product:
       - echo_tool
     allowed_models:
       - gpt-4o-mini
+  ade:
+    max_steps: 20
 
 # configs/products.yaml
 # ==============================

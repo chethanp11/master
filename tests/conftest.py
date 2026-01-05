@@ -90,7 +90,7 @@ class FakeToolBackend:
                 details={"params": params},
             )
             return ToolResult(ok=False, data=None, error=err, meta=meta)
-        return ToolResult.ok(data={"result": "ok"}, meta=meta)
+        return ToolResult(ok=True, data={"result": "ok"}, error=None, meta=meta)
 
 
 @pytest.fixture

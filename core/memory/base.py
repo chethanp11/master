@@ -26,6 +26,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.contracts.run_schema import RunRecord, StepRecord, TraceEvent
 
 
+class MemoryBackendLoadError(Exception):
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {"code": self.code, "message": self.message}
+
+
 class ApprovalRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

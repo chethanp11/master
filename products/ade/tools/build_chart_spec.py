@@ -9,8 +9,8 @@ from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolR
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
-ChartInputType = Literal["auto", "line", "bar", "stacked_bar", "scatter", "table"]
+ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
+ChartInputType = Literal["auto", "line", "bar", "area", "stacked_bar", "scatter", "table"]
 
 
 class ChartData(BaseModel):
@@ -70,10 +70,17 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
     if chart_type == "table":
         spec["encoding"] = encoding
     else:
-        if payload.x is None or payload.x not in columns:
-            raise ValueError("missing or unknown x field")
-        if payload.y is None or payload.y not in columns:
-            raise ValueError("missing or unknown y field")
+        if payload.x is None or payload.x not in columns or payload.y is None or payload.y not in columns:
+            chart_type = "table"
+            caveats.append("fallback_to_table_missing_axes")
+            spec["type"] = chart_type
+            spec["encoding"] = encoding
+            summary = f"built spec for {chart_type}"
+            return BuildChartSpecOutput(
+                chart_spec=spec,
+                summary=summary,
+                caveats=caveats,
+            )
         encoding["x"] = {"field": payload.x}
         encoding["y"] = {"field": payload.y}
         if chart_type == "stacked_bar":

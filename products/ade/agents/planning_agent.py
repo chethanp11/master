@@ -21,7 +21,19 @@ class PlanningAgent(BaseAgent):
     name = "planning_agent"
     description = "Produces a replan note and a suggested restart step based on rejection context."
 
-    def _analysis_plan(self, focus_metric: str, chart_type: str, time_axis: str) -> Dict[str, Any]:
+    def _analysis_plan(
+        self,
+        focus_metric: str,
+        chart_type: str,
+        time_axis: str,
+        include_hypothesis_checks: bool,
+    ) -> Dict[str, Any]:
+        hypothesis_tests = [
+            "test variance vs baseline",
+            "test segment lift vs control",
+        ]
+        if not include_hypothesis_checks:
+            hypothesis_tests = ["skipped_by_user_preference"]
         return {
             "baseline_comparisons": [
                 "compare recent period vs prior period",
@@ -35,14 +47,12 @@ class PlanningAgent(BaseAgent):
                 "check periodic patterns across time buckets",
                 "flag deviations from expected seasonal bands",
             ],
-            "hypothesis_tests": [
-                "test variance vs baseline",
-                "test segment lift vs control",
-            ],
+            "hypothesis_tests": hypothesis_tests,
             "user_inputs": {
                 "focus_metric": focus_metric,
                 "chart_type": chart_type,
                 "time_axis": time_axis,
+                "include_hypothesis_checks": include_hypothesis_checks,
             },
         }
 
@@ -62,6 +72,22 @@ class PlanningAgent(BaseAgent):
             return selection.strip()
         return default
 
+    @staticmethod
+    def _resolve_viz_pref(artifacts: Dict[str, Any], key: str, default: Any) -> Any:
+        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
+        if not isinstance(user_inputs, dict):
+            return default
+        entry = user_inputs.get("viz_preferences")
+        if not isinstance(entry, dict):
+            return default
+        values = entry.get("values")
+        if not isinstance(values, dict):
+            return default
+        value = values.get(key)
+        if value is None:
+            return default
+        return value
+
     def run(self, step_context: StepContext) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
@@ -70,9 +96,15 @@ class PlanningAgent(BaseAgent):
                 previous_run=payload.get("previous_run", {}),
             )
             interpreted_intent = (payload.get("prompt") or "").strip()
-            focus_metric = self._resolve_user_selection(step_context.run.artifacts, "select_focus_metric", "mean")
-            chart_type = self._resolve_user_selection(step_context.run.artifacts, "select_chart_type", "bar")
-            time_axis = self._resolve_user_selection(step_context.run.artifacts, "confirm_time_axis", "yes")
+            focus_metric = self._resolve_viz_pref(step_context.run.artifacts, "metric_focus", "mean")
+            chart_type = self._resolve_viz_pref(step_context.run.artifacts, "chart_type", "bar")
+            include_hypothesis_checks = bool(
+                self._resolve_viz_pref(step_context.run.artifacts, "include_hypothesis_checks", True)
+            )
+            time_axis = "auto"
+            data_reader = step_context.run.artifacts.get("tool.data_reader.output")
+            if isinstance(data_reader, dict):
+                time_axis = str(data_reader.get("x_field") or "auto")
             comment = (plan.comment or "").strip()
             note = "Replan requested."
             if comment:
@@ -117,12 +149,18 @@ class PlanningAgent(BaseAgent):
                     "note": note,
                     "start_step_id": start_step_id,
                     "decision_reason": reason,
-                    "analysis_plan": self._analysis_plan(focus_metric, chart_type, time_axis),
+                    "analysis_plan": self._analysis_plan(
+                        focus_metric,
+                        chart_type,
+                        time_axis,
+                        include_hypothesis_checks,
+                    ),
                     "interpreted_intent": interpreted_intent,
                     "analysis_preferences": {
                         "focus_metric": focus_metric,
                         "chart_type": chart_type,
                         "time_axis": time_axis,
+                        "include_hypothesis_checks": include_hypothesis_checks,
                     },
                 },
                 error=None,

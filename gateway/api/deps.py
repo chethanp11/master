@@ -5,6 +5,7 @@ from __future__ import annotations
 # ==============================
 
 from functools import lru_cache
+from pathlib import Path
 
 from core.config.loader import load_settings
 from core.utils.product_loader import discover_products, register_enabled_products, ProductCatalog
@@ -12,10 +13,12 @@ from core.orchestrator.engine import OrchestratorEngine
 from core.memory.router import MemoryRouter
 from core.memory.tracing import Tracer
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 @lru_cache(maxsize=1)
 def get_settings():
-    return load_settings()
+    return load_settings(repo_root=str(REPO_ROOT))
 
 
 @lru_cache(maxsize=1)

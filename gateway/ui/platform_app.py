@@ -97,12 +97,16 @@ class ApiClient:
         selected_option_ids: Optional[List[str]] = None,
         free_text: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        values: Optional[Dict[str, Any]] = None,
+        comment: Optional[str] = None,
     ) -> ApiResponse:
         payload = {
             "prompt_id": prompt_id,
             "selected_option_ids": selected_option_ids,
             "free_text": free_text,
             "metadata": metadata or {},
+            "values": values,
+            "comment": comment or "",
         }
         return self._request("POST", f"/api/runs/{run_id}/user_input", payload)
 
@@ -148,7 +152,7 @@ def _resolve_path(path_str: str) -> Path:
 
 
 def _observability_root(settings: Optional[Any] = None) -> Path:
-    resolved = settings or load_settings()
+    resolved = settings or load_settings(repo_root=str(REPO_ROOT))
     path = Path(resolved.app.paths.observability_dir)
     return path if path.is_absolute() else (resolved.repo_root_path() / path)
 
@@ -434,7 +438,7 @@ def _render_run_history(*, observability_root: Path) -> None:
             st.write(f"Events: {len(events)}")
             approvals_from_output: List[Dict[str, Any]] = []
             output_dir = observability_root / product / run_id / "output"
-            base_url = _api_base_url(load_settings())
+            base_url = _api_base_url(load_settings(repo_root=str(REPO_ROOT)))
             if output_dir.exists() and output_dir.is_dir():
                 response_path = output_dir / "response.json"
                 if response_path.exists():
@@ -443,12 +447,24 @@ def _render_run_history(*, observability_root: Path) -> None:
                         approvals_from_output = response_payload.get("approvals") or []
                     except Exception:
                         approvals_from_output = []
-                output_files = sorted([p for p in output_dir.iterdir() if p.is_file()])
+                output_files = [p for p in output_dir.iterdir() if p.is_file()]
+                def _output_rank(path: Path) -> Tuple[int, str]:
+                    if path.name == "business_report.html":
+                        return (0, path.name)
+                    if path.name == "decision_packet.html":
+                        return (1, path.name)
+                    return (2, path.name)
+                output_files = sorted(output_files, key=_output_rank)
                 if output_files:
                     st.markdown("**Outputs**")
                     for output_file in output_files:
+                        label = (
+                            "Download Business Report"
+                            if output_file.name == "business_report.html"
+                            else f"Download {output_file.name}"
+                        )
                         st.markdown(
-                            f"[Download {output_file.name}]({base_url}/api/output/{product}/{run_id}/{output_file.name})"
+                            f"[{label}]({base_url}/api/output/{product}/{run_id}/{output_file.name})"
                         )
             if events:
                 step_state: Dict[str, Dict[str, str]] = {}
@@ -704,12 +720,36 @@ def _pending_user_input_runs(client: ApiClient) -> List[Dict[str, Any]]:
     return pending
 
 
-def _render_user_input_prompt(prompt: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[str]]:
+def _render_user_input_prompt(prompt: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[str], Dict[str, Any]]:
     options = prompt.get("options") if isinstance(prompt.get("options"), list) else []
     defaults = prompt.get("defaults") if isinstance(prompt.get("defaults"), dict) else {}
     allow_free_text = bool(prompt.get("allow_free_text"))
+    schema = prompt.get("schema") if isinstance(prompt.get("schema"), dict) else {}
+    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     selected_ids: Optional[List[str]] = None
     free_text: Optional[str] = None
+    values: Dict[str, Any] = {}
+
+    if properties:
+        for key, spec in properties.items():
+            if not isinstance(spec, dict):
+                continue
+            label = key.replace("_", " ").title()
+            value = defaults.get(key)
+            if spec.get("type") == "string" and isinstance(spec.get("enum"), list):
+                choices = [str(item) for item in spec.get("enum", [])]
+                if value not in choices and choices:
+                    value = choices[0]
+                selection = st.selectbox(label, choices, index=choices.index(value) if value in choices else 0)
+                values[key] = selection
+            elif spec.get("type") == "boolean":
+                values[key] = st.checkbox(label, value=bool(value))
+            else:
+                if key in {"notes", "comment", "description"}:
+                    values[key] = st.text_area(label, value=str(value or ""), height=120)
+                else:
+                    values[key] = st.text_input(label, value=str(value or ""))
+        return selected_ids, free_text, values
 
     if options:
         option_ids = [opt.get("option_id") for opt in options if isinstance(opt, dict) and opt.get("option_id")]
@@ -726,7 +766,7 @@ def _render_user_input_prompt(prompt: Dict[str, Any]) -> Tuple[Optional[List[str
     if allow_free_text:
         free_text = st.text_area("Free text", value="", height=120)
 
-    return selected_ids, free_text
+    return selected_ids, free_text, values
 
 
 def _render_user_inputs(client: ApiClient) -> None:
@@ -767,7 +807,7 @@ def _render_user_inputs(client: ApiClient) -> None:
     if question:
         st.write(question)
 
-    selected_ids, free_text = _render_user_input_prompt(prompt)
+    selected_ids, free_text, values = _render_user_input_prompt(prompt)
     if st.button("Submit input", type="primary", disabled=not run_id.strip()):
         prompt_id = str(prompt.get("prompt_id") or "")
         if not prompt_id:
@@ -779,6 +819,7 @@ def _render_user_inputs(client: ApiClient) -> None:
             selected_option_ids=selected_ids,
             free_text=free_text,
             metadata={"source": "ui"},
+            values=values or None,
         )
         if resp.ok:
             st.success(f"User input submitted for run: {run_id.strip()}")
@@ -795,7 +836,7 @@ def _render_user_inputs(client: ApiClient) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="master platform", layout="wide")
-    settings = load_settings()
+    settings = load_settings(repo_root=str(REPO_ROOT))
     observability_root = _observability_root()
     api_base = _api_base_url(settings)
     client = ApiClient(api_base)
@@ -966,7 +1007,7 @@ def main() -> None:
                     else:
                         st.markdown("### User input required")
                         st.write(prompt.get("question") or "Provide input")
-                        selected_ids, free_text = _render_user_input_prompt(prompt)
+                        selected_ids, free_text, values = _render_user_input_prompt(prompt)
                         if st.button("Submit input", type="primary"):
                             prompt_id = str(prompt.get("prompt_id") or "")
                             if not prompt_id:
@@ -978,6 +1019,7 @@ def main() -> None:
                                     selected_option_ids=selected_ids,
                                     free_text=free_text,
                                     metadata={"source": "ui"},
+                                    values=values or None,
                                 )
                                 if resp.ok:
                                     st.success("User input submitted. Refreshing run status...")

@@ -1,4 +1,4 @@
-# captured_at: 2026-01-04T15:55:09.066776+00:00
+# captured_at: 2026-01-05T07:45:17.830733+00:00
 
 # products/__init__.py
 """Product packs namespace package."""
@@ -10,8 +10,9 @@
 """Analytical Decision Engine agents package."""
 
 # products/ade/agents/dashboard_agent.py
-# Analytical Decision Engine agent
 from __future__ import annotations
+
+# Analytical Decision Engine agent
 
 from typing import Any, Dict
 
@@ -50,7 +51,144 @@ class DashboardAgent(BaseAgent):
 def build() -> DashboardAgent:
     return DashboardAgent()
 
+# products/ade/agents/plan_proposal_agent.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.agents.base import BaseAgent
+from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
+from core.contracts.plan_schema import EstimatedCost, PlanProposal, PlanStep
+from core.orchestrator.context import StepContext
+
+
+class PlanProposalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment: str = Field(default="")
+
+
+class PlanProposalAgent(BaseAgent):
+    name = "plan_proposal_agent"
+    description = "Generates a deterministic plan proposal for ADE flows."
+
+    @staticmethod
+    def _resolve_pref(artifacts: Dict[str, Any], key: str, default: Any) -> Any:
+        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
+        if not isinstance(user_inputs, dict):
+            return default
+        entry = user_inputs.get("viz_preferences")
+        if not isinstance(entry, dict):
+            return default
+        values = entry.get("values")
+        if not isinstance(values, dict):
+            return default
+        value = values.get(key)
+        return default if value is None else value
+
+    def run(self, step_context: StepContext) -> AgentResult:
+        try:
+            payload = step_context.run.payload or {}
+            plan_input = PlanProposalInput(comment=payload.get("replan_comment", ""))
+            chart_type = str(self._resolve_pref(step_context.run.artifacts, "chart_type", "bar"))
+            metric_focus = str(self._resolve_pref(step_context.run.artifacts, "metric_focus", "mean"))
+            include_hypothesis_checks = bool(
+                self._resolve_pref(step_context.run.artifacts, "include_hypothesis_checks", True)
+            )
+            notes = str(self._resolve_pref(step_context.run.artifacts, "notes", "") or "")
+
+            steps: List[PlanStep] = [
+                PlanStep(
+                    step_id="compute_business_metrics",
+                    description="Compute business metrics for reporting.",
+                    step_type="tool",
+                    tool="compute_business_metrics",
+                ),
+            ]
+            if include_hypothesis_checks:
+                steps.extend(
+                    [
+                        PlanStep(
+                            step_id="hypothesis_data_outage",
+                            description="Check for recent outage patterns.",
+                            step_type="tool",
+                            tool="hypothesis_test_data_outage",
+                        ),
+                        PlanStep(
+                            step_id="hypothesis_seasonality",
+                            description="Check for seasonal signals.",
+                            step_type="tool",
+                            tool="hypothesis_test_seasonality",
+                        ),
+                    ]
+                )
+            steps.extend(
+                [
+                    PlanStep(
+                        step_id="build_chart_spec",
+                        description="Build chart spec using selected chart type.",
+                        step_type="tool",
+                        tool="build_chart_spec",
+                    ),
+                    PlanStep(
+                        step_id="assemble_evidence_bundle",
+                        description="Assemble deterministic evidence bundle.",
+                        step_type="tool",
+                        tool="assemble_evidence_bundle",
+                    ),
+                    PlanStep(
+                        step_id="assemble_decision_packet",
+                        description="Assemble decision packet with evidence and narratives.",
+                        step_type="tool",
+                        tool="assemble_decision_packet",
+                    ),
+                    PlanStep(
+                        step_id="assemble_business_report",
+                        description="Assemble business report for stakeholders.",
+                        step_type="tool",
+                        tool="assemble_business_report",
+                    ),
+                    PlanStep(
+                        step_id="render_business_report_html",
+                        description="Render business report HTML.",
+                        step_type="tool",
+                        tool="render_business_report_html",
+                    ),
+                    PlanStep(
+                        step_id="render_decision_packet_html",
+                        description="Render decision packet to HTML.",
+                        step_type="tool",
+                        tool="render_decision_packet_html",
+                    ),
+                ]
+            )
+
+            checks_summary = "hypothesis checks enabled" if include_hypothesis_checks else "hypothesis checks skipped"
+            summary = (
+                f"Plan uses chart '{chart_type}' and focuses on '{metric_focus}'. "
+                f"{checks_summary}. {notes}".strip()
+            )
+            plan = PlanProposal(
+                summary=summary,
+                steps=steps,
+                required_tools=[step.tool for step in steps if step.tool],
+                approvals=[],
+                estimated_cost=EstimatedCost(currency="USD", amount=0.0, tokens=0, details={"comment": plan_input.comment}),
+            )
+            meta = AgentMeta(agent_name=self.name)
+            return AgentResult(ok=True, data=plan.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=AgentMeta(agent_name=self.name))
+
+
+def build() -> PlanProposalAgent:
+    return PlanProposalAgent()
+
 # products/ade/agents/planning_agent.py
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -73,7 +211,19 @@ class PlanningAgent(BaseAgent):
     name = "planning_agent"
     description = "Produces a replan note and a suggested restart step based on rejection context."
 
-    def _analysis_plan(self) -> Dict[str, Any]:
+    def _analysis_plan(
+        self,
+        focus_metric: str,
+        chart_type: str,
+        time_axis: str,
+        include_hypothesis_checks: bool,
+    ) -> Dict[str, Any]:
+        hypothesis_tests = [
+            "test variance vs baseline",
+            "test segment lift vs control",
+        ]
+        if not include_hypothesis_checks:
+            hypothesis_tests = ["skipped_by_user_preference"]
         return {
             "baseline_comparisons": [
                 "compare recent period vs prior period",
@@ -87,11 +237,46 @@ class PlanningAgent(BaseAgent):
                 "check periodic patterns across time buckets",
                 "flag deviations from expected seasonal bands",
             ],
-            "hypothesis_tests": [
-                "test variance vs baseline",
-                "test segment lift vs control",
-            ],
+            "hypothesis_tests": hypothesis_tests,
+            "user_inputs": {
+                "focus_metric": focus_metric,
+                "chart_type": chart_type,
+                "time_axis": time_axis,
+                "include_hypothesis_checks": include_hypothesis_checks,
+            },
         }
+
+    @staticmethod
+    def _resolve_user_selection(artifacts: Dict[str, Any], form_id: str, default: str) -> str:
+        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
+        if not isinstance(user_inputs, dict):
+            return default
+        entry = user_inputs.get(form_id)
+        if not isinstance(entry, dict):
+            return default
+        values = entry.get("values")
+        if not isinstance(values, dict):
+            return default
+        selection = values.get("selection") or values.get("value") or values.get("text")
+        if isinstance(selection, str) and selection.strip():
+            return selection.strip()
+        return default
+
+    @staticmethod
+    def _resolve_viz_pref(artifacts: Dict[str, Any], key: str, default: Any) -> Any:
+        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
+        if not isinstance(user_inputs, dict):
+            return default
+        entry = user_inputs.get("viz_preferences")
+        if not isinstance(entry, dict):
+            return default
+        values = entry.get("values")
+        if not isinstance(values, dict):
+            return default
+        value = values.get(key)
+        if value is None:
+            return default
+        return value
 
     def run(self, step_context: StepContext) -> AgentResult:
         try:
@@ -101,6 +286,15 @@ class PlanningAgent(BaseAgent):
                 previous_run=payload.get("previous_run", {}),
             )
             interpreted_intent = (payload.get("prompt") or "").strip()
+            focus_metric = self._resolve_viz_pref(step_context.run.artifacts, "metric_focus", "mean")
+            chart_type = self._resolve_viz_pref(step_context.run.artifacts, "chart_type", "bar")
+            include_hypothesis_checks = bool(
+                self._resolve_viz_pref(step_context.run.artifacts, "include_hypothesis_checks", True)
+            )
+            time_axis = "auto"
+            data_reader = step_context.run.artifacts.get("tool.data_reader.output")
+            if isinstance(data_reader, dict):
+                time_axis = str(data_reader.get("x_field") or "auto")
             comment = (plan.comment or "").strip()
             note = "Replan requested."
             if comment:
@@ -145,8 +339,19 @@ class PlanningAgent(BaseAgent):
                     "note": note,
                     "start_step_id": start_step_id,
                     "decision_reason": reason,
-                    "analysis_plan": self._analysis_plan(),
+                    "analysis_plan": self._analysis_plan(
+                        focus_metric,
+                        chart_type,
+                        time_axis,
+                        include_hypothesis_checks,
+                    ),
                     "interpreted_intent": interpreted_intent,
+                    "analysis_preferences": {
+                        "focus_metric": focus_metric,
+                        "chart_type": chart_type,
+                        "time_axis": time_axis,
+                        "include_hypothesis_checks": include_hypothesis_checks,
+                    },
                 },
                 error=None,
                 meta=meta,
@@ -160,6 +365,7 @@ def build() -> PlanningAgent:
     return PlanningAgent()
 
 # products/ade/agents/sufficiency_evaluator.py
+
 from __future__ import annotations
 
 from math import sqrt
@@ -361,6 +567,7 @@ from products.ade.contracts.decision_section import DecisionSection
 __all__ = ["DecisionPacket", "DecisionSection"]
 
 # products/ade/contracts/card.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional, Union
@@ -383,7 +590,7 @@ class InsightCard(BaseModel):
 
     card_id: str
     title: str
-    chart_type: Literal["line", "bar", "stacked_bar", "scatter", "table"]
+    chart_type: Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
     chart_spec: Dict[str, Any]
     key_metrics: List[KeyMetric]
     narrative: str
@@ -394,6 +601,7 @@ class InsightCard(BaseModel):
     anomalies: Optional[List[Dict[str, Any]]] = None
 
 # products/ade/contracts/citations.py
+
 from __future__ import annotations
 
 from typing import List, Literal, Optional
@@ -427,6 +635,7 @@ class CitationRef(BaseModel):
     pdf: Optional[PdfCitation] = None
 
 # products/ade/contracts/decision_packet.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -448,6 +657,7 @@ class DecisionPacket(BaseModel):
     trace_refs: List[Dict[str, Any]]
 
 # products/ade/contracts/decision_section.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -468,6 +678,7 @@ class DecisionSection(BaseModel):
     rejected_alternatives: Optional[List[str]] = None
 
 # products/ade/contracts/slices.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Literal
@@ -538,6 +749,49 @@ steps:
       max_attempts: 2
       backoff_seconds: 1
 
+  - id: "viz_preferences"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "viz_preferences"
+      title: "Visualization preferences"
+      prompt: "Choose chart type + metrics focus"
+      input_type: "text"
+      mode: "choice_input"
+      required:
+        - "chart_type"
+        - "metric_focus"
+      defaults:
+        chart_type: "bar"
+        metric_focus: "anomalies"
+        include_hypothesis_checks: true
+        notes: ""
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["bar", "line", "area", "scatter"]
+          metric_focus:
+            type: "string"
+            enum: ["mean", "sum", "median", "growth_rate", "anomalies"]
+          include_hypothesis_checks:
+            type: "boolean"
+          notes:
+            type: "string"
+
+  - id: "compute_business_metrics"
+    type: "tool"
+    backend: "local"
+    tool: "compute_business_metrics"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      columns: "{{artifacts.tool.data_reader.output.columns}}"
+      rows: "{{artifacts.tool.data_reader.output.rows}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
   - id: "sufficiency_eval"
     type: "agent"
     backend: "local"
@@ -550,28 +804,60 @@ steps:
     agent: "planning_agent"
     params: {}
 
-  - id: "compute_anomalies"
+  - id: "plan_proposal"
+    type: "plan_proposal"
+    backend: "local"
+    agent: "plan_proposal_agent"
+    params: {}
+
+  - id: "build_chart_spec"
     type: "tool"
     backend: "local"
-    tool: "detect_anomalies"
+    tool: "build_chart_spec"
     params:
-      series: "{{artifacts.tool.data_reader.output.series}}"
-      data: "{{artifacts.tool.data_reader.output.data}}"
-      min_points: 3
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      fallback_chart_type: "bar"
+      title: "Evidence chart"
+      x: "{{artifacts.tool.data_reader.output.x_field}}"
+      y: "{{artifacts.tool.data_reader.output.y_field}}"
+      series: "{{artifacts.tool.data_reader.output.category_field}}"
+      data:
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
+        rows: "{{artifacts.tool.data_reader.output.rows}}"
+      evidence_ref:
+        dataset_id: "{{payload.dataset}}"
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
 
   - id: "hypothesis_data_outage"
     type: "tool"
     backend: "local"
     tool: "hypothesis_test_data_outage"
     params:
+      dataset_id: "{{payload.dataset}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
   - id: "hypothesis_seasonality"
     type: "tool"
     backend: "local"
     tool: "hypothesis_test_seasonality"
     params:
+      dataset_id: "{{payload.dataset}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "assemble_evidence_bundle"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_evidence_bundle"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      intent: "{{payload.prompt}}"
+      selections: "{{artifacts.user_input.viz_preferences.values}}"
+      items:
+        - "{{artifacts.tool.compute_business_metrics.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_data_outage.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_seasonality.output.evidence_items}}"
 
   - id: "assemble_decision_packet"
     type: "tool"
@@ -579,7 +865,7 @@ steps:
     tool: "assemble_decision_packet"
     params:
       question: "{{payload.prompt}}"
-      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks."
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}. Hypothesis checks: {{artifacts.tool.hypothesis_test_data_outage.output.status}} / {{artifacts.tool.hypothesis_test_seasonality.output.status}}."
       confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
       assumptions:
         - "Inputs reflect the provided dataset."
@@ -589,16 +875,21 @@ steps:
         - "Evidence tables are limited to uploaded rows."
       trace_refs:
         - step_id: "read"
-        - step_id: "compute_anomalies"
+        - step_id: "build_chart_spec"
         - step_id: "hypothesis_data_outage"
         - step_id: "hypothesis_seasonality"
+        - user_inputs:
+            chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+            metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+            include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
       sections:
         - section_id: "sufficiency"
           title: "Data sufficiency"
           intent: "{{payload.prompt}}"
-          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}."
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}."
           claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
           visuals:
+            - chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
             - table:
                 columns: "{{artifacts.tool.data_reader.output.columns}}"
                 rows: "{{artifacts.tool.data_reader.output.rows}}"
@@ -617,6 +908,237 @@ steps:
             - dataset_id: "{{payload.dataset}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
 
+  - id: "assemble_business_report"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_business_report"
+    params:
+      metrics: "{{artifacts.tool.compute_business_metrics.output}}"
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
+      downgrade_reasons: "{{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "render_business_report_html"
+    type: "tool"
+    backend: "local"
+    tool: "render_business_report_html"
+    params:
+      report: "{{artifacts.tool.assemble_business_report.output.report}}"
+
+  - id: "render_decision_packet_html"
+    type: "tool"
+    backend: "local"
+    tool: "render_decision_packet_html"
+    params:
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
+
+# products/ade/flows/visualization.yaml
+# ==============================
+# Flow: visualization
+# ==============================
+# Golden path:
+#   1) Interpret intent and plan
+#   2) Read dataset evidence
+#   3) Evaluate sufficiency and run hypothesis tests
+#   4) Assemble decision packet and render HTML
+
+id: "visualization"
+version: "1.0.0"
+description: "Deterministic ADE decision packet generation"
+autonomy_level: "suggest_only"
+
+steps:
+  - id: "intent_interpretation"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "read"
+    type: "tool"
+    backend: "local"
+    tool: "data_reader"
+    params:
+      dataset: "{{payload.dataset}}"
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+
+  - id: "viz_preferences"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "viz_preferences"
+      title: "Visualization preferences"
+      prompt: "Choose chart type + metrics focus"
+      input_type: "text"
+      mode: "choice_input"
+      required:
+        - "chart_type"
+        - "metric_focus"
+      defaults:
+        chart_type: "bar"
+        metric_focus: "anomalies"
+        include_hypothesis_checks: true
+        notes: ""
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["bar", "line", "area", "scatter"]
+          metric_focus:
+            type: "string"
+            enum: ["mean", "sum", "median", "growth_rate", "anomalies"]
+          include_hypothesis_checks:
+            type: "boolean"
+          notes:
+            type: "string"
+
+  - id: "compute_business_metrics"
+    type: "tool"
+    backend: "local"
+    tool: "compute_business_metrics"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      columns: "{{artifacts.tool.data_reader.output.columns}}"
+      rows: "{{artifacts.tool.data_reader.output.rows}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "sufficiency_eval"
+    type: "agent"
+    backend: "local"
+    agent: "sufficiency_evaluator"
+    params: {}
+
+  - id: "planning"
+    type: "agent"
+    backend: "local"
+    agent: "planning_agent"
+    params: {}
+
+  - id: "plan_proposal"
+    type: "plan_proposal"
+    backend: "local"
+    agent: "plan_proposal_agent"
+    params: {}
+
+  - id: "compute_anomalies"
+    type: "tool"
+    backend: "local"
+    tool: "detect_anomalies"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
+      min_points: 3
+
+  - id: "build_chart_spec"
+    type: "tool"
+    backend: "local"
+    tool: "build_chart_spec"
+    params:
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      fallback_chart_type: "bar"
+      title: "Evidence chart"
+      x: "{{artifacts.tool.data_reader.output.x_field}}"
+      y: "{{artifacts.tool.data_reader.output.y_field}}"
+      series: "{{artifacts.tool.data_reader.output.category_field}}"
+      data:
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
+        rows: "{{artifacts.tool.data_reader.output.rows}}"
+      evidence_ref:
+        dataset_id: "{{payload.dataset}}"
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
+
+  - id: "hypothesis_data_outage"
+    type: "tool"
+    backend: "local"
+    tool: "hypothesis_test_data_outage"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "hypothesis_seasonality"
+    type: "tool"
+    backend: "local"
+    tool: "hypothesis_test_seasonality"
+    params:
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "assemble_decision_packet"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_decision_packet"
+    params:
+      question: "{{payload.prompt}}"
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}. Hypothesis checks: {{artifacts.tool.hypothesis_test_data_outage.output.status}} / {{artifacts.tool.hypothesis_test_seasonality.output.status}}."
+      confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
+      assumptions:
+        - "Inputs reflect the provided dataset."
+        - "No external data sources are used."
+      limitations:
+        - "Hypothesis checks are heuristic."
+        - "Evidence tables are limited to uploaded rows."
+      trace_refs:
+        - step_id: "read"
+        - step_id: "compute_anomalies"
+        - step_id: "build_chart_spec"
+        - step_id: "hypothesis_data_outage"
+        - step_id: "hypothesis_seasonality"
+        - user_inputs:
+            chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+            metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+            include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+      sections:
+        - section_id: "sufficiency"
+          title: "Data sufficiency"
+          intent: "{{payload.prompt}}"
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}."
+          claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
+          visuals:
+            - chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
+            - table:
+                columns: "{{artifacts.tool.data_reader.output.columns}}"
+                rows: "{{artifacts.tool.data_reader.output.rows}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
+        - section_id: "hypotheses"
+          title: "Hypothesis checks"
+          intent: "Evaluate alternative explanations"
+          narrative: "Data outage: {{artifacts.tool.hypothesis_test_data_outage.output.status}} ({{artifacts.tool.hypothesis_test_data_outage.output.reasoning}}). Seasonality: {{artifacts.tool.hypothesis_test_seasonality.output.status}} ({{artifacts.tool.hypothesis_test_seasonality.output.reasoning}})."
+          claim_strength: "medium"
+          rejected_alternatives:
+            - "data_outage={{artifacts.tool.hypothesis_test_data_outage.output.status}}"
+            - "seasonality={{artifacts.tool.hypothesis_test_seasonality.output.status}}"
+          evidence_refs:
+            - dataset_id: "{{payload.dataset}}"
+              columns: "{{artifacts.tool.data_reader.output.columns}}"
+
+  - id: "assemble_business_report"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_business_report"
+    params:
+      metrics: "{{artifacts.tool.compute_business_metrics.output}}"
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
+      downgrade_reasons: "{{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "render_business_report_html"
+    type: "tool"
+    backend: "local"
+    tool: "render_business_report_html"
+    params:
+      report: "{{artifacts.tool.assemble_business_report.output.report}}"
+
   - id: "render_decision_packet_html"
     type: "tool"
     backend: "local"
@@ -631,11 +1153,12 @@ display_name: "Analytical Decision Engine"
 description: "Produces audit-ready analytical decisions with evidence, confidence, and traceability. Visuals are supporting artifacts, not the primary output."
 version: "0.1.0"
 
-default_flow: "ade_v1"
+default_flow: "visualization"
 
 exposed_api:
   enabled: true
   allowed_flows:
+    - "visualization"
     - "ade_v1"
 
 ui_enabled: true
@@ -651,6 +1174,7 @@ ui:
       title: "Approvals Queue"
 
 flows:
+  - "visualization"
   - "ade_v1"
 
 # products/ade/registry.py
@@ -688,13 +1212,19 @@ Example (after you create a tool/agent):
 from __future__ import annotations
 
 
+
+
 from core.utils.product_loader import ProductRegistries
 from products.ade.agents.dashboard_agent import build as build_agent
+from products.ade.agents.plan_proposal_agent import build as build_plan_proposal_agent
 from products.ade.agents.planning_agent import build as build_planning_agent
 from products.ade.agents.sufficiency_evaluator import build as build_sufficiency_evaluator
 from products.ade.tools.assemble_decision_packet import build as build_assemble_decision_packet
+from products.ade.tools.assemble_evidence_bundle import build as build_assemble_evidence_bundle
+from products.ade.tools.assemble_business_report import build as build_assemble_business_report
 from products.ade.tools.assemble_insight_card import build as build_assemble_insight_card
 from products.ade.tools.build_chart_spec import build as build_chart_spec
+from products.ade.tools.compute_business_metrics import build as build_compute_business_metrics
 from products.ade.tools.data_reader import build as build_data_reader
 from products.ade.tools.detect_anomalies import build as build_detect_anomalies
 from products.ade.tools.driver_analysis import build as build_driver_analysis
@@ -702,11 +1232,13 @@ from products.ade.tools.export_pdf import build as build_export_pdf
 from products.ade.tools.hypothesis_test_data_outage import build as build_hypothesis_test_data_outage
 from products.ade.tools.hypothesis_test_seasonality import build as build_hypothesis_test_seasonality
 from products.ade.tools.render_decision_packet_html import build as build_render_decision_packet_html
+from products.ade.tools.render_business_report_html import build as build_render_business_report_html
 from products.ade.tools.recommend_chart import build as build_recommend_chart
 
 
 def register(registries: ProductRegistries) -> None:
     registries.agent_registry.register(build_agent().name, build_agent)
+    registries.agent_registry.register(build_plan_proposal_agent().name, build_plan_proposal_agent)
     registries.agent_registry.register(build_planning_agent().name, build_planning_agent)
     registries.agent_registry.register(build_sufficiency_evaluator().name, build_sufficiency_evaluator)
     registries.tool_registry.register(build_data_reader().name, build_data_reader)
@@ -716,10 +1248,213 @@ def register(registries: ProductRegistries) -> None:
     registries.tool_registry.register(build_driver_analysis().name, build_driver_analysis)
     registries.tool_registry.register(build_assemble_insight_card().name, build_assemble_insight_card)
     registries.tool_registry.register(build_assemble_decision_packet().name, build_assemble_decision_packet)
+    registries.tool_registry.register(build_assemble_evidence_bundle().name, build_assemble_evidence_bundle)
+    registries.tool_registry.register(build_compute_business_metrics().name, build_compute_business_metrics)
+    registries.tool_registry.register(build_assemble_business_report().name, build_assemble_business_report)
     registries.tool_registry.register(build_export_pdf().name, build_export_pdf)
+    registries.tool_registry.register(build_render_business_report_html().name, build_render_business_report_html)
     registries.tool_registry.register(build_render_decision_packet_html().name, build_render_decision_packet_html)
     registries.tool_registry.register(build_hypothesis_test_data_outage().name, build_hypothesis_test_data_outage)
     registries.tool_registry.register(build_hypothesis_test_seasonality().name, build_hypothesis_test_seasonality)
+
+# products/ade/schemas/business_report.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class Finding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    headline: str
+    value: str
+    context: str
+    evidence_refs: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class VisualSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["line", "heatmap", "bar"]
+    title: str
+    data: Dict[str, Any] = Field(default_factory=dict)
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnomalyRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int
+    expense: str
+    period: str
+    value: float
+    baseline: float
+    delta: float
+    delta_pct: Optional[float] = None
+    reason: str
+
+
+class Appendix(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confidence: str
+    downgrade_reasons: List[str] = Field(default_factory=list)
+    trace_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
+
+class BusinessReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    generated_at_iso: str
+    dataset_id: str
+    row_count: int
+    period_labels: List[str]
+    series_count: int
+    executive_summary: List[str]
+    key_findings: List[Finding]
+    visuals: List[VisualSpec]
+    anomalies: List[AnomalyRow]
+    recommendations: List[str]
+    appendix: Appendix
+
+# products/ade/schemas/confirm_time_axis.yaml
+schema_version: "1.0"
+form_id: "confirm_time_axis"
+title: "Confirm time axis"
+prompt: "Treat H22024..H2029 as time buckets?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "yes"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "yes"
+        - "no"
+
+# products/ade/schemas/evidence.py
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class EvidenceItemBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    kind: str
+    tool_step_id: str
+    dataset_id: str
+    created_at_iso: str
+    inputs_hash: str
+
+
+class TrendEvidence(EvidenceItemBase):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["trend"]
+    period_labels: List[str]
+    totals: List[Dict[str, Any]] = Field(default_factory=list)
+    means: List[Dict[str, Any]] = Field(default_factory=list)
+    top_movers_abs: List[Dict[str, Any]] = Field(default_factory=list)
+    top_movers_pct: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class OutlierEvidence(EvidenceItemBase):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["outlier"]
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    method: str = "iqr"
+
+
+class DataQualityEvidence(EvidenceItemBase):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["data_quality"]
+    row_count: int
+    deduped_row_count: int
+    duplicate_count: int
+
+
+class HypothesisEvidence(EvidenceItemBase):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["hypothesis"]
+    hypothesis_name: str
+    status: str
+    reasoning: str
+
+
+EvidenceItem = Union[TrendEvidence, OutlierEvidence, DataQualityEvidence, HypothesisEvidence]
+
+
+class EvidenceBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    product: str
+    flow: str
+    dataset_id: str
+    intent: str
+    selections: Dict[str, Any] = Field(default_factory=dict)
+    items: List[EvidenceItem] = Field(default_factory=list)
+    summary_stats: Dict[str, Any] = Field(default_factory=dict)
+
+# products/ade/schemas/select_chart_type.yaml
+schema_version: "1.0"
+form_id: "select_chart_type"
+title: "Select chart type"
+prompt: "Which chart type should be used for evidence?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "bar"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "bar"
+        - "line"
+        - "stacked"
+
+# products/ade/schemas/select_focus_metric.yaml
+schema_version: "1.0"
+form_id: "select_focus_metric"
+title: "Select focus metric"
+prompt: "Which metric should the analysis focus on?"
+input_type: "select"
+mode: "choice_input"
+required:
+  - "selection"
+defaults:
+  selection: "mean"
+schema:
+  type: "object"
+  properties:
+    selection:
+      type: "string"
+      enum:
+        - "mean"
+        - "median"
+        - "growth"
+        - "outliers"
 
 # products/ade/tests/__init__.py
 """visual insights tests"""
@@ -728,10 +1463,11 @@ def register(registries: ProductRegistries) -> None:
 """Analytical Decision Engine integration tests."""
 
 # products/ade/tests/integration/test_ade_orchestrator_flow.py
+from __future__ import annotations
+
 # ==============================
 # Analytical Decision Engine Orchestrator Flow Test
 # ==============================
-from __future__ import annotations
 
 import shutil
 import json
@@ -787,9 +1523,28 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
             },
         )
         assert started.ok, started.error
-        assert started.data and started.data["status"] == "COMPLETED"
-
+        assert started.data and started.data["status"] == "PAUSED_WAITING_FOR_USER"
         run_id = started.data["run_id"]
+
+        user_input = engine.resume_run(
+            run_id=run_id,
+            user_input_response={
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "test run",
+                },
+            },
+        )
+        assert user_input.ok, user_input.error
+        assert user_input.data["status"] == "PENDING_HUMAN"
+
+        approved = engine.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert approved.ok, approved.error
+        assert approved.data["status"] == "COMPLETED"
+
         result = engine.get_run(run_id=run_id)
         assert result.ok, result.error
         steps = result.data["steps"]
@@ -815,7 +1570,7 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
 
         events_path = repo_root / "observability" / "ade" / run_id / "runtime" / "events.jsonl"
         events_text = events_path.read_text(encoding="utf-8")
-        assert "user_input_requested" not in events_text
+        assert "user_input_requested" in events_text
         assert "content_base64" not in events_text
     finally:
         AgentRegistry.clear()
@@ -826,6 +1581,7 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
             shutil.rmtree(repo_root / "observability" / "ade" / run_id, ignore_errors=True)
 
 # products/ade/tests/integration/test_ade_v1.py
+
 from __future__ import annotations
 
 import json
@@ -880,14 +1636,51 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
 
         first = engine.run_flow(product="ade", flow="ade_v1", payload=payload)
         assert first.ok, first.error
-        assert first.data and first.data["status"] == "COMPLETED"
+        assert first.data and first.data["status"] == "PAUSED_WAITING_FOR_USER"
+        first_run_id = first.data["run_id"]
+
+        first_input = engine.resume_run(
+            run_id=first_run_id,
+            user_input_response={
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "test run",
+                },
+            },
+        )
+        assert first_input.ok, first_input.error
+        assert first_input.data["status"] == "PENDING_HUMAN"
+
+        first_approved = engine.resume_run(run_id=first_run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert first_approved.ok, first_approved.error
+        assert first_approved.data["status"] == "COMPLETED"
 
         second = engine.run_flow(product="ade", flow="ade_v1", payload=payload)
         assert second.ok, second.error
-        assert second.data and second.data["status"] == "COMPLETED"
-
-        first_run_id = first.data["run_id"]
+        assert second.data and second.data["status"] == "PAUSED_WAITING_FOR_USER"
         second_run_id = second.data["run_id"]
+
+        second_input = engine.resume_run(
+            run_id=second_run_id,
+            user_input_response={
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "test run",
+                },
+            },
+        )
+        assert second_input.ok, second_input.error
+        assert second_input.data["status"] == "PENDING_HUMAN"
+
+        second_approved = engine.resume_run(run_id=second_run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert second_approved.ok, second_approved.error
+        assert second_approved.data["status"] == "COMPLETED"
 
         first_run = engine.get_run(run_id=first_run_id)
         second_run = engine.get_run(run_id=second_run_id)
@@ -923,6 +1716,7 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
         assert "decision_packet.html" in stored_names
+        assert "business_report.html" in stored_names
         html_path = response_path.parent / "decision_packet.html"
         assert html_path.exists()
     finally:
@@ -1168,7 +1962,28 @@ def test_seasonality_rejected_for_flat_series():
     result = hypothesis_test_seasonality(payload)
     assert result.status == "rejected"
 
+# products/ade/tests/unit/test_product_catalog_ade.py
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.config.loader import load_settings
+from core.utils.product_loader import discover_products
+
+
+def test_ade_catalog_has_flows() -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    settings = load_settings(
+        repo_root=str(repo_root),
+        configs_dir=str(repo_root / "configs"),
+        env={},
+    )
+    catalog = discover_products(settings, repo_root=repo_root)
+    assert "ade" in catalog.products
+    assert catalog.flows.get("ade")
+
 # products/ade/tests/unit/test_stub_payload.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -1278,7 +2093,229 @@ def test_sufficiency_low_confidence_for_multiple_downgrades():
 # products/ade/tools/__init__.py
 """Analytical Decision Engine tools package."""
 
+# products/ade/tools/assemble_business_report.py
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.ade.contracts.decision_packet import DecisionPacket
+from products.ade.schemas.business_report import (
+    AnomalyRow,
+    Appendix,
+    BusinessReport,
+    Finding,
+    VisualSpec,
+)
+from products.ade.tools.compute_business_metrics import BusinessMetrics
+
+
+class AssembleBusinessReportInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metrics: BusinessMetrics
+    packet: DecisionPacket
+    downgrade_reasons: List[str] = Field(default_factory=list)
+    chart_type: str = "line"
+    metric_focus: str = "mean"
+    include_hypothesis_checks: bool = True
+
+
+class AssembleBusinessReportOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: BusinessReport
+
+
+def _format_number(value: float) -> str:
+    return f"{value:,.1f}" if abs(value) >= 1 else f"{value:,.3f}"
+
+
+def _build_series(period_labels: List[str], rows: List[List[Any]]) -> List[Dict[str, Any]]:
+    series: Dict[str, List[Optional[float]]] = {}
+    for row in rows:
+        if not row:
+            continue
+        expense = str(row[0])
+        series.setdefault(expense, [None for _ in period_labels])
+        for idx, _period in enumerate(period_labels, start=1):
+            if idx >= len(row):
+                continue
+            value = row[idx]
+            try:
+                series[expense][idx - 1] = float(value)
+            except (ValueError, TypeError):
+                continue
+    return [{"name": name, "values": values} for name, values in series.items()]
+
+
+def assemble_business_report(payload: AssembleBusinessReportInput) -> AssembleBusinessReportOutput:
+    metrics = payload.metrics
+    packet = payload.packet
+    now = datetime.now(tz=timezone.utc).isoformat()
+    last_period = metrics.period_labels[-1] if metrics.period_labels else "latest"
+    prev_period = metrics.period_labels[-2] if len(metrics.period_labels) >= 2 else "previous"
+
+    top_abs = metrics.top_movers_abs[0] if metrics.top_movers_abs else None
+    top_pct = metrics.top_movers_pct[0] if metrics.top_movers_pct else None
+    total_latest = metrics.totals[-1].total if metrics.totals else 0.0
+    total_prev = metrics.totals[-2].total if len(metrics.totals) >= 2 else 0.0
+    total_delta = total_latest - total_prev
+
+    exec_summary = [
+        f"Dataset covers {metrics.series_count} expense series across {len(metrics.period_labels)} periods.",
+        f"Overall total in {last_period} is {_format_number(total_latest)} "
+        f"({('+' if total_delta >= 0 else '')}{_format_number(total_delta)} vs {prev_period}).",
+    ]
+    if top_abs:
+        exec_summary.append(
+            f"Top absolute mover: {top_abs.expense} "
+            f"({('+' if top_abs.delta >= 0 else '')}{_format_number(top_abs.delta)})."
+        )
+    if top_pct and top_pct.delta_pct is not None:
+        exec_summary.append(
+            f"Top % mover: {top_pct.expense} "
+            f"({('+' if top_pct.delta_pct >= 0 else '')}{top_pct.delta_pct:.1%})."
+        )
+    exec_summary.append(f"Anomaly candidates flagged: {len(metrics.anomalies)}.")
+    exec_summary = exec_summary[:5]
+
+    findings: List[Finding] = [
+        Finding(
+            headline=f"Total change from {prev_period} to {last_period}",
+            value=f"{('+' if total_delta >= 0 else '')}{_format_number(total_delta)}",
+            context=f"Total moved from {_format_number(total_prev)} to {_format_number(total_latest)}.",
+            evidence_refs=[{"periods": [prev_period, last_period]}],
+        )
+    ]
+    if metrics.totals:
+        period_summaries = [
+            f"{item.period}: total {_format_number(item.total)} / mean {_format_number(item.mean)}"
+            for item in metrics.totals
+        ]
+        findings.append(
+            Finding(
+                headline="Trend summary by period",
+                value=f"{len(metrics.totals)} periods summarized",
+                context="; ".join(period_summaries),
+                evidence_refs=[{"periods": [item.period for item in metrics.totals]}],
+            )
+        )
+    if top_abs:
+        findings.append(
+            Finding(
+                headline="Largest absolute mover",
+                value=f"{top_abs.expense} ({('+' if top_abs.delta >= 0 else '')}{_format_number(top_abs.delta)})",
+                context=f"Change measured between {prev_period} and {last_period}.",
+                evidence_refs=[{"expense": top_abs.expense}],
+            )
+        )
+    if top_pct and top_pct.delta_pct is not None:
+        findings.append(
+            Finding(
+                headline="Largest percentage mover",
+                value=f"{top_pct.expense} ({('+' if top_pct.delta_pct >= 0 else '')}{top_pct.delta_pct:.1%})",
+                context=f"Percentage change between {prev_period} and {last_period}.",
+                evidence_refs=[{"expense": top_pct.expense}],
+            )
+        )
+    if metrics.anomalies:
+        findings.append(
+            Finding(
+                headline="Anomaly candidates",
+                value=f"{len(metrics.anomalies)} flagged",
+                context="Outliers identified from period-over-period deltas.",
+                evidence_refs=[{"period": last_period}],
+            )
+        )
+
+    series = _build_series(metrics.period_labels, metrics.deduped_rows)
+    visuals = [
+        VisualSpec(
+            kind="line",
+            title="Primary trend overview",
+            data={"periods": metrics.period_labels, "series": series},
+            config={"metric_focus": payload.metric_focus, "chart_type": payload.chart_type},
+        ),
+        VisualSpec(
+            kind="heatmap",
+            title="Expense by period heatmap",
+            data={"columns": metrics.period_labels, "rows": metrics.deduped_rows},
+            config={},
+        ),
+    ]
+
+    anomalies: List[AnomalyRow] = []
+    for idx, item in enumerate(metrics.anomalies, start=1):
+        anomalies.append(
+            AnomalyRow(
+                rank=idx,
+                expense=item.expense,
+                period=item.period,
+                value=item.value,
+                baseline=item.baseline,
+                delta=item.delta,
+                delta_pct=item.delta_pct,
+                reason=item.reason,
+            )
+        )
+
+    recommendations = [
+        "Validate anomalous expenses with source system owners before downstream decisions.",
+        "Confirm period definitions and align reporting cadence for trend stability.",
+        "Collect additional periods or segments to raise statistical confidence.",
+    ]
+
+    report = BusinessReport(
+        title=packet.question or "Business Report",
+        generated_at_iso=now,
+        dataset_id=metrics.dataset_id or "unknown",
+        row_count=metrics.row_count,
+        period_labels=metrics.period_labels,
+        series_count=metrics.series_count,
+        executive_summary=exec_summary,
+        key_findings=findings,
+        visuals=visuals,
+        anomalies=anomalies,
+        recommendations=recommendations,
+        appendix=Appendix(
+            confidence=packet.confidence_level,
+            downgrade_reasons=payload.downgrade_reasons,
+            trace_refs=[ref for ref in packet.trace_refs if isinstance(ref, dict)],
+            assumptions=packet.assumptions,
+            limitations=packet.limitations,
+        ),
+    )
+    return AssembleBusinessReportOutput(report=report)
+
+
+class AssembleBusinessReportTool(BaseTool):
+    name = "assemble_business_report"
+    description = "Assembles a business-ready report from ADE metrics and decision packet."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = AssembleBusinessReportInput.model_validate(params or {})
+            output = assemble_business_report(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> AssembleBusinessReportTool:
+    return AssembleBusinessReportTool()
+
 # products/ade/tools/assemble_decision_packet.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -1343,7 +2380,91 @@ class AssembleDecisionPacketTool(BaseTool):
 def build() -> AssembleDecisionPacketTool:
     return AssembleDecisionPacketTool()
 
+# products/ade/tools/assemble_evidence_bundle.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.ade.schemas.evidence import EvidenceBundle, EvidenceItem
+
+
+class AssembleEvidenceBundleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str
+    intent: str
+    selections: Dict[str, Any] = Field(default_factory=dict)
+    items: List[Any] = Field(default_factory=list)
+
+
+class AssembleEvidenceBundleOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_bundle: EvidenceBundle
+
+
+_EVIDENCE_ADAPTER = TypeAdapter(EvidenceItem)
+
+
+def _flatten_items(items: List[Any]) -> List[EvidenceItem]:
+    flattened: List[EvidenceItem] = []
+    for item in items:
+        if isinstance(item, list):
+            flattened.extend(_flatten_items(item))
+            continue
+        if isinstance(item, dict):
+            flattened.append(_EVIDENCE_ADAPTER.validate_python(item))
+    return flattened
+
+
+def assemble_evidence_bundle(payload: AssembleEvidenceBundleInput, ctx: StepContext) -> AssembleEvidenceBundleOutput:
+    items = _flatten_items(payload.items)
+    summary_stats: Dict[str, Any] = {"total_items": len(items)}
+    kind_counts: Dict[str, int] = {}
+    for item in items:
+        kind_counts[item.kind] = kind_counts.get(item.kind, 0) + 1
+    summary_stats["by_kind"] = kind_counts
+
+    bundle = EvidenceBundle(
+        run_id=ctx.run.run_id,
+        product=ctx.run.product,
+        flow=ctx.run.flow,
+        dataset_id=payload.dataset_id,
+        intent=payload.intent,
+        selections=payload.selections,
+        items=items,
+        summary_stats=summary_stats,
+    )
+    return AssembleEvidenceBundleOutput(evidence_bundle=bundle)
+
+
+class AssembleEvidenceBundleTool(BaseTool):
+    name = "assemble_evidence_bundle"
+    description = "Aggregates evidence items into a single evidence bundle."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = AssembleEvidenceBundleInput.model_validate(params or {})
+            output = assemble_evidence_bundle(payload, ctx)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> AssembleEvidenceBundleTool:
+    return AssembleEvidenceBundleTool()
+
 # products/ade/tools/assemble_insight_card.py
+
 from __future__ import annotations
 
 from statistics import mean, median
@@ -1358,7 +2479,7 @@ from products.ade.contracts.card import InsightCard, KeyMetric
 from products.ade.contracts.citations import CitationRef
 from products.ade.contracts.slices import DataSlice
 
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
 
 
 class AssembleInsightCardInput(BaseModel):
@@ -1479,6 +2600,7 @@ def _build_primary_metric(chart_spec: Dict[str, object], metric: Optional[str]) 
 
 
 def _to_float(value: Any) -> Optional[float]:
+    # TODO: Keep local conversion to avoid cross-tool coupling; consolidate if a shared util is introduced.
     if isinstance(value, (int, float)):
         return float(value)
     try:
@@ -1487,6 +2609,7 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 # products/ade/tools/build_chart_spec.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
@@ -1497,8 +2620,8 @@ from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolR
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
-ChartInputType = Literal["auto", "line", "bar", "stacked_bar", "scatter", "table"]
+ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
+ChartInputType = Literal["auto", "line", "bar", "area", "stacked_bar", "scatter", "table"]
 
 
 class ChartData(BaseModel):
@@ -1558,10 +2681,17 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
     if chart_type == "table":
         spec["encoding"] = encoding
     else:
-        if payload.x is None or payload.x not in columns:
-            raise ValueError("missing or unknown x field")
-        if payload.y is None or payload.y not in columns:
-            raise ValueError("missing or unknown y field")
+        if payload.x is None or payload.x not in columns or payload.y is None or payload.y not in columns:
+            chart_type = "table"
+            caveats.append("fallback_to_table_missing_axes")
+            spec["type"] = chart_type
+            spec["encoding"] = encoding
+            summary = f"built spec for {chart_type}"
+            return BuildChartSpecOutput(
+                chart_spec=spec,
+                summary=summary,
+                caveats=caveats,
+            )
         encoding["x"] = {"field": payload.x}
         encoding["y"] = {"field": payload.y}
         if chart_type == "stacked_bar":
@@ -1597,9 +2727,285 @@ class BuildChartSpecTool(BaseTool):
 def build() -> BuildChartSpecTool:
     return BuildChartSpecTool()
 
-# products/ade/tools/data_reader.py
-# Visual insights tool: simple data reader
+# products/ade/tools/compute_business_metrics.py
 from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.ade.schemas.evidence import DataQualityEvidence, OutlierEvidence, TrendEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
+
+
+class BusinessMetricsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = ""
+    columns: List[str]
+    rows: List[List[Any]]
+    metric_focus: str = "mean"
+    chart_type: str = "line"
+    include_hypothesis_checks: bool = True
+
+
+class PeriodStat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period: str
+    total: float
+    mean: float
+
+
+class Mover(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expense: str
+    previous: float
+    latest: float
+    delta: float
+    delta_pct: Optional[float] = None
+
+
+class AnomalyCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expense: str
+    period: str
+    value: float
+    baseline: float
+    delta: float
+    delta_pct: Optional[float] = None
+    reason: str
+
+
+class BusinessMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = ""
+    row_count: int
+    period_labels: List[str]
+    series_count: int
+    totals: List[PeriodStat]
+    means: List[PeriodStat]
+    top_movers_abs: List[Mover]
+    top_movers_pct: List[Mover]
+    anomalies: List[AnomalyCandidate]
+    deduped_rows: List[List[Any]]
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
+
+
+def _coerce_number(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip().replace(",", "")
+        if text == "":
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
+def _dedupe_rows(rows: List[List[Any]]) -> List[List[Any]]:
+    seen: set[Tuple[Any, ...]] = set()
+    deduped: List[List[Any]] = []
+    for row in rows:
+        key = tuple(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(list(row))
+    return deduped
+
+
+def _percentile(values: List[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    idx = (len(sorted_vals) - 1) * p
+    lower = int(idx)
+    upper = min(lower + 1, len(sorted_vals) - 1)
+    weight = idx - lower
+    return sorted_vals[lower] * (1 - weight) + sorted_vals[upper] * weight
+
+
+def compute_business_metrics(payload: BusinessMetricsInput) -> BusinessMetrics:
+    columns = payload.columns or []
+    deduped_rows = _dedupe_rows(payload.rows or [])
+    period_labels = columns[1:] if len(columns) > 1 else []
+    expense_idx = 0
+    values_by_expense: Dict[str, List[Optional[float]]] = {}
+
+    for row in deduped_rows:
+        if not row:
+            continue
+        expense = str(row[expense_idx])
+        if expense not in values_by_expense:
+            values_by_expense[expense] = [0.0 for _ in period_labels]
+        for idx, _period in enumerate(period_labels, start=1):
+            if idx >= len(row):
+                continue
+            value = _coerce_number(row[idx])
+            if value is None:
+                continue
+            values_by_expense[expense][idx - 1] += value
+
+    series_count = len(values_by_expense)
+    totals: List[PeriodStat] = []
+    means: List[PeriodStat] = []
+    for idx, period in enumerate(period_labels):
+        values = []
+        for series in values_by_expense.values():
+            if idx < len(series):
+                values.append(series[idx])
+        total = float(sum(values)) if values else 0.0
+        mean = float(total / len(values)) if values else 0.0
+        totals.append(PeriodStat(period=period, total=total, mean=mean))
+        means.append(PeriodStat(period=period, total=total, mean=mean))
+
+    movers: List[Mover] = []
+    if len(period_labels) >= 2:
+        for expense, series in values_by_expense.items():
+            prev = series[-2]
+            latest = series[-1]
+            delta = latest - prev
+            delta_pct = None
+            if prev != 0:
+                delta_pct = delta / prev
+            movers.append(
+                Mover(
+                    expense=expense,
+                    previous=prev,
+                    latest=latest,
+                    delta=delta,
+                    delta_pct=delta_pct,
+                )
+            )
+
+    top_movers_abs = sorted(movers, key=lambda m: abs(m.delta), reverse=True)[:3]
+    movers_with_pct = [m for m in movers if m.delta_pct is not None]
+    top_movers_pct = sorted(movers_with_pct, key=lambda m: abs(m.delta_pct or 0.0), reverse=True)[:3]
+
+    anomalies: List[AnomalyCandidate] = []
+    deltas = [m.delta for m in movers]
+    if deltas:
+        q1 = _percentile(deltas, 0.25)
+        q3 = _percentile(deltas, 0.75)
+        iqr = q3 - q1
+        upper = q3 + 1.5 * iqr
+        lower = q1 - 1.5 * iqr
+        for mover in movers:
+            if mover.delta >= upper or mover.delta <= lower:
+                anomalies.append(
+                    AnomalyCandidate(
+                        expense=mover.expense,
+                        period=period_labels[-1],
+                        value=mover.latest,
+                        baseline=mover.previous,
+                        delta=mover.delta,
+                        delta_pct=mover.delta_pct,
+                        reason="delta_iqr_outlier",
+                    )
+                )
+    if not anomalies and movers:
+        for mover in top_movers_abs[:3]:
+            anomalies.append(
+                AnomalyCandidate(
+                    expense=mover.expense,
+                    period=period_labels[-1] if period_labels else "latest",
+                    value=mover.latest,
+                    baseline=mover.previous,
+                    delta=mover.delta,
+                    delta_pct=mover.delta_pct,
+                    reason="largest_delta",
+                )
+            )
+
+    return BusinessMetrics(
+        dataset_id=payload.dataset_id,
+        row_count=len(deduped_rows),
+        period_labels=period_labels,
+        series_count=series_count,
+        totals=totals,
+        means=means,
+        top_movers_abs=top_movers_abs,
+        top_movers_pct=top_movers_pct,
+        anomalies=anomalies,
+        deduped_rows=deduped_rows,
+    )
+
+
+class ComputeBusinessMetricsTool(BaseTool):
+    name = "compute_business_metrics"
+    description = "Computes deterministic business metrics for ADE reports."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = BusinessMetricsInput.model_validate(params or {})
+            output = compute_business_metrics(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            duplicate_count = max(0, len(payload.rows) - len(output.deduped_rows))
+            trend = TrendEvidence(
+                evidence_id=evidence_id(kind="trend", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="trend",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                period_labels=output.period_labels,
+                totals=[{"period": item.period, "total": item.total} for item in output.totals],
+                means=[{"period": item.period, "mean": item.mean} for item in output.means],
+                top_movers_abs=[m.model_dump(mode="json") for m in output.top_movers_abs],
+                top_movers_pct=[m.model_dump(mode="json") for m in output.top_movers_pct],
+            )
+            data_quality = DataQualityEvidence(
+                evidence_id=evidence_id(kind="data_quality", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="data_quality",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                row_count=len(payload.rows),
+                deduped_row_count=len(output.deduped_rows),
+                duplicate_count=duplicate_count,
+            )
+            outlier = OutlierEvidence(
+                evidence_id=evidence_id(kind="outlier", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="outlier",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                candidates=[item.model_dump(mode="json") for item in output.anomalies],
+                method="iqr",
+            )
+            output = output.model_copy(update={"evidence_items": [trend, data_quality, outlier]})
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> ComputeBusinessMetricsTool:
+    return ComputeBusinessMetricsTool()
+
+# products/ade/tools/data_reader.py
+from __future__ import annotations
+
+# Visual insights tool: simple data reader
 
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1800,6 +3206,7 @@ def _read_csv(path: Path) -> Tuple[List[str], List[List[Any]], int]:
     return columns, rows, row_count
 
 # products/ade/tools/detect_anomalies.py
+
 from __future__ import annotations
 
 from statistics import mean, pstdev
@@ -1810,6 +3217,8 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
+from products.ade.schemas.evidence import OutlierEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class Point(BaseModel):
@@ -1822,6 +3231,7 @@ class Point(BaseModel):
 class DetectAnomaliesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     data: Optional["TableData"] = None
     method: Literal["zscore"] = "zscore"
@@ -1846,6 +3256,7 @@ class DetectAnomaliesOutput(BaseModel):
 
     anomalies: List[Anomaly]
     summary: str
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
 
 
 class TableData(BaseModel):
@@ -1885,6 +3296,18 @@ class DetectAnomaliesTool(BaseTool):
         try:
             payload = DetectAnomaliesInput.model_validate(params or {})
             output = detect_anomalies(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = OutlierEvidence(
+                evidence_id=evidence_id(kind="outlier", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="outlier",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                candidates=[item.model_dump(mode="json") for item in output.anomalies],
+                method=payload.method,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:
@@ -1990,6 +3413,7 @@ def _detect_anomalies_from_table(data: TableData, payload: DetectAnomaliesInput)
 
 
 def _to_float(value: Any) -> Optional[float]:
+    # TODO: Keep local conversion to avoid cross-tool coupling; consolidate if a shared util is introduced.
     if isinstance(value, (int, float)):
         return float(value)
     try:
@@ -1998,6 +3422,7 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 # products/ade/tools/driver_analysis.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -2096,7 +3521,30 @@ class DriverAnalysisTool(BaseTool):
 def build() -> DriverAnalysisTool:
     return DriverAnalysisTool()
 
+# products/ade/tools/evidence_utils.py
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+from typing import Any, Dict
+
+
+def inputs_hash(params: Dict[str, Any]) -> str:
+    payload = json.dumps(params, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def evidence_id(*, kind: str, tool_step_id: str, inputs_hash_value: str) -> str:
+    raw = f"{kind}:{tool_step_id}:{inputs_hash_value}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 # products/ade/tools/export_pdf.py
+
 from __future__ import annotations
 
 import base64
@@ -2184,6 +3632,7 @@ def build() -> ExportPdfTool:
     return ExportPdfTool()
 
 # products/ade/tools/export_rendering.py
+
 from __future__ import annotations
 
 from io import BytesIO
@@ -2293,7 +3742,7 @@ def _render_chart(
         _plot_stacked_bar(draw, columns, rows, x_field, y_field, series_field, plot_left, plot_top, plot_right, plot_bottom, font=font)
         return
 
-    if chart_type in {"bar", "line"}:
+    if chart_type in {"bar", "line", "area"}:
         labels = []
         values = []
         for row in rows:
@@ -2511,7 +3960,7 @@ def _build_stub_card(card: InsightCard) -> Dict[str, Any]:
     return card_payload
 
 
-def _extract_chart_rows(chart_spec: Dict[str, Any]) -> tuple[Optional[List[str]], Optional[List[List[Any]]]]:
+def _extract_chart_rows(chart_spec: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[List[List[Any]]]]:
     data = chart_spec.get("data")
     if not isinstance(data, dict):
         return None, None
@@ -2755,6 +4204,7 @@ def _majority_monotonic_increase(
 
 
 def _to_float(value: Any) -> Optional[float]:
+    # TODO: Keep local conversion to avoid cross-tool coupling; consolidate if a shared util is introduced.
     if isinstance(value, (int, float)):
         return float(value)
     try:
@@ -2983,6 +4433,7 @@ def _build_html_bytes(stub_payload: Dict[str, Any]) -> bytes:
     return html.encode("utf-8")
 
 # products/ade/tools/hypothesis_test_data_outage.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -2992,21 +4443,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-
-
-class Point(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ts: str
-    value: float
+from products.ade.tools.detect_anomalies import Point
+from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class DataOutageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     recent_window: int = 5
     outage_threshold: float = 0.6
+    enabled: bool = True
 
 
 class HypothesisTestOutput(BaseModel):
@@ -3015,10 +4464,17 @@ class HypothesisTestOutput(BaseModel):
     hypothesis_name: str
     status: str
     reasoning: str
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
 
 
 def hypothesis_test_data_outage(payload: DataOutageInput) -> HypothesisTestOutput:
     hypothesis_name = "data_outage"
+    if not payload.enabled:
+        return HypothesisTestOutput(
+            hypothesis_name=hypothesis_name,
+            status="skipped",
+            reasoning="skipped_by_user_preference",
+        )
     series = payload.series
     if payload.recent_window <= 0 or payload.outage_threshold <= 0:
         return HypothesisTestOutput(
@@ -3057,6 +4513,19 @@ class HypothesisTestDataOutageTool(BaseTool):
         try:
             payload = DataOutageInput.model_validate(params or {})
             output = hypothesis_test_data_outage(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = HypothesisEvidence(
+                evidence_id=evidence_id(kind="hypothesis", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="hypothesis",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                hypothesis_name=output.hypothesis_name,
+                status=output.status,
+                reasoning=output.reasoning,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:
@@ -3069,6 +4538,7 @@ def build() -> HypothesisTestDataOutageTool:
     return HypothesisTestDataOutageTool()
 
 # products/ade/tools/hypothesis_test_seasonality.py
+
 from __future__ import annotations
 
 from math import sqrt
@@ -3079,30 +4549,21 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-
-
-class Point(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ts: str
-    value: float
+from products.ade.tools.detect_anomalies import Point
+from products.ade.tools.hypothesis_test_data_outage import HypothesisTestOutput
+from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
+from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
 
 class SeasonalityInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dataset_id: str = ""
     series: List[Point] = Field(default_factory=list)
     period: int = 7
     min_points: int = 12
     strength_threshold: float = 0.2
-
-
-class HypothesisTestOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    hypothesis_name: str
-    status: str
-    reasoning: str
+    enabled: bool = True
 
 
 def _seasonal_strength(values: List[float], period: int) -> float:
@@ -3122,6 +4583,12 @@ def _seasonal_strength(values: List[float], period: int) -> float:
 
 def hypothesis_test_seasonality(payload: SeasonalityInput) -> HypothesisTestOutput:
     hypothesis_name = "seasonality"
+    if not payload.enabled:
+        return HypothesisTestOutput(
+            hypothesis_name=hypothesis_name,
+            status="skipped",
+            reasoning="skipped_by_user_preference",
+        )
     series = payload.series
     if payload.period <= 1 or payload.min_points <= 0:
         return HypothesisTestOutput(
@@ -3159,6 +4626,19 @@ class HypothesisTestSeasonalityTool(BaseTool):
         try:
             payload = SeasonalityInput.model_validate(params or {})
             output = hypothesis_test_seasonality(payload)
+            input_hash = inputs_hash(payload.model_dump(mode="json"))
+            evidence = HypothesisEvidence(
+                evidence_id=evidence_id(kind="hypothesis", tool_step_id=ctx.step_id, inputs_hash_value=input_hash),
+                kind="hypothesis",
+                tool_step_id=ctx.step_id,
+                dataset_id=payload.dataset_id,
+                created_at_iso=now_iso(),
+                inputs_hash=input_hash,
+                hypothesis_name=output.hypothesis_name,
+                status=output.status,
+                reasoning=output.reasoning,
+            )
+            output = output.model_copy(update={"evidence_items": [evidence]})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:
@@ -3171,16 +4651,17 @@ def build() -> HypothesisTestSeasonalityTool:
     return HypothesisTestSeasonalityTool()
 
 # products/ade/tools/recommend_chart.py
+
 from __future__ import annotations
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
-ChartType = Literal["line", "bar", "stacked_bar", "scatter", "table"]
+from products.ade.tools.build_chart_spec import ChartType
 
 
 class RecommendChartInput(BaseModel):
@@ -3200,12 +4681,12 @@ class RecommendChartOutput(BaseModel):
     chart_type: ChartType
     rationale: str
     purpose: str = "evidence_rendering"
-    caveats: list[str] = []
+    caveats: List[str] = []
     optional: bool = True
 
 
 def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
-    caveats: list[str] = ["heuristic_only", "does_not_influence_analysis"]
+    caveats: List[str] = ["heuristic_only", "does_not_influence_analysis"]
     if payload.has_time and payload.has_y_numeric:
         chart_type: ChartType = "line"
         rationale = "time series + numeric target -> line chart"
@@ -3249,7 +4730,333 @@ class RecommendChartTool(BaseTool):
 def build() -> RecommendChartTool:
     return RecommendChartTool()
 
+# products/ade/tools/render_business_report_html.py
+from __future__ import annotations
+
+import base64
+import json
+from string import Template
+from typing import Any, Dict, List, Tuple
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
+from core.orchestrator.context import StepContext
+from core.tools.base import BaseTool
+from products.ade.schemas.business_report import BusinessReport
+
+
+class RenderBusinessReportInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: BusinessReport
+    embed_assets: bool = True
+
+
+class RenderBusinessReportOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    html: str
+    output_files: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+def _escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _heatmap_stats(rows: List[List[Any]]) -> Tuple[float, float]:
+    values: List[float] = []
+    for row in rows:
+        for cell in row[1:]:
+            try:
+                values.append(float(cell))
+            except (TypeError, ValueError):
+                continue
+    if not values:
+        return 0.0, 0.0
+    return min(values), max(values)
+
+
+def _heatmap_cell(value: Any, min_val: float, max_val: float) -> str:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return "<td>-</td>"
+    if max_val == min_val:
+        intensity = 0.5
+    else:
+        intensity = (num - min_val) / (max_val - min_val)
+    shade = int(255 - (intensity * 120))
+    color = f"rgb({shade},{shade},{255})"
+    return f"<td style=\"background:{color}\">{_escape(f'{num:,.1f}')}</td>"
+
+
+def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBusinessReportOutput:
+    report = payload.report
+    dataset_meta = (
+        f"{report.series_count} series · {report.row_count} rows · "
+        f"{len(report.period_labels)} periods · Generated {report.generated_at_iso}"
+    )
+    summary_items = "".join(f"<li>{_escape(item)}</li>" for item in report.executive_summary)
+    recommendations = "".join(f"<li>{_escape(item)}</li>" for item in report.recommendations)
+
+    findings_blocks = []
+    for finding in report.key_findings:
+        refs = "".join(f"<li>{_escape(str(ref))}</li>" for ref in finding.evidence_refs)
+        refs_html = f"<ul class=\"refs\">{refs}</ul>" if refs else ""
+        findings_blocks.append(
+            f"<div class=\"card\"><h4>{_escape(finding.headline)}</h4>"
+            f"<div class=\"value\">{_escape(finding.value)}</div>"
+            f"<p>{_escape(finding.context)}</p>{refs_html}</div>"
+        )
+    findings_html = "".join(findings_blocks)
+
+    line_visual = next((v for v in report.visuals if v.kind == "line"), None)
+    heatmap_visual = next((v for v in report.visuals if v.kind == "heatmap"), None)
+    line_data = line_visual.data if line_visual else {}
+    heatmap_data = heatmap_visual.data if heatmap_visual else {}
+
+    heatmap_rows = heatmap_data.get("rows") if isinstance(heatmap_data.get("rows"), list) else []
+    heatmap_columns = heatmap_data.get("columns") if isinstance(heatmap_data.get("columns"), list) else report.period_labels
+    min_val, max_val = _heatmap_stats(heatmap_rows)
+
+    heatmap_body = []
+    for row in heatmap_rows:
+        if not row:
+            continue
+        row_label = _escape(str(row[0]))
+        cells = "".join(_heatmap_cell(cell, min_val, max_val) for cell in row[1:])
+        heatmap_body.append(f"<tr><td class=\"row-label\">{row_label}</td>{cells}</tr>")
+    heatmap_head = "".join(f"<th>{_escape(str(col))}</th>" for col in heatmap_columns)
+
+    anomalies_rows = []
+    for anomaly in report.anomalies:
+        delta_pct = f"{anomaly.delta_pct:.1%}" if anomaly.delta_pct is not None else "-"
+        anomalies_rows.append(
+            "<tr>"
+            f"<td>{anomaly.rank}</td>"
+            f"<td>{_escape(anomaly.expense)}</td>"
+            f"<td>{_escape(anomaly.period)}</td>"
+            f"<td>{_escape(f'{anomaly.value:,.1f}')}</td>"
+            f"<td>{_escape(f'{anomaly.baseline:,.1f}')}</td>"
+            f"<td>{_escape(f'{anomaly.delta:,.1f}')}</td>"
+            f"<td>{_escape(delta_pct)}</td>"
+            f"<td>{_escape(anomaly.reason)}</td>"
+            "</tr>"
+        )
+    anomalies_html = "".join(anomalies_rows) if anomalies_rows else "<tr><td colspan=\"8\">No anomalies detected.</td></tr>"
+
+    downgrade = "".join(f"<li>{_escape(reason)}</li>" for reason in report.appendix.downgrade_reasons)
+    assumptions = "".join(f"<li>{_escape(item)}</li>" for item in report.appendix.assumptions)
+    limitations = "".join(f"<li>{_escape(item)}</li>" for item in report.appendix.limitations)
+    trace_refs = "".join(f"<li>{_escape(str(item))}</li>" for item in report.appendix.trace_refs)
+
+    confidence_explainer = ""
+    if report.appendix.confidence.lower() == "low":
+        missing = []
+        if len(report.period_labels) < 6:
+            missing.append("longer historical window")
+        if report.series_count < 5:
+            missing.append("broader series coverage")
+        missing.append("validated anomaly labels")
+        missing_text = ", ".join(missing)
+        confidence_explainer = (
+            "<div class=\"confidence-card\">"
+            "<h4>Why confidence is low</h4>"
+            f"<p>Missing: {missing_text}.</p>"
+            "<p>Impact: interpret the findings as directional signals, not precise forecasts.</p>"
+            "<p>Raise confidence: add more periods, validate outliers, and segment by key drivers.</p>"
+            "</div>"
+        )
+
+    line_json = json.dumps(line_data)
+    template = Template("""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$title</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root {{
+      --ink: #1a1f2b;
+      --muted: #5c6477;
+      --border: #e2e6ef;
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --accent: #1f4f99;
+    }}
+    body {{ font-family: "Source Sans 3", "Helvetica Neue", Arial, sans-serif; margin: 0; color: var(--ink); background: var(--bg); }}
+    header {{ padding: 28px 36px 20px; background: var(--card); border-bottom: 1px solid var(--border); }}
+    h1 {{ margin: 0 0 6px; font-size: 28px; }}
+    .meta {{ color: var(--muted); font-size: 0.95rem; }}
+    main {{ padding: 28px 36px 40px; max-width: 1200px; margin: 0 auto; }}
+    section {{ margin-bottom: 28px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
+    .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }}
+    .value {{ font-size: 20px; font-weight: 600; color: var(--accent); margin: 6px 0; }}
+    ul {{ padding-left: 18px; margin: 8px 0 0; }}
+    .chart {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 0.9rem; }}
+    th, td {{ border: 1px solid var(--border); padding: 6px 8px; text-align: right; }}
+    th {{ background: #f0f3f9; text-align: center; }}
+    td.row-label {{ text-align: left; font-weight: 600; background: #f8f9fc; }}
+    .confidence-card {{ background: #fff7e6; border: 1px solid #f5d7a1; border-radius: 10px; padding: 12px 16px; }}
+    details {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }}
+    summary {{ font-weight: 600; cursor: pointer; }}
+    .refs {{ margin-top: 6px; color: var(--muted); }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>$title</h1>
+    <div class="meta">Dataset: $dataset_id · $dataset_meta</div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Executive summary</h2>
+      <ul>$summary_items</ul>
+    </section>
+
+    $confidence_explainer
+
+    <section>
+      <h2>Key findings</h2>
+      <div class="grid">$findings_html</div>
+    </section>
+
+    <section class="chart">
+      <h2>$line_title</h2>
+      <div id="primary-chart" style="height: 420px;"></div>
+    </section>
+
+    <section class="chart">
+      <h2>$heatmap_title</h2>
+      <table>
+        <thead>
+          <tr><th>Expense</th>$heatmap_head</tr>
+        </thead>
+        <tbody>
+          $heatmap_body
+        </tbody>
+      </table>
+    </section>
+
+    <section class="chart">
+      <h2>Anomaly candidates</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Expense</th><th>Period</th><th>Value</th><th>Baseline</th><th>Delta</th><th>Delta %</th><th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          $anomalies_html
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Recommendations / next actions</h2>
+      <ul>$recommendations</ul>
+    </section>
+
+    <details>
+      <summary>Appendix (Technical)</summary>
+      <p><strong>Confidence:</strong> $confidence</p>
+      <h4>Downgrade reasons</h4>
+      <ul>$downgrade</ul>
+      <h4>Assumptions</h4>
+      <ul>$assumptions</ul>
+      <h4>Limitations</h4>
+      <ul>$limitations</ul>
+      <h4>Trace references</h4>
+      <ul>$trace_refs</ul>
+    </details>
+  </main>
+
+  <script>
+    const chartData = $line_json;
+    const periods = chartData.periods || [];
+    const series = chartData.series || [];
+    const traces = series.map(item => ({
+      x: periods,
+      y: item.values,
+      name: item.name,
+      mode: 'lines+markers'
+    }));
+    Plotly.newPlot('primary-chart', traces, {{
+      margin: {{ t: 20, r: 20, l: 50, b: 40 }},
+      legend: {{ orientation: 'h' }},
+      xaxis: {{ title: 'Period' }},
+      yaxis: {{ title: 'Value' }},
+    }}, {{displayModeBar: false}});
+  </script>
+</body>
+</html>""")
+    html = template.safe_substitute(
+        title=_escape(report.title),
+        dataset_id=_escape(report.dataset_id),
+        dataset_meta=_escape(dataset_meta),
+        summary_items=summary_items,
+        confidence_explainer=confidence_explainer,
+        findings_html=findings_html,
+        line_title=_escape(line_visual.title if line_visual else "Primary chart"),
+        heatmap_title=_escape(heatmap_visual.title if heatmap_visual else "Heatmap"),
+        heatmap_head=heatmap_head,
+        heatmap_body="".join(heatmap_body),
+        anomalies_html=anomalies_html,
+        recommendations=recommendations,
+        confidence=_escape(report.appendix.confidence),
+        downgrade=downgrade,
+        assumptions=assumptions,
+        limitations=limitations,
+        trace_refs=trace_refs,
+        line_json=line_json,
+    )
+
+    output_files: List[Dict[str, Any]] = []
+    if payload.embed_assets:
+        encoded = base64.b64encode(html.encode("utf-8")).decode("ascii")
+        output_files.append(
+            {
+                "name": "business_report.html",
+                "content_type": "text/html",
+                "content_base64": encoded,
+                "role": "primary",
+            }
+        )
+    return RenderBusinessReportOutput(html=html, output_files=output_files)
+
+
+class RenderBusinessReportHtmlTool(BaseTool):
+    name = "render_business_report_html"
+    description = "Renders a BusinessReport into an analyst-ready HTML report."
+    risk = "read_only"
+
+    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+        try:
+            payload = RenderBusinessReportInput.model_validate(params or {})
+            output = render_business_report_html(payload)
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except Exception as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
+
+
+def build() -> RenderBusinessReportHtmlTool:
+    return RenderBusinessReportHtmlTool()
+
 # products/ade/tools/render_decision_packet_html.py
+
 from __future__ import annotations
 
 import base64
@@ -3323,6 +5130,15 @@ def _render_visual(visual: Dict[str, Any]) -> str:
     return f"<pre class=\"visual-json\">{_escape(str(visual))}</pre>"
 
 
+def _extract_user_inputs(trace_refs: List[Any]) -> Dict[str, Any]:
+    for item in trace_refs:
+        if isinstance(item, dict) and "user_inputs" in item:
+            user_inputs = item.get("user_inputs")
+            if isinstance(user_inputs, dict):
+                return user_inputs
+    return {}
+
+
 def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDecisionPacketOutput:
     packet = payload.packet
     sections_html = []
@@ -3353,6 +5169,11 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
     limitations = "".join(f"<li>{_escape(item)}</li>" for item in packet.limitations)
     assumptions = "".join(f"<li>{_escape(item)}</li>" for item in packet.assumptions)
     trace_refs = "".join(f"<li>{_escape(str(item))}</li>" for item in packet.trace_refs)
+    user_inputs = _extract_user_inputs(packet.trace_refs)
+    user_inputs_html = ""
+    if user_inputs:
+        items = "".join(f"<li>{_escape(str(key))}: {_escape(str(value))}</li>" for key, value in user_inputs.items())
+        user_inputs_html = f"<h2>Selections</h2><ul>{items}</ul>"
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -3388,6 +5209,7 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
   </div>
   <div class="grid">
     <div>
+      {user_inputs_html}
       <h2>Assumptions</h2>
       <ul>{assumptions}</ul>
       <h2>Limitations</h2>
@@ -3442,10 +5264,11 @@ def build() -> RenderDecisionPacketHtmlTool:
 
 
 # products/hello_world/agents/simple_agent.py
+from __future__ import annotations
+
 # ==============================
 # Hello World Agent: simple_agent
 # ==============================
-from __future__ import annotations
 
 from typing import Any, Dict
 
@@ -3636,6 +5459,8 @@ This module must remain side-effect safe:
 
 from __future__ import annotations
 
+
+
 from products.hello_world.agents.simple_agent import build as build_agent
 from products.hello_world.tools.echo_tool import build as build_tool
 from core.utils.product_loader import ProductRegistries
@@ -3652,10 +5477,11 @@ def register(registries: ProductRegistries) -> None:
 
 
 # products/hello_world/tests/test_hello_world_flow.py
+from __future__ import annotations
+
 # ==============================
 # Hello World Golden Path Test
 # ==============================
-from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -3767,10 +5593,11 @@ def test_hello_world_end_to_end(tmp_path: Path) -> None:
 
 
 # products/hello_world/tools/echo_tool.py
+from __future__ import annotations
+
 # ==============================
 # Hello World Tool: echo_tool
 # ==============================
-from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict

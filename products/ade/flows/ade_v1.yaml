@@ -29,68 +29,54 @@ steps:
       max_attempts: 2
       backoff_seconds: 1
 
+  - id: "viz_preferences"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "viz_preferences"
+      title: "Visualization preferences"
+      prompt: "Choose chart type + metrics focus"
+      input_type: "text"
+      mode: "choice_input"
+      required:
+        - "chart_type"
+        - "metric_focus"
+      defaults:
+        chart_type: "bar"
+        metric_focus: "anomalies"
+        include_hypothesis_checks: true
+        notes: ""
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["bar", "line", "area", "scatter"]
+          metric_focus:
+            type: "string"
+            enum: ["mean", "sum", "median", "growth_rate", "anomalies"]
+          include_hypothesis_checks:
+            type: "boolean"
+          notes:
+            type: "string"
+
+  - id: "compute_business_metrics"
+    type: "tool"
+    backend: "local"
+    tool: "compute_business_metrics"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      columns: "{{artifacts.tool.data_reader.output.columns}}"
+      rows: "{{artifacts.tool.data_reader.output.rows}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
   - id: "sufficiency_eval"
     type: "agent"
     backend: "local"
     agent: "sufficiency_evaluator"
     params: {}
-
-  - id: "select_focus_metric"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "select_focus_metric"
-      title: "Select focus metric"
-      prompt: "Which metric should the analysis focus on?"
-      input_type: "select"
-      mode: "choice_input"
-      required: ["selection"]
-      defaults:
-        selection: "mean"
-      schema:
-        type: "object"
-        properties:
-          selection:
-            type: "string"
-            enum: ["mean", "median", "growth", "outliers"]
-
-  - id: "select_chart_type"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "select_chart_type"
-      title: "Select chart type"
-      prompt: "Which chart type should be used for evidence?"
-      input_type: "select"
-      mode: "choice_input"
-      required: ["selection"]
-      defaults:
-        selection: "bar"
-      schema:
-        type: "object"
-        properties:
-          selection:
-            type: "string"
-            enum: ["bar", "line", "stacked"]
-
-  - id: "confirm_time_axis"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "confirm_time_axis"
-      title: "Confirm time axis"
-      prompt: "Treat H22024..H2029 as time buckets?"
-      input_type: "select"
-      mode: "choice_input"
-      required: ["selection"]
-      defaults:
-        selection: "yes"
-      schema:
-        type: "object"
-        properties:
-          selection:
-            type: "string"
-            enum: ["yes", "no"]
 
   - id: "planning"
     type: "agent"
@@ -98,28 +84,60 @@ steps:
     agent: "planning_agent"
     params: {}
 
-  - id: "compute_anomalies"
+  - id: "plan_proposal"
+    type: "plan_proposal"
+    backend: "local"
+    agent: "plan_proposal_agent"
+    params: {}
+
+  - id: "build_chart_spec"
     type: "tool"
     backend: "local"
-    tool: "detect_anomalies"
+    tool: "build_chart_spec"
     params:
-      series: "{{artifacts.tool.data_reader.output.series}}"
-      data: "{{artifacts.tool.data_reader.output.data}}"
-      min_points: 3
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      fallback_chart_type: "bar"
+      title: "Evidence chart"
+      x: "{{artifacts.tool.data_reader.output.x_field}}"
+      y: "{{artifacts.tool.data_reader.output.y_field}}"
+      series: "{{artifacts.tool.data_reader.output.category_field}}"
+      data:
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
+        rows: "{{artifacts.tool.data_reader.output.rows}}"
+      evidence_ref:
+        dataset_id: "{{payload.dataset}}"
+        columns: "{{artifacts.tool.data_reader.output.columns}}"
 
   - id: "hypothesis_data_outage"
     type: "tool"
     backend: "local"
     tool: "hypothesis_test_data_outage"
     params:
+      dataset_id: "{{payload.dataset}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
   - id: "hypothesis_seasonality"
     type: "tool"
     backend: "local"
     tool: "hypothesis_test_seasonality"
     params:
+      dataset_id: "{{payload.dataset}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "assemble_evidence_bundle"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_evidence_bundle"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      intent: "{{payload.prompt}}"
+      selections: "{{artifacts.user_input.viz_preferences.values}}"
+      items:
+        - "{{artifacts.tool.compute_business_metrics.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_data_outage.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_seasonality.output.evidence_items}}"
 
   - id: "assemble_decision_packet"
     type: "tool"
@@ -127,7 +145,7 @@ steps:
     tool: "assemble_decision_packet"
     params:
       question: "{{payload.prompt}}"
-      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.select_focus_metric.values.selection}}. Chart: {{artifacts.user_input.select_chart_type.values.selection}}. Time axis: {{artifacts.user_input.confirm_time_axis.values.selection}}."
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}. Hypothesis checks: {{artifacts.tool.hypothesis_test_data_outage.output.status}} / {{artifacts.tool.hypothesis_test_seasonality.output.status}}."
       confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
       assumptions:
         - "Inputs reflect the provided dataset."
@@ -137,20 +155,21 @@ steps:
         - "Evidence tables are limited to uploaded rows."
       trace_refs:
         - step_id: "read"
-        - step_id: "compute_anomalies"
+        - step_id: "build_chart_spec"
         - step_id: "hypothesis_data_outage"
         - step_id: "hypothesis_seasonality"
         - user_inputs:
-            focus_metric: "{{artifacts.user_input.select_focus_metric.values.selection}}"
-            chart_type: "{{artifacts.user_input.select_chart_type.values.selection}}"
-            time_axis: "{{artifacts.user_input.confirm_time_axis.values.selection}}"
+            chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+            metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+            include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
       sections:
         - section_id: "sufficiency"
           title: "Data sufficiency"
           intent: "{{payload.prompt}}"
-          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}."
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}."
           claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
           visuals:
+            - chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
             - table:
                 columns: "{{artifacts.tool.data_reader.output.columns}}"
                 rows: "{{artifacts.tool.data_reader.output.rows}}"
@@ -168,6 +187,25 @@ steps:
           evidence_refs:
             - dataset_id: "{{payload.dataset}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
+
+  - id: "assemble_business_report"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_business_report"
+    params:
+      metrics: "{{artifacts.tool.compute_business_metrics.output}}"
+      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
+      downgrade_reasons: "{{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "render_business_report_html"
+    type: "tool"
+    backend: "local"
+    tool: "render_business_report_html"
+    params:
+      report: "{{artifacts.tool.assemble_business_report.output.report}}"
 
   - id: "render_decision_packet_html"
     type: "tool"

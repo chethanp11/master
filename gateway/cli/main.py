@@ -187,7 +187,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = ap.parse_args(argv)
 
-    settings = load_settings()
+    repo_root = Path(__file__).resolve().parents[2]
+    settings = load_settings(repo_root=str(repo_root))
     catalog = discover_products(settings)
     AgentRegistry.clear()
     ToolRegistry.clear()

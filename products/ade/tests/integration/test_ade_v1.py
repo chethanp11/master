@@ -53,14 +53,51 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
 
         first = engine.run_flow(product="ade", flow="ade_v1", payload=payload)
         assert first.ok, first.error
-        assert first.data and first.data["status"] == "COMPLETED"
+        assert first.data and first.data["status"] == "PAUSED_WAITING_FOR_USER"
+        first_run_id = first.data["run_id"]
+
+        first_input = engine.resume_run(
+            run_id=first_run_id,
+            user_input_response={
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "test run",
+                },
+            },
+        )
+        assert first_input.ok, first_input.error
+        assert first_input.data["status"] == "PENDING_HUMAN"
+
+        first_approved = engine.resume_run(run_id=first_run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert first_approved.ok, first_approved.error
+        assert first_approved.data["status"] == "COMPLETED"
 
         second = engine.run_flow(product="ade", flow="ade_v1", payload=payload)
         assert second.ok, second.error
-        assert second.data and second.data["status"] == "COMPLETED"
-
-        first_run_id = first.data["run_id"]
+        assert second.data and second.data["status"] == "PAUSED_WAITING_FOR_USER"
         second_run_id = second.data["run_id"]
+
+        second_input = engine.resume_run(
+            run_id=second_run_id,
+            user_input_response={
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "test run",
+                },
+            },
+        )
+        assert second_input.ok, second_input.error
+        assert second_input.data["status"] == "PENDING_HUMAN"
+
+        second_approved = engine.resume_run(run_id=second_run_id, approval_payload={"approved": True}, decision="APPROVED")
+        assert second_approved.ok, second_approved.error
+        assert second_approved.data["status"] == "COMPLETED"
 
         first_run = engine.get_run(run_id=first_run_id)
         second_run = engine.get_run(run_id=second_run_id)
@@ -96,6 +133,7 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
         assert "decision_packet.html" in stored_names
+        assert "business_report.html" in stored_names
         html_path = response_path.parent / "decision_packet.html"
         assert html_path.exists()
     finally:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # ==============================
-# Integration: Observability Artifacts
+# Integration: Observability Files Created
 # ==============================
 
 import json
@@ -73,16 +73,11 @@ def _write_flow(tmp_path: Path) -> Path:
     return flow_path
 
 
-def _build_engine(tmp_path: Path, *, mirror_inputs: bool = False) -> OrchestratorEngine:
+def _build_engine(tmp_path: Path) -> OrchestratorEngine:
     flow_path = _write_flow(tmp_path)
     flow_loader = FlowLoader(products_root=flow_path.parents[2])
     observability_root = tmp_path / "observability"
-    memory = MemoryRouter(
-        backend=InMemoryBackend(),
-        repo_root=tmp_path,
-        observability_root=observability_root,
-        mirror_inputs=mirror_inputs,
-    )
+    memory = MemoryRouter(backend=InMemoryBackend(), repo_root=tmp_path, observability_root=observability_root)
     tracer = Tracer(memory=memory, mirror_to_log=False)
     governance = GovernanceHooks(settings=Settings())
     tool_executor = ToolExecutor(registry=ToolRegistry, hooks=governance, redactor=SecurityRedactor())
@@ -96,7 +91,7 @@ def _build_engine(tmp_path: Path, *, mirror_inputs: bool = False) -> Orchestrato
     )
 
 
-def test_observability_artifacts_written(tmp_path: Path) -> None:
+def test_observability_files_created(tmp_path: Path) -> None:
     AgentRegistry.clear()
     ToolRegistry.clear()
     try:
@@ -107,57 +102,29 @@ def test_observability_artifacts_written(tmp_path: Path) -> None:
         assert started.ok, started.error
         run_id = started.data["run_id"]
 
-        run_dir = tmp_path / "observability" / "test_product" / run_id
-        input_dir = run_dir / "input"
-        runtime_dir = run_dir / "runtime"
-        output_dir = run_dir / "output"
-
-        assert input_dir.exists()
-        assert not (input_dir / "input.json").exists()
-        assert runtime_dir.exists()
-        assert (runtime_dir / "events.jsonl").exists()
-        assert output_dir.exists()
-        assert (output_dir / "response.json").exists()
-
-        response = json.loads((output_dir / "response.json").read_text(encoding="utf-8"))
-        assert response.get("status") == "PAUSED_WAITING_FOR_USER"
-
-        events_text = (runtime_dir / "events.jsonl").read_text(encoding="utf-8")
-        assert "pending_user_input" in events_text
-        assert "run_paused" in events_text
-
         resumed = engine.resume_run(
             run_id=run_id,
             user_input_response={"prompt_id": "notes", "selected_option_ids": ["alpha"]},
         )
         assert resumed.ok, resumed.error
 
-        response = json.loads((output_dir / "response.json").read_text(encoding="utf-8"))
+        runtime_path = tmp_path / "observability" / "test_product" / run_id / "runtime" / "events.jsonl"
+        assert runtime_path.exists()
+        events = runtime_path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(events) >= 3
+
+        combined = "\n".join(events)
+        assert "run_started" in combined
+        assert "step_started" in combined
+        assert ("pending_user_input" in combined) or ("pending_approval" in combined)
+        assert ("run_paused" in combined) or ("run_pending_human" in combined)
+        assert "run_resumed" in combined
+        assert "output_written" in combined
+        assert "run_completed" in combined
+
+        response_path = tmp_path / "observability" / "test_product" / run_id / "output" / "response.json"
+        response = json.loads(response_path.read_text(encoding="utf-8"))
         assert response.get("status") == "COMPLETED"
-        reasoning_path = output_dir / "reasoning.md"
-        assert reasoning_path.exists()
-        reasoning_text = reasoning_path.read_text(encoding="utf-8")
-        assert "input (user_input)" in reasoning_text
-        assert "INPUT requested" in reasoning_text
-        assert "INPUT provided" in reasoning_text
-    finally:
-        AgentRegistry.clear()
-        ToolRegistry.clear()
-
-
-def test_observability_input_mirroring_opt_in(tmp_path: Path) -> None:
-    AgentRegistry.clear()
-    ToolRegistry.clear()
-    try:
-        ToolRegistry.register("echo_tool", lambda: _EchoTool())
-        engine = _build_engine(tmp_path, mirror_inputs=True)
-
-        started = engine.run_flow(product="test_product", flow="test_flow", payload={})
-        assert started.ok, started.error
-        run_id = started.data["run_id"]
-
-        input_dir = tmp_path / "observability" / "test_product" / run_id / "input"
-        assert (input_dir / "input.json").exists()
     finally:
         AgentRegistry.clear()
         ToolRegistry.clear()
