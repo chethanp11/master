@@ -24,8 +24,10 @@ from core.config.schema import Settings
 from core.contracts.agent_schema import find_control_fields, validate_agent_output_payload
 from core.contracts.reasoning_schema import ReasoningPurpose
 from core.contracts.flow_schema import AutonomyLevel
+from core.contracts.budget_schema import Budget, BudgetState
 from core.governance.policies import PolicyDecision, PolicyEngine
 from core.governance.security import SecurityRedactor
+from core.governance.budgeting import consume_budget
 from core.orchestrator.context import RunContext, StepContext
 
 _INJECTION_PATTERNS = (
@@ -115,6 +117,36 @@ class GovernanceHooks:
             "run_id": self._run_id(ctx.run),
             "product": self._product(ctx.run),
         }
+        budget = ctx.run.meta.get("budget")
+        budget_state = ctx.run.meta.get("budget_state")
+        if isinstance(budget, Budget) and isinstance(budget_state, BudgetState):
+            allowed, action, updated = consume_budget(
+                budget=budget,
+                state=budget_state,
+                kind="tool",
+                amount=1,
+                cost_units=1,
+            )
+            ctx.run.meta["budget_state"] = updated
+            ctx.emit(
+                "budget_consumed",
+                {"kind": "tool", "state": updated.model_dump(mode="json")},
+            )
+            if not allowed:
+                ctx.emit(
+                    "budget_exceeded",
+                    {
+                        "kind": "tool",
+                        "limit": budget.max_tool_calls,
+                        "state": updated.model_dump(mode="json"),
+                        "action_taken": action,
+                    },
+                )
+                decision = PolicyDecision(
+                    allow=False,
+                    reason="budget_exceeded",
+                    details={"action": action, "kind": "tool"},
+                )
         limit = self.settings.policies.max_tool_calls
         if limit is not None:
             count = int(ctx.run.meta.get("tool_calls", 0))

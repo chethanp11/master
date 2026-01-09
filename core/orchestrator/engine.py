@@ -33,6 +33,8 @@ from core.contracts.user_input_schema import (
     UserInputResponse,
 )
 from core.governance.hooks import GovernanceHooks
+from core.contracts.budget_schema import BudgetPolicy
+from core.governance.budgeting import resolve_budget, init_budget_state
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
 from core.memory.router import MemoryRouter
@@ -126,6 +128,7 @@ class OrchestratorEngine:
             run_id = _new_run_id()
             run_ctx = RunContext(run_id=run_id, product=product, flow=flow, payload=payload)
             run_ctx.trace = self._trace_hook(run_ctx)
+            self._resolve_budget(run_ctx, flow_def)
 
             payload_limit = self.governance.settings.policies.max_payload_bytes
             if payload_limit is not None:
@@ -744,6 +747,33 @@ class OrchestratorEngine:
             )
 
         return _hook
+
+    def _resolve_budget(self, run_ctx: RunContext, flow_def: FlowDef) -> None:
+        policy_raw = run_ctx.payload.get("_budget_policy")
+        if not isinstance(policy_raw, dict):
+            return
+        try:
+            policy = BudgetPolicy.model_validate(policy_raw)
+        except Exception:
+            return
+        sensitivity = str(run_ctx.payload.get("_budget_sensitivity") or "LOW")
+        flow_type = str((flow_def.metadata or {}).get("flow_type") or flow_def.id)
+        budget = resolve_budget(policy, sensitivity_class=sensitivity, flow_type=flow_type)
+        state = init_budget_state()
+        run_ctx.meta["budget"] = budget
+        run_ctx.meta["budget_state"] = state
+        self._emit_event(
+            kind="budget_resolved",
+            run_id=run_ctx.run_id,
+            step_id=None,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={
+                "sensitivity_class": sensitivity,
+                "flow_type": flow_type,
+                "budget": budget.model_dump(mode="json"),
+            },
+        )
 
     def _transition_run_status(
         self,

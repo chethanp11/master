@@ -21,6 +21,8 @@ from core.contracts.reasoning_ladder_schema import (
     ReasoningLadderResult,
     ReasoningLadderSelectPayload,
 )
+from core.contracts.budget_schema import Budget, BudgetState
+from core.governance.budgeting import consume_budget
 
 TraceEmitter = Callable[[str, Dict[str, Any]], None]
 LadderReasoner = Callable[[str, Dict[str, Any]], Union[Dict[str, Any], str]]
@@ -35,6 +37,8 @@ def run_reasoning_ladder(
     trace: Optional[TraceEmitter] = None,
     available_tools: Optional[List[ToolDescriptor]] = None,
     available_agents: Optional[List[AgentDescriptor]] = None,
+    budget: Optional[Budget] = None,
+    budget_state: Optional[BudgetState] = None,
 ) -> ReasoningLadderResult:
     if config.max_passes < 3:
         failure = ReasoningLadderFailure(
@@ -52,6 +56,8 @@ def run_reasoning_ladder(
         trace=trace,
         available_tools=available_tools,
         available_agents=available_agents,
+        budget=budget,
+        budget_state=budget_state,
     )
     if isinstance(interpret, ReasoningLadderFailure):
         return ReasoningLadderResult(ok=False, error=interpret)
@@ -65,6 +71,8 @@ def run_reasoning_ladder(
         config=config,
         available_tools=available_tools,
         available_agents=available_agents,
+        budget=budget,
+        budget_state=budget_state,
     )
     if isinstance(propose, ReasoningLadderFailure):
         return ReasoningLadderResult(ok=False, error=propose)
@@ -77,6 +85,8 @@ def run_reasoning_ladder(
         llm_reasoner=llm_reasoner,
         trace=trace,
         config=config,
+        budget=budget,
+        budget_state=budget_state,
     )
     if isinstance(select_payload, ReasoningLadderFailure):
         return ReasoningLadderResult(ok=False, error=select_payload)
@@ -100,8 +110,12 @@ def _run_interpret_pass(
     trace: Optional[TraceEmitter],
     available_tools: Optional[List[ToolDescriptor]],
     available_agents: Optional[List[AgentDescriptor]],
-) -> ReasoningLadderInterpret | ReasoningLadderFailure:
+    budget: Optional[Budget],
+    budget_state: Optional[BudgetState],
+) -> Union[ReasoningLadderInterpret, ReasoningLadderFailure]:
     pass_name = "interpret"
+    if not _consume_pass_budget(trace, pass_name, budget, budget_state):
+        return ReasoningLadderFailure(reason="budget_exceeded", failed_pass=pass_name, details={})
     _emit_start(trace, pass_name, context_pack, question, available_tools, available_agents)
     payload = _call_reasoner(
         llm_reasoner,
@@ -129,8 +143,12 @@ def _run_propose_pass(
     config: ReasoningLadderConfig,
     available_tools: Optional[List[ToolDescriptor]],
     available_agents: Optional[List[AgentDescriptor]],
-) -> ReasoningLadderPropose | ReasoningLadderFailure:
+    budget: Optional[Budget],
+    budget_state: Optional[BudgetState],
+) -> Union[ReasoningLadderPropose, ReasoningLadderFailure]:
     pass_name = "propose"
+    if not _consume_pass_budget(trace, pass_name, budget, budget_state):
+        return ReasoningLadderFailure(reason="budget_exceeded", failed_pass=pass_name, details={})
     _emit_start(trace, pass_name, context_pack, question, available_tools, available_agents)
     payload = _call_reasoner(
         llm_reasoner,
@@ -164,8 +182,12 @@ def _run_select_pass(
     llm_reasoner: LadderReasoner,
     trace: Optional[TraceEmitter],
     config: ReasoningLadderConfig,
-) -> ReasoningLadderSelectPayload | ReasoningLadderFailure:
+    budget: Optional[Budget],
+    budget_state: Optional[BudgetState],
+) -> Union[ReasoningLadderSelectPayload, ReasoningLadderFailure]:
     pass_name = "select"
+    if not _consume_pass_budget(trace, pass_name, budget, budget_state):
+        return ReasoningLadderFailure(reason="budget_exceeded", failed_pass=pass_name, details={})
     _emit_start(trace, pass_name, context_pack, question, None, None)
     payload = _call_reasoner(
         llm_reasoner,
@@ -283,3 +305,28 @@ def _emit(trace: Optional[TraceEmitter], event_type: str, payload: Dict[str, Any
     if trace is None:
         return
     trace(event_type, payload)
+
+
+def _consume_pass_budget(
+    trace: Optional[TraceEmitter],
+    pass_name: str,
+    budget: Optional[Budget],
+    budget_state: Optional[BudgetState],
+) -> bool:
+    if budget is None or budget_state is None:
+        return True
+    allowed, action, updated = consume_budget(budget=budget, state=budget_state, kind="pass", amount=1, cost_units=1)
+    budget_state.passes_used = updated.passes_used
+    budget_state.tool_calls_used = updated.tool_calls_used
+    budget_state.parallel_calls_used = updated.parallel_calls_used
+    budget_state.cost_units_used = updated.cost_units_used
+    budget_state.latency_bucket_observed = updated.latency_bucket_observed
+    budget_state.violations = updated.violations
+    _emit(trace, "budget_consumed", {"kind": "pass", "state": updated.model_dump(mode="json")})
+    if not allowed:
+        _emit(
+            trace,
+            "budget_exceeded",
+            {"kind": "pass", "limit": budget.max_passes, "state": updated.model_dump(mode="json"), "action_taken": action},
+        )
+    return allowed
