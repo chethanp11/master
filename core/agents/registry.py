@@ -15,9 +15,10 @@ from __future__ import annotations
 
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Iterable
 
 from core.agents.base import BaseAgent
+from core.contracts.descriptors_schema import AgentDescriptor, CostHint
 from core.agents.llm_reasoner import (
     build as build_llm_reasoner,
     build_explanation_reasoner,
@@ -34,6 +35,7 @@ class AgentRegistration:
     name: str
     factory: AgentFactory
     meta: Dict[str, Any]
+    descriptor: AgentDescriptor
 
 
 class AgentRegistry:
@@ -59,6 +61,7 @@ class AgentRegistry:
         factory: AgentFactory | BaseAgent,
         *,
         meta: Optional[Dict[str, Any]] = None,
+        descriptor: Optional[AgentDescriptor | Dict[str, Any]] = None,
         overwrite: bool = False,
     ) -> None:
         norm = _norm(name)
@@ -69,7 +72,13 @@ class AgentRegistry:
             raise ValueError("AgentRegistry.register requires a factory to avoid shared state across runs.")
         actual_factory = factory
 
-        cls._agents[norm] = AgentRegistration(name=norm, factory=actual_factory, meta=meta or {})
+        resolved_descriptor = cls._coerce_descriptor(norm, actual_factory, meta or {}, descriptor)
+        cls._agents[norm] = AgentRegistration(
+            name=norm,
+            factory=actual_factory,
+            meta=meta or {},
+            descriptor=resolved_descriptor,
+        )
 
     @classmethod
     def resolve(cls, name: str) -> BaseAgent:
@@ -89,6 +98,55 @@ class AgentRegistry:
     def list(cls) -> Dict[str, Dict[str, Any]]:
         _register_core_agents()
         return {k: {"name": v.name, "meta": v.meta} for k, v in cls._agents.items()}
+
+    @classmethod
+    def get_descriptor(cls, name: str) -> AgentDescriptor:
+        _register_core_agents()
+        norm = _norm(name)
+        reg = cls._agents.get(norm)
+        if reg is None:
+            raise KeyError(f"Unknown agent: {name}")
+        return reg.descriptor
+
+    @classmethod
+    def list_descriptors(cls) -> Iterable[AgentDescriptor]:
+        _register_core_agents()
+        return [reg.descriptor for reg in cls._agents.values()]
+
+    @classmethod
+    def _coerce_descriptor(
+        cls,
+        name: str,
+        factory: AgentFactory,
+        meta: Dict[str, Any],
+        descriptor: Optional[AgentDescriptor | Dict[str, Any]],
+    ) -> AgentDescriptor:
+        if isinstance(descriptor, AgentDescriptor):
+            return descriptor
+        if isinstance(descriptor, dict):
+            return AgentDescriptor.model_validate(descriptor)
+
+        description = ""
+        try:
+            agent = factory()
+            description = getattr(agent, "description", "") or ""
+        except Exception:
+            agent = None  # type: ignore[assignment]
+
+        purposes = list(meta.get("purposes") or [])
+        tags = list(meta.get("tags") or [])
+        allowed_step_types = list(meta.get("allowed_step_types") or ["agent", "plan_proposal"])
+        cost_hint = meta.get("cost_hint") or CostHint.UNKNOWN
+
+        return AgentDescriptor(
+            name=name,
+            purposes=purposes,
+            tags=tags,
+            input_schema_ref=meta.get("input_schema_ref"),
+            output_schema_ref=meta.get("output_schema_ref"),
+            cost_hint=CostHint(str(cost_hint)) if not isinstance(cost_hint, CostHint) else cost_hint,
+            allowed_step_types=allowed_step_types,
+        )
 
 
 def _norm(name: str) -> str:

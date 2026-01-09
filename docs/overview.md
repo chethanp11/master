@@ -227,3 +227,8 @@ flowchart TB
 - No product-specific imports in core orchestrator.
 - Models are accessed only via `core/models/router.py`.
 - Tools are executed only via `core/tools/executor.py`.
+
+### Intelligence acceptance guardrails
+- Deterministic flows must replay the same steps and outputs (see `tests/acceptance_intelligence`).
+- HITL/user_input transitions remain paused until explicitly resumed, and resume actions stay idempotent.
+- Governance continues to deny blocked tools/models before execution, traces capture tool/model boundaries, and `plan_proposal` steps emit artifacts without invoking tools.

@@ -829,27 +829,27 @@ class OrchestratorEngine:
                             self._persist_run_output(run_ctx)
                             return RunStatus.FAILED.value
                     else:
-                    self._transition_run_status(
-                        run_id=run_ctx.run_id,
-                        product=run_ctx.product,
-                        flow=run_ctx.flow,
-                        current_status=current_status,
-                        target_status=RunStatus.FAILED,
-                        step_id=step_id,
-                        summary={"failed_step_id": step_id},
-                        reason="free_text_guard_blocked",
-                    )
-                    current_status = RunStatus.FAILED
-                    self._emit_event(
-                        kind="free_text_guard_blocked",
-                        run_id=run_ctx.run_id,
-                        step_id=step_id,
-                        product=run_ctx.product,
-                        flow=run_ctx.flow,
-                        payload={"message": "Free-text input cannot directly trigger tools or agents."},
-                    )
-                    self._persist_run_output(run_ctx)
-                    return RunStatus.FAILED.value
+                        self._transition_run_status(
+                            run_id=run_ctx.run_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            current_status=current_status,
+                            target_status=RunStatus.FAILED,
+                            step_id=step_id,
+                            summary={"failed_step_id": step_id},
+                            reason="free_text_guard_blocked",
+                        )
+                        current_status = RunStatus.FAILED
+                        self._emit_event(
+                            kind="free_text_guard_blocked",
+                            run_id=run_ctx.run_id,
+                            step_id=step_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            payload={"message": "Free-text input cannot directly trigger tools or agents."},
+                        )
+                        self._persist_run_output(run_ctx)
+                        return RunStatus.FAILED.value
 
             step_record = StepRecord(
                 run_id=run_ctx.run_id,
