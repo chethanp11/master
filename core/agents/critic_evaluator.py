@@ -11,6 +11,7 @@ import json
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from core.agents.base import BaseAgent
+from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
 from core.contracts.context_pack_schema import ContextPack
 from core.contracts.critic_schema import CriticFailure, CriticOutput, CriticResult
 from core.contracts.evidence_schema import EvidenceItem
@@ -73,16 +74,23 @@ class CriticEvaluatorAgent(BaseAgent):
         self._llm_reasoner = llm_reasoner
         self._trace = trace
 
-    def run(self, step_context: StepContext) -> CriticResult:  # type: ignore[override]
+    def run(self, step_context: StepContext) -> AgentResult:  # type: ignore[override]
         params = step_context.step.params if step_context.step else {}
-        context_pack = ContextPack.model_validate(params.get("context_pack") or {})
-        evidence_raw = params.get("evidence") or []
-        evidence = [EvidenceItem.model_validate(item) for item in evidence_raw]
-        reasoning = ReasoningLadderOutput.model_validate(params.get("reasoning") or {})
-        question = params.get("question") or ""
+        meta = AgentMeta(agent_name=self.name)
         if self._llm_reasoner is None:
-            return CriticResult(ok=False, error=CriticFailure(reason="llm_reasoner_missing"))
-        return run_critic_evaluator(
+            err = AgentError(code=AgentErrorCode.INVALID_INPUT, message="llm_reasoner_missing")
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+        try:
+            context_pack = ContextPack.model_validate(params.get("context_pack") or {})
+            evidence_raw = params.get("evidence") or []
+            evidence = [EvidenceItem.model_validate(item) for item in evidence_raw]
+            reasoning = ReasoningLadderOutput.model_validate(params.get("reasoning") or {})
+            question = params.get("question") or ""
+        except Exception as exc:
+            err = AgentError(code=AgentErrorCode.INVALID_INPUT, message=str(exc))
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+
+        result = run_critic_evaluator(
             context_pack=context_pack,
             evidence=evidence,
             reasoning=reasoning,
@@ -90,6 +98,10 @@ class CriticEvaluatorAgent(BaseAgent):
             llm_reasoner=self._llm_reasoner,
             trace=self._trace or step_context.emit,
         )
+        if not result.ok or result.output is None:
+            err = AgentError(code=AgentErrorCode.UNKNOWN, message=result.error.reason if result.error else "critic_failed")
+            return AgentResult(ok=False, data=None, error=err, meta=meta)
+        return AgentResult(ok=True, data=result.output.model_dump(mode="json"), error=None, meta=meta)
 
 
 def _emit(trace: Optional[TraceEmitter], event_type: str, payload: Dict[str, Any]) -> None:
