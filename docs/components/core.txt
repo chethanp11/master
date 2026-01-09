@@ -1,4 +1,4 @@
-# captured_at: 2026-01-05T08:52:58.657401+00:00
+# captured_at: 2026-01-05T13:04:52.822950+00:00
 
 # core/__init__.py
 
@@ -5861,6 +5861,37 @@ class OrchestratorEngine:
                     and (prev_def.params or {}).get("mode") == UserInputModes.FREE_TEXT_INPUT
                     and step_def.type in {StepType.AGENT, StepType.TOOL}
                 ):
+                    prev_constraints = (prev_def.params or {}).get("constraints")
+                    if isinstance(prev_constraints, dict):
+                        allow_agents = prev_constraints.get("allow_next_agents") or []
+                        allow_tools = prev_constraints.get("allow_next_tools") or []
+                        if step_def.type == StepType.AGENT and step_def.agent in allow_agents:
+                            pass
+                        elif step_def.type == StepType.TOOL and step_def.tool in allow_tools:
+                            pass
+                        else:
+                            self._transition_run_status(
+                                run_id=run_ctx.run_id,
+                                product=run_ctx.product,
+                                flow=run_ctx.flow,
+                                current_status=current_status,
+                                target_status=RunStatus.FAILED,
+                                step_id=step_id,
+                                summary={"failed_step_id": step_id},
+                                reason="free_text_guard_blocked",
+                            )
+                            current_status = RunStatus.FAILED
+                            self._emit_event(
+                                kind="free_text_guard_blocked",
+                                run_id=run_ctx.run_id,
+                                step_id=step_id,
+                                product=run_ctx.product,
+                                flow=run_ctx.flow,
+                                payload={"message": "Free-text input cannot directly trigger tools or agents."},
+                            )
+                            self._persist_run_output(run_ctx)
+                            return RunStatus.FAILED.value
+                    else:
                     self._transition_run_status(
                         run_id=run_ctx.run_id,
                         product=run_ctx.product,
@@ -6067,6 +6098,44 @@ class OrchestratorEngine:
                     )
                     self._persist_run_output(run_ctx)
                     return RunStatus.FAILED.value
+
+                constraints = request.constraints if isinstance(request.constraints, dict) else {}
+                pause_if = constraints.get("pause_if")
+                if pause_if is False:
+                    empty_values = {"text": ""}
+                    user_input_payload = {
+                        "form_id": request.form_id,
+                        "values": empty_values,
+                        "comment": "",
+                        "metadata": {},
+                    }
+                    self.memory.update_step(
+                        run_ctx.run_id,
+                        step_id,
+                        {
+                            "status": StepStatus.COMPLETED.value,
+                            "finished_at": int(time.time()),
+                            "output": {"user_input": user_input_payload, "skipped": True},
+                        },
+                    )
+                    _store_user_input_artifacts(run_ctx, request.form_id, empty_values, "")
+                    self._emit_event(
+                        kind="user_input_skipped",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"form_id": request.form_id, "reason": "pause_if_false"},
+                    )
+                    self._emit_event(
+                        kind="step_completed",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={"ok": True},
+                    )
+                    continue
 
                 prompt = _build_user_input_prompt(run_ctx=run_ctx, step_id=step_id, request=request)
                 schema_summary = _summarize_schema(request.schema)

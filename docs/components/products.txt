@@ -1,4 +1,4 @@
-# captured_at: 2026-01-05T08:52:58.668143+00:00
+# captured_at: 2026-01-05T13:04:52.828279+00:00
 
 # products/__init__.py
 """Product packs namespace package."""
@@ -70,6 +70,7 @@ class IntentInput(BaseModel):
 
     intent: str = ""
     dataset: Optional[str] = None
+    input_text: Optional[str] = None
 
 
 class IntentAgent(BaseAgent):
@@ -90,67 +91,132 @@ class IntentAgent(BaseAgent):
         return "summary"
 
     @staticmethod
-    def _extract_measures(text: str) -> List[str]:
-        measures = []
+    def _extract_metrics(text: str) -> List[str]:
         lowered = text.lower()
-        for token in ("sales", "revenue", "spend", "expense", "cost", "profit"):
-            if token in lowered:
-                measures.append(token)
-        return measures
+        metrics: List[str] = []
+        mapping = [
+            ("amount_inr", ("amount", "spend", "purchase", "transaction amount", "volume")),
+            ("risk_score", ("risk", "risk score")),
+            ("fraud_label", ("fraud", "chargeback", "suspicious")),
+            ("decline_reason", ("decline", "rejection", "failed transactions")),
+            ("value", ("value",)),
+        ]
+        for column, tokens in mapping:
+            if any(token in lowered for token in tokens):
+                metrics.append(column)
+        match = re.search(r"\bh(\d{4})\b", lowered)
+        if match:
+            metrics.append(f"H{match.group(1)}")
+        return metrics
 
     @staticmethod
-    def _extract_dimensions(text: str) -> List[str]:
-        dims = []
+    def _extract_entities(text: str) -> List[str]:
         lowered = text.lower()
-        for token in ("region", "segment", "category", "product", "channel"):
-            if token in lowered:
-                dims.append(token)
-        return dims
+        entities: List[str] = []
+        if "branded_cards_transactions" in lowered or "branded cards" in lowered:
+            entities.append("branded_cards_transactions")
+        file_matches = re.findall(r"([\w\-]+\.csv)", lowered)
+        for match in file_matches:
+            entities.append(match)
+        return entities
+
+    @staticmethod
+    def _extract_time_window(text: str) -> Optional[str]:
+        lowered = text.lower()
+        match = re.search(r"last\s+(\d+\s+\w+)", lowered)
+        if match:
+            return match.group(1)
+        if "last quarter" in lowered:
+            return "last quarter"
+        if "last year" in lowered or "past year" in lowered:
+            return "last year"
+        return None
+
+    @staticmethod
+    def _requested_outputs(text: str) -> List[str]:
+        lowered = text.lower()
+        outputs: List[str] = []
+        if any(token in lowered for token in ("chart", "plot", "graph", "visual")):
+            outputs.append("chart")
+        if "table" in lowered:
+            outputs.append("table")
+        if any(token in lowered for token in ("report", "summary", "narrative", "explain")):
+            outputs.append("narrative")
+        if not outputs:
+            outputs.append("narrative")
+        return outputs
+
+    @staticmethod
+    def _build_blocking_question(missing: List[str]) -> Optional[str]:
+        if not missing:
+            return None
+        parts = []
+        if "dataset" in missing:
+            parts.append("the dataset to analyze (e.g., branded_cards_transactions)")
+        if "metric" in missing:
+            parts.append("the metric to focus on (e.g., amount_inr, risk_score)")
+        if "time_window" in missing:
+            parts.append("the time window (e.g., last 30 days)")
+        detail = "; ".join(parts)
+        return (
+            "I need a bit more detail to proceed: "
+            f"{detail}. This ensures the analysis is correct and scoped."
+        )
 
     def run(self, step_context: StepContext) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
-            raw_intent = (
-                payload.get("intent")
-                or payload.get("prompt")
-                or payload.get("question")
-                or payload.get("instructions")
-                or ""
-            )
-            dataset = payload.get("dataset")
-            lowered = str(raw_intent).strip().lower()
+            params = step_context.step.params if step_context.step else {}
+            input_text = ""
+            if isinstance(params, dict):
+                input_text = str(params.get("input_text") or "").strip()
+            if not input_text:
+                input_text = str(
+                    payload.get("intent")
+                    or payload.get("prompt")
+                    or payload.get("question")
+                    or payload.get("instructions")
+                    or ""
+                ).strip()
 
-            question_type = self._question_type(lowered)
-            measures = self._extract_measures(lowered)
-            dimensions = self._extract_dimensions(lowered)
-            time_window = None
-            match = re.search(r"last\s+(\d+\s+\w+)", lowered)
-            if match:
-                time_window = match.group(1)
+            lowered = input_text.lower()
+            inferred_entities = self._extract_entities(lowered)
+            payload_dataset = payload.get("dataset")
+            if payload_dataset and payload_dataset not in inferred_entities:
+                inferred_entities.append(str(payload_dataset))
+            inferred_metrics = self._extract_metrics(lowered)
+            inferred_time_window = self._extract_time_window(lowered)
 
-            required = []
-            clarifying = []
-            if not dataset:
-                required.append("dataset_id")
-                clarifying.append("Which dataset should I analyze?")
-            if not measures:
-                required.append("metric")
-                clarifying.append("Which metric should I focus on?")
-            if not time_window:
-                required.append("time_window")
-                clarifying.append("What time window should I use?")
+            missing: List[str] = []
+            if not inferred_entities:
+                missing.append("dataset")
+            if not inferred_metrics:
+                missing.append("metric")
+            if not inferred_time_window:
+                missing.append("time_window")
 
-            confidence = "medium" if not required else "low"
+            blocking_question = self._build_blocking_question(missing) or "Provide any clarification needed."
+            blocking_questions = [blocking_question] if missing else []
+
+            confidence_score = 0.2 if missing else 0.75
+            if confidence_score >= 0.7:
+                confidence_label = "high"
+            elif confidence_score >= 0.4:
+                confidence_label = "medium"
+            else:
+                confidence_label = "low"
 
             frame = IntentFrame(
-                question_type=question_type,
-                measures=measures,
-                dimensions=dimensions,
-                time_window=time_window,
-                dataset_id=dataset,
-                required_data=required,
-                clarifying_questions=clarifying,
-                confidence=confidence,
+                intent_summary=input_text or "No intent provided.",
+                inferred_entities=inferred_entities,
+                inferred_metrics=inferred_metrics,
+                inferred_time_window=inferred_time_window,
+                requested_outputs=self._requested_outputs(lowered),
+                confidence_score=confidence_score,
+                confidence_label=confidence_label,
+                blocking_required=bool(missing),
+                blocking_questions=blocking_questions,
+                blocking_question=blocking_question,
             )
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(ok=True, data=frame.model_dump(mode="json"), error=None, meta=meta)
@@ -165,7 +231,7 @@ def build() -> IntentAgent:
 # products/ade/agents/plan_agent.py
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -186,17 +252,17 @@ class PlanAgent(BaseAgent):
     description = "Builds a deterministic plan spec for ADE runs."
 
     @staticmethod
-    def _resolve_user_inputs(artifacts: Dict[str, Any]) -> Dict[str, Any]:
-        user_inputs = artifacts.get("user_input") if isinstance(artifacts, dict) else None
-        if not isinstance(user_inputs, dict):
-            return {}
-        entry = user_inputs.get("ensure_inputs")
-        if not isinstance(entry, dict):
-            return {}
-        values = entry.get("values")
-        if not isinstance(values, dict):
-            return {}
-        return values
+    def _question_type(text: str) -> str:
+        lowered = text.lower()
+        if any(token in lowered for token in ("why", "root cause", "cause", "explain")):
+            return "explain_drop"
+        if any(token in lowered for token in ("anomaly", "outlier", "spike", "unexpected")):
+            return "anomaly_investigation"
+        if any(token in lowered for token in ("compare", "vs", "versus")):
+            return "comparison"
+        if any(token in lowered for token in ("trend", "over time", "growth")):
+            return "trend_summary"
+        return "summary"
 
     def run(self, step_context: StepContext) -> AgentResult:
         try:
@@ -206,13 +272,22 @@ class PlanAgent(BaseAgent):
             if not isinstance(intent, dict):
                 intent = {}
 
-            user_values = self._resolve_user_inputs(step_context.run.artifacts)
-            dataset_id = user_values.get("dataset_id") or intent.get("dataset_id") or payload.get("dataset")
-            metric = user_values.get("metric") or (intent.get("measures") or [None])[0]
-            time_window = user_values.get("time_window") or intent.get("time_window")
-            chart_type = user_values.get("chart_type") or "line"
-            include_hypothesis = bool(user_values.get("include_hypothesis_checks", False))
-            question_type = intent.get("question_type") or "summary"
+            if intent.get("blocking_required"):
+                raise ValueError("Blocking intent fields unresolved; cannot plan execution.")
+
+            inferred_entities = intent.get("inferred_entities") or []
+            inferred_metrics = intent.get("inferred_metrics") or []
+            dataset_id = inferred_entities[0] if isinstance(inferred_entities, list) and inferred_entities else None
+            metric = inferred_metrics[0] if isinstance(inferred_metrics, list) and inferred_metrics else None
+            time_window = intent.get("inferred_time_window")
+            chart_type = "line"
+            include_hypothesis = False
+            question_type = self._question_type(intent.get("intent_summary", ""))
+
+            if not dataset_id:
+                raise ValueError("Missing dataset selection; cannot build a deterministic plan.")
+            if not metric:
+                raise ValueError("Missing metric selection; cannot build a deterministic plan.")
 
             tool_flags = {
                 "detect_anomalies": question_type in {"explain_drop", "anomaly_investigation"},
@@ -834,12 +909,12 @@ schema:
 
 # products/ade/flows/ade_v1.yaml
 # ==============================
-# Flow: ade_v1 (interactive analyst workflow)
+# Flow: ade_v1 (free-text analyst workflow)
 # ==============================
 
 id: "ade_v1"
 version: "1.0.0"
-description: "Interactive ADE workflow with HITL pauses and business-ready outputs"
+description: "Free-text ADE workflow with HITL pauses and business-ready outputs"
 autonomy_level: "suggest_only"
 
 steps:
@@ -849,40 +924,49 @@ steps:
     agent: "intent_agent"
     params: {}
 
-  - id: "ensure_inputs"
+  - id: "clarify_intent"
     type: "user_input"
     params:
       schema_version: "1.0"
-      form_id: "ensure_inputs"
-      title: "Analysis inputs"
-      prompt: "Provide missing analysis inputs"
+      form_id: "clarify_intent"
+      title: "Analysis clarification"
+      prompt: "{{artifacts.agent.intent_agent.output.blocking_question}}"
       input_type: "text"
-      mode: "choice_input"
-      required:
-        - "{{artifacts.agent.intent_agent.output.required_data}}"
-      defaults:
-        dataset_id: "{{payload.dataset}}"
-        metric: "{{artifacts.agent.intent_agent.output.measures.0}}"
-        time_window: "{{artifacts.agent.intent_agent.output.time_window}}"
-        chart_type: "line"
-        include_hypothesis_checks: false
-        notes: ""
-      schema:
-        type: "object"
-        properties:
-          dataset_id:
-            type: "string"
-          metric:
-            type: "string"
-          time_window:
-            type: "string"
-          chart_type:
-            type: "string"
-            enum: ["line", "bar", "area", "scatter"]
-          include_hypothesis_checks:
-            type: "boolean"
-          notes:
-            type: "string"
+      mode: "free_text_input"
+      defaults: {}
+      schema: {}
+      required: []
+      constraints:
+        pause_if: "{{artifacts.agent.intent_agent.output.blocking_required}}"
+
+  - id: "intent_refinement"
+    type: "agent"
+    backend: "local"
+    agent: "intent_agent"
+    params:
+      input_text: "{{payload.prompt}} {{artifacts.user_input.clarify_intent.values.text}}"
+
+  - id: "clarify_followup"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "clarify_followup"
+      title: "Additional clarification"
+      prompt: "{{artifacts.agent.intent_agent.output.blocking_question}}"
+      input_type: "text"
+      mode: "free_text_input"
+      defaults: {}
+      schema: {}
+      required: []
+      constraints:
+        pause_if: "{{artifacts.agent.intent_agent.output.blocking_required}}"
+
+  - id: "intent_final"
+    type: "agent"
+    backend: "local"
+    agent: "intent_agent"
+    params:
+      input_text: "{{payload.prompt}} {{artifacts.user_input.clarify_intent.values.text}} {{artifacts.user_input.clarify_followup.values.text}}"
 
   - id: "planning"
     type: "agent"
@@ -901,7 +985,7 @@ steps:
     backend: "local"
     tool: "data_reader"
     params:
-      dataset: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+      dataset: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
     retry:
       max_attempts: 2
       backoff_seconds: 1
@@ -911,19 +995,19 @@ steps:
     backend: "local"
     tool: "compute_business_metrics"
     params:
-      dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
       columns: "{{artifacts.tool.data_reader.output.columns}}"
       rows: "{{artifacts.tool.data_reader.output.rows}}"
-      metric_focus: "{{artifacts.user_input.ensure_inputs.values.metric}}"
+      metric_focus: "{{artifacts.agent.intent_agent.output.inferred_metrics.0}}"
       chart_type: "{{artifacts.agent.plan_agent.output.chart_type}}"
-      include_hypothesis_checks: "{{artifacts.user_input.ensure_inputs.values.include_hypothesis_checks}}"
+      include_hypothesis_checks: false
 
   - id: "detect_anomalies"
     type: "tool"
     backend: "local"
     tool: "detect_anomalies"
     params:
-      dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
       data:
         columns: "{{artifacts.tool.data_reader.output.columns}}"
@@ -935,7 +1019,7 @@ steps:
     backend: "local"
     tool: "hypothesis_test_data_outage"
     params:
-      dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
       enabled: "{{artifacts.agent.plan_agent.output.tool_flags.hypothesis_data_outage}}"
 
@@ -944,7 +1028,7 @@ steps:
     backend: "local"
     tool: "hypothesis_test_seasonality"
     params:
-      dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
       enabled: "{{artifacts.agent.plan_agent.output.tool_flags.hypothesis_seasonality}}"
 
@@ -963,7 +1047,7 @@ steps:
         columns: "{{artifacts.tool.data_reader.output.columns}}"
         rows: "{{artifacts.tool.data_reader.output.rows}}"
       evidence_ref:
-        dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+        dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
         columns: "{{artifacts.tool.data_reader.output.columns}}"
 
   - id: "build_reasoning_narrative"
@@ -977,9 +1061,9 @@ steps:
     backend: "local"
     tool: "assemble_decision_packet"
     params:
-      question: "{{payload.intent}}"
+      question: "{{artifacts.agent.intent_agent.output.intent_summary}}"
       decision_summary: "Plan aligned to intent and executed with configured tools."
-      confidence_level: "{{artifacts.agent.intent_agent.output.confidence}}"
+      confidence_level: "{{artifacts.agent.intent_agent.output.confidence_label}}"
       assumptions:
         - "Inputs reflect the provided dataset."
         - "No external data sources are used."
@@ -994,16 +1078,16 @@ steps:
       sections:
         - section_id: "analysis"
           title: "Analysis summary"
-          intent: "{{payload.intent}}"
+          intent: "{{artifacts.agent.intent_agent.output.intent_summary}}"
           narrative: "Key metrics computed and summarized for analyst review."
-          claim_strength: "{{artifacts.agent.intent_agent.output.confidence}}"
+          claim_strength: "{{artifacts.agent.intent_agent.output.confidence_label}}"
           visuals:
             - chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
             - table:
                 columns: "{{artifacts.tool.data_reader.output.columns}}"
                 rows: "{{artifacts.tool.data_reader.output.rows}}"
           evidence_refs:
-            - dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+            - dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
         - section_id: "hypotheses"
           title: "Hypothesis checks"
@@ -1014,7 +1098,7 @@ steps:
             - "data_outage={{artifacts.tool.hypothesis_test_data_outage.output.status}}"
             - "seasonality={{artifacts.tool.hypothesis_test_seasonality.output.status}}"
           evidence_refs:
-            - dataset_id: "{{artifacts.user_input.ensure_inputs.values.dataset_id}}"
+            - dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
 
   - id: "assemble_business_report"
@@ -1026,8 +1110,8 @@ steps:
       packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
       downgrade_reasons: []
       chart_type: "{{artifacts.agent.plan_agent.output.chart_type}}"
-      metric_focus: "{{artifacts.user_input.ensure_inputs.values.metric}}"
-      include_hypothesis_checks: "{{artifacts.user_input.ensure_inputs.values.include_hypothesis_checks}}"
+      metric_focus: "{{artifacts.agent.intent_agent.output.inferred_metrics.0}}"
+      include_hypothesis_checks: false
 
   - id: "render_business_report_html"
     type: "tool"
@@ -1631,14 +1715,16 @@ from pydantic import BaseModel, ConfigDict, Field
 class IntentFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    question_type: str
-    measures: List[str] = Field(default_factory=list)
-    dimensions: List[str] = Field(default_factory=list)
-    time_window: Optional[str] = None
-    dataset_id: Optional[str] = None
-    required_data: List[str] = Field(default_factory=list)
-    clarifying_questions: List[str] = Field(default_factory=list)
-    confidence: str = "low"
+    intent_summary: str
+    inferred_entities: List[str] = Field(default_factory=list)
+    inferred_metrics: List[str] = Field(default_factory=list)
+    inferred_time_window: Optional[str] = None
+    requested_outputs: List[str] = Field(default_factory=list)
+    confidence_score: float = 0.0
+    confidence_label: str = "low"
+    blocking_required: bool = False
+    blocking_questions: List[str] = Field(default_factory=list)
+    blocking_question: Optional[str] = None
 
 # products/ade/schemas/plan_spec.py
 from __future__ import annotations
@@ -1767,7 +1853,7 @@ def test_ade_user_input_pause_resume(tmp_path: Path) -> None:
             flow="ade_v1",
             payload={
                 "dataset": "sample.csv",
-                "intent": "Summarize sales trend.",
+                "prompt": "Summarize sales trend.",
                 "files": [{"name": "sample.csv", "file_type": "csv"}],
             },
         )
@@ -1777,7 +1863,7 @@ def test_ade_user_input_pause_resume(tmp_path: Path) -> None:
 
         invalid = engine.resume_run(
             run_id=run_id,
-            user_input_response={"form_id": "ensure_inputs", "values": {"dataset_id": ""}},
+            user_input_response={"prompt_id": "clarify_intent", "free_text": ""},
         )
         assert not invalid.ok
         assert invalid.error is not None
@@ -1785,14 +1871,8 @@ def test_ade_user_input_pause_resume(tmp_path: Path) -> None:
         valid = engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "value",
-                    "time_window": "last 9 days",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": False,
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 9 days.",
             },
         )
         assert valid.ok, valid.error
@@ -1819,7 +1899,7 @@ def test_ade_approval_reject_replan_limit(tmp_path: Path) -> None:
             flow="ade_v1",
             payload={
                 "dataset": "sample.csv",
-                "intent": "Explain why sales dropped.",
+                "prompt": "Explain why sales dropped.",
                 "files": [{"name": "sample.csv", "file_type": "csv"}],
             },
         )
@@ -1829,14 +1909,8 @@ def test_ade_approval_reject_replan_limit(tmp_path: Path) -> None:
         valid = engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "value",
-                    "time_window": "last 9 days",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": True,
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 9 days.",
             },
         )
         assert valid.ok, valid.error
@@ -1923,7 +1997,7 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
                 "dataset": "sample.csv",
                 "upload_id": upload_id,
                 "files": [{"name": "sample.csv", "file_type": "csv"}],
-                "intent": "Assess dataset adequacy and highlight key risks.",
+                "prompt": "Assess dataset adequacy and highlight key risks.",
             },
         )
         assert started.ok, started.error
@@ -1933,15 +2007,8 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
         user_input = engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "value",
-                    "time_window": "last 7 days",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": False,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert user_input.ok, user_input.error
@@ -2038,7 +2105,7 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
             "dataset": "sample.csv",
             "upload_id": "test_upload",
             "files": [{"name": "sample.csv", "file_type": "csv"}],
-            "intent": "Assess dataset adequacy and highlight key risks.",
+            "prompt": "Assess dataset adequacy and highlight key risks.",
         }
 
         first = engine.run_flow(product="ade", flow="ade_v1", payload=payload)
@@ -2049,15 +2116,8 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         first_input = engine.resume_run(
             run_id=first_run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "value",
-                    "time_window": "last 7 days",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": False,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert first_input.ok, first_input.error
@@ -2075,15 +2135,8 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         second_input = engine.resume_run(
             run_id=second_run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "value",
-                    "time_window": "last 7 days",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": False,
-                    "notes": "test run",
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric value over last 7 days.",
             },
         )
         assert second_input.ok, second_input.error
@@ -2195,7 +2248,7 @@ def test_business_report_quality_smoke(tmp_path: Path) -> None:
             flow="ade_v1",
             payload={
                 "dataset": "sample.csv",
-                "intent": "Summarize spend trend.",
+                "prompt": "Summarize spend trend.",
                 "files": [{"name": "sample.csv", "file_type": "csv"}],
             },
         )
@@ -2203,14 +2256,8 @@ def test_business_report_quality_smoke(tmp_path: Path) -> None:
         engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "form_id": "ensure_inputs",
-                "values": {
-                    "dataset_id": "sample.csv",
-                    "metric": "H2026",
-                    "time_window": "H2024-H2026",
-                    "chart_type": "line",
-                    "include_hypothesis_checks": False,
-                },
+                "prompt_id": "clarify_intent",
+                "free_text": "Analyze sample.csv using metric H2026 over H2024-H2026.",
             },
         )
         engine.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")
@@ -2364,6 +2411,58 @@ def test_assemble_insight_card_requires_citations():
                 citations=[],
             )
         )
+
+# products/ade/tests/unit/test_demo_data_reader.py
+from pathlib import Path
+
+from core.orchestrator.context import RunContext
+
+from products.ade.tools.data_reader import DataReaderTool
+
+
+def test_demo_data_reader_branded_cards() -> None:
+    tool = DataReaderTool()
+    run_ctx = RunContext(run_id="run_demo", product="ade", flow="ade_v1", payload={})
+    step_ctx = run_ctx.new_step(step_id="read", step_type="tool", target="data_reader")
+
+    result = tool.run({"dataset": "branded_cards_transactions"}, step_ctx)
+    assert result.ok, result.error
+    data = result.data or {}
+    assert data.get("row_count") == 1000
+
+    expected_columns = [
+        "transaction_id",
+        "account_id",
+        "customer_id",
+        "card_network",
+        "card_type",
+        "product",
+        "txn_ts",
+        "amount_inr",
+        "currency",
+        "merchant_name",
+        "merchant_category",
+        "merchant_city",
+        "merchant_country",
+        "channel",
+        "auth_type",
+        "status",
+        "decline_reason",
+        "is_international",
+        "fx_rate",
+        "amount_base_inr",
+        "risk_score",
+        "fraud_label",
+        "device_id",
+        "ip_country",
+        "latitude",
+        "longitude",
+    ]
+    assert data.get("columns") == expected_columns
+
+    product_root = Path(__file__).resolve().parents[2]
+    demo_path = product_root / "data" / "branded_cards_transactions.csv"
+    assert demo_path.exists()
 
 # products/ade/tests/unit/test_detect_anomalies_rules.py
 from products.ade.tools.detect_anomalies import (
@@ -3647,8 +3746,8 @@ class DataReaderTool(BaseTool):
     def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         try:
             validated = ReadParams.model_validate(params or {})
-            input_dir = (ctx.run.meta or {}).get("input_dir")
-            if not input_dir:
+            dataset_path = _resolve_dataset_path(validated.dataset, ctx)
+            if dataset_path is None:
                 meta = ToolMeta(tool_name=self.name, backend="local")
                 return ToolResult(
                     ok=False,
@@ -3659,7 +3758,6 @@ class DataReaderTool(BaseTool):
                     ),
                     meta=meta,
                 )
-            dataset_path = Path(str(input_dir)) / validated.dataset
             columns: List[str] = []
             rows: List[List[Any]] = []
             row_count = 0
@@ -3747,6 +3845,16 @@ class DataReaderTool(BaseTool):
 
 def build() -> DataReaderTool:
     return DataReaderTool()
+
+
+def _resolve_dataset_path(dataset: str, ctx: StepContext) -> Optional[Path]:
+    if dataset == "branded_cards_transactions":
+        product_root = Path(__file__).resolve().parents[1]
+        return product_root / "data" / "branded_cards_transactions.csv"
+    input_dir = (ctx.run.meta or {}).get("input_dir")
+    if not input_dir:
+        return None
+    return Path(str(input_dir)) / dataset
 
 
 def _is_number(value: str) -> bool:
@@ -5049,6 +5157,304 @@ def _build_html_bytes(stub_payload: Dict[str, Any]) -> bytes:
 """
     html = html.replace("__STUB_JSON__", stub_json)
     return html.encode("utf-8")
+
+# products/ade/tools/generate_demo_data.py
+from __future__ import annotations
+
+import csv
+import math
+import random
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+
+SEED = 42
+ROW_COUNT = 1000
+TZ = timezone(timedelta(hours=5, minutes=30))
+
+CARD_NETWORKS = ["VISA", "MASTERCARD", "AMEX", "RUPAY"]
+CARD_TYPES = ["CREDIT", "DEBIT"]
+MERCHANT_CATEGORIES = [
+    "Grocery",
+    "Fuel",
+    "Travel",
+    "Ecomm",
+    "Dining",
+    "Utilities",
+    "Pharmacy",
+    "Entertainment",
+    "Other",
+]
+CITIES = [
+    "Bangalore",
+    "Mumbai",
+    "Delhi",
+    "Pune",
+    "Hyderabad",
+    "Chennai",
+    "Kolkata",
+    "Ahmedabad",
+]
+COUNTRY_CHOICES = ["US", "SG", "AE", "GB", "DE"]
+CURRENCY_BY_COUNTRY = {"US": "USD", "SG": "SGD", "AE": "AED", "GB": "GBP", "DE": "EUR"}
+FX_RANGES = {
+    "USD": (74.0, 92.0),
+    "SGD": (54.0, 72.0),
+    "EUR": (82.0, 98.0),
+    "GBP": (95.0, 112.0),
+    "AED": (20.0, 26.0),
+}
+DECLINE_REASONS = [
+    "INSUFFICIENT_FUNDS",
+    "SUSPECTED_FRAUD",
+    "INVALID_PIN",
+    "NETWORK_ERROR",
+    "LIMIT_EXCEEDED",
+]
+
+CITY_COORDS = {
+    "Bangalore": (12.9716, 77.5946),
+    "Mumbai": (19.076, 72.8777),
+    "Delhi": (28.7041, 77.1025),
+    "Pune": (18.5204, 73.8567),
+    "Hyderabad": (17.385, 78.4867),
+    "Chennai": (13.0827, 80.2707),
+    "Kolkata": (22.5726, 88.3639),
+    "Ahmedabad": (23.0225, 72.5714),
+}
+
+MERCHANTS_BY_CATEGORY = {
+    "Grocery": ["FreshBasket", "DailyMart", "GreenLeaf Grocers"],
+    "Fuel": ["SpeedFuel", "MetroPetro", "FuelPoint"],
+    "Travel": ["SkyRoute", "CityCab", "RailEase"],
+    "Ecomm": ["ShopSphere", "UrbanCart", "ClickBazaar"],
+    "Dining": ["SpiceTrail", "Cafe Mosaic", "TasteHub"],
+    "Utilities": ["PowerGrid", "AquaFlow", "NetConnect"],
+    "Pharmacy": ["MediPlus", "HealthFirst", "WellnessRx"],
+    "Entertainment": ["StarCinemas", "FunZone", "PlayArena"],
+    "Other": ["QuickServices", "LocalStore", "CityServices"],
+}
+
+
+def _right_skewed_amount(category: str, rng: random.Random) -> float:
+    base = rng.lognormvariate(4.3, 0.6)
+    if category in {"Travel", "Ecomm"}:
+        base *= rng.uniform(2.0, 4.5)
+    elif category == "Fuel":
+        base *= rng.uniform(0.8, 1.5)
+    elif category == "Utilities":
+        base *= rng.uniform(1.0, 2.0)
+    amount = min(base, 150000.0)
+    return round(max(amount, 75.0), 2)
+
+
+def _choose_time(now: datetime, rng: random.Random) -> datetime:
+    days_back = rng.randint(0, 179)
+    seconds = rng.randint(0, 86399)
+    return now - timedelta(days=days_back, seconds=seconds)
+
+
+def _risk_score(amount: float, channel: str, is_international: int, ip_mismatch: bool, rng: random.Random) -> int:
+    score = rng.randint(5, 55)
+    if amount > 50000:
+        score += 20
+    elif amount > 20000:
+        score += 12
+    if channel == "ECOM":
+        score += 12
+    if is_international:
+        score += 18
+    if ip_mismatch:
+        score += 20
+    return min(score, 100)
+
+
+def _format_decimal(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def generate_rows(count: int) -> List[Dict[str, Any]]:
+    rng = random.Random(SEED)
+    now = datetime.now(tz=TZ)
+    rows: List[Dict[str, Any]] = []
+
+    for idx in range(count):
+        card_network = rng.choice(CARD_NETWORKS)
+        card_type = rng.choice(CARD_TYPES)
+        category = rng.choice(MERCHANT_CATEGORIES)
+        merchant_name = rng.choice(MERCHANTS_BY_CATEGORY[category])
+        city = rng.choice(CITIES)
+        channel = rng.choices(["POS", "ECOM", "ATM"], weights=[0.62, 0.30, 0.08])[0]
+        auth_type = "chip_pin"
+        if channel == "ECOM":
+            auth_type = "online"
+        elif channel == "ATM":
+            auth_type = "atm_pin"
+        else:
+            auth_type = rng.choice(["chip_pin", "contactless"])
+
+        status = "APPROVED" if rng.random() > 0.08 else "DECLINED"
+        decline_reason = "" if status == "APPROVED" else rng.choice(DECLINE_REASONS)
+
+        is_international = 1 if rng.random() < 0.06 else 0
+        merchant_country = "IN"
+        currency = "INR"
+        fx_rate: Optional[float] = None
+
+        if is_international:
+            merchant_country = rng.choice(COUNTRY_CHOICES)
+            currency = CURRENCY_BY_COUNTRY.get(merchant_country, "USD")
+            fx_low, fx_high = FX_RANGES[currency]
+            fx_rate = rng.uniform(fx_low, fx_high)
+
+        amount = _right_skewed_amount(category, rng)
+        amount_base_inr = amount
+        if is_international and fx_rate is not None:
+            amount_base_inr = amount * fx_rate
+
+        ip_country = "IN"
+        ip_mismatch = False
+        if channel == "ECOM" and rng.random() < 0.08:
+            ip_country = rng.choice([c for c in COUNTRY_CHOICES if c != "IN"])
+            ip_mismatch = True
+
+        device_id = ""
+        if channel == "ECOM":
+            device_id = f"dev_{rng.getrandbits(40):010x}"
+
+        risk = _risk_score(amount_base_inr, channel, is_international, ip_mismatch, rng)
+
+        latitude = ""
+        longitude = ""
+        if channel != "ECOM":
+            coords = CITY_COORDS.get(city)
+            if coords and rng.random() < 0.85:
+                latitude = f"{coords[0] + rng.uniform(-0.05, 0.05):.6f}"
+                longitude = f"{coords[1] + rng.uniform(-0.05, 0.05):.6f}"
+
+        row = {
+            "transaction_id": f"txn_{idx + 1:05d}_{rng.getrandbits(32):08x}",
+            "account_id": f"ACC{rng.randint(1000, 9999)}",
+            "customer_id": f"CUST{rng.randint(10000, 99999)}",
+            "card_network": card_network,
+            "card_type": card_type,
+            "product": "Branded Cards",
+            "txn_ts": _choose_time(now, rng).isoformat(),
+            "amount_inr": _format_decimal(amount),
+            "currency": currency,
+            "merchant_name": merchant_name,
+            "merchant_category": category,
+            "merchant_city": city,
+            "merchant_country": merchant_country,
+            "channel": channel,
+            "auth_type": auth_type,
+            "status": status,
+            "decline_reason": decline_reason,
+            "is_international": str(is_international),
+            "fx_rate": "" if not is_international else _format_decimal(fx_rate or 0.0),
+            "amount_base_inr": _format_decimal(amount_base_inr),
+            "risk_score": str(risk),
+            "fraud_label": "0",
+            "device_id": device_id,
+            "ip_country": ip_country,
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+        rows.append(row)
+
+    _assign_fraud_labels(rows, rng)
+    return rows
+
+
+def _assign_fraud_labels(rows: List[Dict[str, Any]], rng: random.Random) -> None:
+    candidates = []
+    for idx, row in enumerate(rows):
+        risk = int(row["risk_score"])
+        is_international = row["is_international"] == "1"
+        channel = row["channel"]
+        ip_mismatch = row["ip_country"] != "IN"
+        score = risk
+        if channel == "ECOM":
+            score += 10
+        if is_international:
+            score += 10
+        if ip_mismatch:
+            score += 15
+        candidates.append((score, idx))
+
+    candidates.sort(reverse=True)
+    target = max(10, int(math.ceil(len(rows) * 0.015)))
+
+    fraud_indices = set()
+    for score, idx in candidates:
+        if score >= 90 and rng.random() < 0.6:
+            fraud_indices.add(idx)
+        if len(fraud_indices) >= target:
+            break
+
+    if len(fraud_indices) < target:
+        for _, idx in candidates:
+            fraud_indices.add(idx)
+            if len(fraud_indices) >= target:
+                break
+
+    for idx in fraud_indices:
+        rows[idx]["fraud_label"] = "1"
+        rows[idx]["risk_score"] = str(max(int(rows[idx]["risk_score"]), rng.randint(85, 100)))
+        if rows[idx]["channel"] != "ECOM":
+            rows[idx]["channel"] = "ECOM"
+            rows[idx]["auth_type"] = "online"
+            rows[idx]["device_id"] = rows[idx]["device_id"] or f"dev_{rng.getrandbits(40):010x}"
+        if rows[idx]["ip_country"] == "IN" and rng.random() < 0.6:
+            rows[idx]["ip_country"] = rng.choice(COUNTRY_CHOICES)
+
+
+def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
+    fieldnames = [
+        "transaction_id",
+        "account_id",
+        "customer_id",
+        "card_network",
+        "card_type",
+        "product",
+        "txn_ts",
+        "amount_inr",
+        "currency",
+        "merchant_name",
+        "merchant_category",
+        "merchant_city",
+        "merchant_country",
+        "channel",
+        "auth_type",
+        "status",
+        "decline_reason",
+        "is_international",
+        "fx_rate",
+        "amount_base_inr",
+        "risk_score",
+        "fraud_label",
+        "device_id",
+        "ip_country",
+        "latitude",
+        "longitude",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def main() -> None:
+    product_root = Path(__file__).resolve().parents[1]
+    data_path = product_root / "data" / "branded_cards_transactions.csv"
+    rows = generate_rows(ROW_COUNT)
+    write_csv(data_path, rows)
+
+
+if __name__ == "__main__":
+    main()
 
 # products/ade/tools/hypothesis_test_data_outage.py
 
