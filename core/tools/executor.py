@@ -25,9 +25,13 @@ from __future__ import annotations
 
 
 
+import json
 import time
-from typing import Any, Dict, Optional
+from datetime import datetime
+from typing import Any, Dict, Optional, List, Tuple
 
+from core.contracts.evidence_schema import EvidenceItem, EvidenceSource
+from core.contracts.run_schema import ArtifactRef
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.governance.hooks import GovernanceHooks, HookDecision
 from core.governance.security import SecurityRedactor
@@ -112,9 +116,12 @@ class ToolExecutor:
             result = ToolResult(ok=False, data=None, error=err, meta=self._meta(tool_name))
 
         elapsed_ms = int((time.time() - started) * 1000)
+        normalized = self._normalize_result(result, tool_name=tool_name)
+        enriched = self._attach_evidence(normalized, tool_name=tool_name, params=params, ctx=ctx)
 
         # Emit trace/log event (sanitized)
-        safe_result = self._safe_tool_result(result)
+        safe_result = self._safe_tool_result(enriched)
+        produced_evidence = _evidence_metadata(enriched.evidence)
         self._emit(
             ctx,
             kind="tool.executed",
@@ -122,15 +129,16 @@ class ToolExecutor:
                 "tool": tool_name,
                 "params": safe_params,
                 "result": safe_result,
+                "produced_evidence": produced_evidence,
                 "latency_ms": elapsed_ms,
                 "backend": self.backend_mode,
             },
         )
 
         # Always return envelope
-        meta = result.meta or self._meta(tool_name)
+        meta = enriched.meta or self._meta(tool_name)
         updated_meta = meta.model_copy(update={"latency_ms": elapsed_ms, "backend": self.backend_mode})
-        return result.model_copy(update={"meta": updated_meta})
+        return enriched.model_copy(update={"meta": updated_meta})
 
     def _deny(self, ctx: StepContext, decision: HookDecision, tool_name: str) -> ToolResult:
         err = ToolError(
@@ -158,6 +166,51 @@ class ToolExecutor:
     def _meta(self, tool_name: str) -> ToolMeta:
         return ToolMeta(tool_name=tool_name, backend=self.backend_mode)
 
+    def _normalize_result(self, result: Any, *, tool_name: str) -> ToolResult:
+        if isinstance(result, ToolResult):
+            return result
+        meta = self._meta(tool_name)
+        if isinstance(result, dict):
+            return ToolResult(ok=True, data=result, error=None, meta=meta)
+        if isinstance(result, ArtifactRef):
+            return ToolResult(ok=True, data={"artifact": result.model_dump(mode="json")}, error=None, meta=meta)
+        if result is None:
+            return ToolResult(ok=True, data={}, error=None, meta=meta)
+        return ToolResult(ok=True, data={"value": result}, error=None, meta=meta)
+
+    def _attach_evidence(
+        self,
+        result: ToolResult,
+        *,
+        tool_name: str,
+        params: Dict[str, Any],
+        ctx: StepContext,
+    ) -> ToolResult:
+        if result.evidence:
+            return result
+        safe_params = self.redactor.sanitize(params)
+        payload = result.data if result.ok else {"error": result.error.model_dump(mode="json") if result.error else {}}
+        summary = _summarize_payload(payload)
+        confidence = 0.8 if result.ok else 0.5
+        evidence_id = f"{tool_name}-{result.meta.request_id}"
+        content_ref, artifacts = _store_evidence_artifact(
+            ctx=ctx,
+            tool_name=tool_name,
+            evidence_id=evidence_id,
+            payload=payload,
+        )
+        evidence = EvidenceItem(
+            id=evidence_id,
+            type="text",
+            source=EvidenceSource(tool=tool_name, uri=content_ref.uri, ref=content_ref.key),
+            timestamp=datetime.utcnow(),
+            confidence=confidence,
+            content_ref=content_ref,
+            summary=summary,
+            provenance=safe_params,
+        )
+        return result.model_copy(update={"evidence": [evidence], "artifacts": artifacts})
+
 
 def _strip_large_fields(value: Any) -> Any:
     if isinstance(value, dict):
@@ -173,3 +226,38 @@ def _strip_large_fields(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_large_fields(item) for item in value]
     return value
+
+
+def _store_evidence_artifact(
+    *,
+    ctx: StepContext,
+    tool_name: str,
+    evidence_id: str,
+    payload: Dict[str, Any],
+) -> Tuple[ArtifactRef, Dict[str, ArtifactRef]]:
+    key = f"tool.{tool_name}.evidence.{evidence_id}"
+    uri = f"memory://{key}"
+    ref = ArtifactRef(key=key, kind="json", uri=uri, meta={"tool": tool_name})
+    ctx.run.artifacts[key] = payload
+    return ref, {key: ref}
+
+
+def _summarize_payload(payload: Any, *, limit: int = 300) -> str:
+    if isinstance(payload, str):
+        text = payload
+    else:
+        try:
+            text = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+        except Exception:
+            text = str(payload)
+    text = text.strip()
+    if len(text) > limit:
+        return text[: limit - 1] + "…"
+    return text or "tool_output"
+
+
+def _evidence_metadata(items: List[EvidenceItem]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        out.append({"id": item.id, "type": item.type, "source": item.source.model_dump(mode="json")})
+    return out

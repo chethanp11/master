@@ -88,13 +88,16 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | `core/tools/base.py` | `BaseTool` | Tool contract used by products. | `run(params, ctx)` returns `ToolResult`. |
 | `core/tools/registry.py` | Tool registry | Global DI container for tool factories. | Case-normalized name resolution; exposes descriptor catalog. |
-| `core/tools/executor.py` | Tool executor | Central dispatcher for tool execution. | Applies governance hooks and redaction; emits trace events. |
+| `core/tools/executor.py` | Tool executor | Central dispatcher for tool execution. | Applies governance hooks and redaction; emits trace events; wraps outputs as evidence. |
 | `core/tools/backends/local_backend.py` | Local backend | In-process tool execution. | Calls Python tool implementation directly. |
 | `core/tools/backends/remote_backend.py` | Remote backend (stub) | Placeholder for HTTP/gRPC tools. | Returns error in v1. |
 | `core/tools/backends/mcp_backend.py` | MCP backend (stub) | Placeholder for MCP tools. | Disabled by default; returns error in v1. |
 
 ### Descriptors
 - `core/contracts/descriptors_schema.py` defines the `ToolDescriptor` and `AgentDescriptor` catalog contracts used by registries.
+
+### Evidence
+- `core/contracts/evidence_schema.py` defines `EvidenceItem` and `EvidenceSource` for tool output provenance.
 
 ```mermaid
 sequenceDiagram

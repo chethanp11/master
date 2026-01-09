@@ -21,10 +21,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+from core.contracts.evidence_schema import EvidenceItem
+from core.contracts.run_schema import ArtifactRef
 
 # ==============================
 # Typing
@@ -91,6 +94,8 @@ class ToolEnvelope(BaseModel, Generic[T]):
     data: Optional[T] = Field(default=None, description="Tool output payload.")
     error: Optional[ToolError] = Field(default=None, description="Tool error if ok=False.")
     meta: ToolMeta = Field(..., description="Tool execution metadata.")
+    evidence: List[EvidenceItem] = Field(default_factory=list, description="Evidence items produced by the tool.")
+    artifacts: Optional[Dict[str, ArtifactRef]] = Field(default=None, description="Raw artifacts produced by the tool.")
 
     @model_validator(mode="after")
     def _enforce_error_contract(self) -> "ToolEnvelope[T]":
