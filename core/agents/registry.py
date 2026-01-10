@@ -25,6 +25,13 @@ from core.agents.llm_reasoner import (
     build_insight_reasoner,
     build_prioritization_reasoner,
 )
+from core.agents.advisory import (
+    build_tool_selector,
+    build_agent_selector,
+    build_gap_finder,
+    build_summarizer,
+    build_risk_explainer,
+)
 
 
 AgentFactory = Callable[[], BaseAgent]
@@ -160,13 +167,26 @@ def _register_core_agents() -> None:
     global _CORE_REGISTERED
     if _CORE_REGISTERED:
         return
+    advisory_factories = {
+        build_tool_selector: {"tags": ["advisory"], "purposes": ["advisory"], "allowed_step_types": ["agent", "plan_proposal"]},
+        build_agent_selector: {"tags": ["advisory"], "purposes": ["advisory"], "allowed_step_types": ["agent", "plan_proposal"]},
+        build_gap_finder: {"tags": ["advisory"], "purposes": ["advisory"], "allowed_step_types": ["agent", "plan_proposal"]},
+        build_summarizer: {"tags": ["advisory"], "purposes": ["advisory"], "allowed_step_types": ["agent", "plan_proposal"]},
+        build_risk_explainer: {"tags": ["advisory"], "purposes": ["advisory"], "allowed_step_types": ["agent", "plan_proposal"]},
+    }
     for factory in (
         build_llm_reasoner,
         build_insight_reasoner,
         build_prioritization_reasoner,
         build_explanation_reasoner,
+        build_tool_selector,
+        build_agent_selector,
+        build_gap_finder,
+        build_summarizer,
+        build_risk_explainer,
     ):
         name = _norm(factory().name)
         if name not in AgentRegistry._agents:
-            AgentRegistry.register(name, factory)
+            meta = advisory_factories.get(factory)
+            AgentRegistry.register(name, factory, meta=meta)
     _CORE_REGISTERED = True
