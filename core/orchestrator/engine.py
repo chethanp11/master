@@ -17,6 +17,7 @@ from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
 from core.contracts.action_plan_schema import ActionPlan, PlanGateResult, PlanStep, PlanToolCall, PlanAgentCall
 from core.contracts.budget_schema import Budget
+from core.contracts.loop_schema import LoopState
 from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
     RunOperationResult,
@@ -36,8 +37,9 @@ from core.contracts.user_input_schema import (
 )
 from core.governance.hooks import GovernanceHooks
 from core.orchestrator.branching import evaluate_condition, summarize_condition
+from core.orchestrator.looping import evaluate_stop_condition, summarize_stop_condition
 from core.contracts.budget_schema import BudgetPolicy
-from core.governance.budgeting import resolve_budget, init_budget_state
+from core.governance.budgeting import resolve_budget, init_budget_state, consume_budget
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
 from core.memory.router import MemoryRouter
@@ -216,6 +218,18 @@ class OrchestratorEngine:
                     message=branch_decision.reason or "Branch condition disallowed.",
                     details=branch_decision.details,
                 )
+            loop_decision = self.governance.validate_loop_conditions(flow_def=flow_def, run_ctx=run_ctx)
+            if not loop_decision.allowed:
+                return self._reject_run(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    autonomy_level=str(flow_def.autonomy_level.value),
+                    payload=payload,
+                    code="loop_condition_disallowed",
+                    message=loop_decision.reason or "Loop condition disallowed.",
+                    details=loop_decision.details,
+                )
 
             run_record = RunRecord(
                 run_id=run_id,
@@ -229,6 +243,7 @@ class OrchestratorEngine:
                     "steps_executed": 0,
                     "tool_calls": 0,
                     "tokens_used": 0,
+                    "loops": {},
                 },
             )
             self.memory.create_run(run_record)
@@ -1046,6 +1061,21 @@ class OrchestratorEngine:
                 idx = next_index
                 continue
 
+            if step_def.type == StepType.REPEAT_UNTIL:
+                result = self._handle_repeat_until(
+                    flow_def=flow_def,
+                    run_ctx=run_ctx,
+                    step_def=step_def,
+                    step_id=step_id,
+                    step_record=step_record,
+                    requested_by=requested_by,
+                    current_index=idx,
+                )
+                if isinstance(result, str):
+                    return result
+                idx = result
+                continue
+
             if step_def.type == StepType.HUMAN_APPROVAL:
                 approval_payload = self._build_approval_payload(run_ctx, step_record, step_def)
                 approval = self.hitl.create_approval(
@@ -1829,6 +1859,421 @@ class OrchestratorEngine:
         )
         return "continue"
 
+    def _handle_repeat_until(
+        self,
+        *,
+        flow_def: FlowDef,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_id: str,
+        step_record: StepRecord,
+        requested_by: Optional[str],
+        current_index: int,
+    ) -> Union[str, int]:
+        if step_def.stop_condition is None or step_def.iteration_step is None:
+            return self._fail_step(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="repeat_until_missing_config",
+                message="repeat_until missing stop_condition or iteration_step",
+            )
+        loops = run_ctx.meta.setdefault("loops", {})
+        raw_state = loops.get(step_id) if isinstance(loops, dict) else None
+        if isinstance(raw_state, dict):
+            loop_state = LoopState.model_validate(raw_state)
+        else:
+            loop_state = LoopState()
+        if loop_state.started_at is None:
+            loop_state.started_at = int(time.time())
+
+        iteration_def = self._find_step_def(flow_def, step_def.iteration_step)
+        if iteration_def is None:
+            return self._fail_step(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="repeat_until_missing_iteration_step",
+                message="iteration_step not found",
+            )
+        iteration_index = self._find_step_index(flow_def, step_def.iteration_step)
+
+        if loop_state.iters_used == 0 and not loop_state.terminated:
+            self._emit_event(
+                kind="loop_started",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"loop_step_id": step_id, "max_iters": step_def.max_iters},
+            )
+
+        while True:
+            stop_summary = summarize_stop_condition(step_def.stop_condition)
+            stop_met = evaluate_stop_condition(step_def.stop_condition, run_ctx=run_ctx, memory=self.memory)
+            loop_state.last_evaluated_condition = {"summary": stop_summary, "result": stop_met}
+            if stop_met:
+                loop_state.terminated = True
+                loop_state.termination_reason = "STOP_CONDITION_MET"
+                break
+            if loop_state.iters_used >= int(step_def.max_iters or 0):
+                loop_state.terminated = True
+                loop_state.termination_reason = "MAX_ITERS_REACHED"
+                break
+
+            budget = run_ctx.meta.get("budget")
+            budget_state = run_ctx.meta.get("budget_state")
+            if isinstance(budget, Budget) and budget_state is not None:
+                allowed, action, updated = consume_budget(
+                    budget=budget,
+                    state=budget_state,
+                    kind="pass",
+                    amount=1,
+                    cost_units=1,
+                )
+                run_ctx.meta["budget_state"] = updated
+                self._emit_event(
+                    kind="budget_consumed",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"kind": "pass", "state": updated.model_dump(mode="json")},
+                )
+                if not allowed:
+                    self._emit_event(
+                        kind="budget_exceeded",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "kind": "pass",
+                            "limit": budget.max_passes,
+                            "state": updated.model_dump(mode="json"),
+                            "action_taken": action,
+                        },
+                    )
+                    loop_state.terminated = True
+                    loop_state.termination_reason = "BUDGET_EXCEEDED"
+                    loop_state.ended_at = int(time.time())
+                    loops[step_id] = loop_state.model_dump(mode="json")
+                    run_ctx.meta["loops"] = loops
+                    self._emit_event(
+                        kind="loop_terminated",
+                        run_id=run_ctx.run_id,
+                        step_id=step_id,
+                        product=run_ctx.product,
+                        flow=run_ctx.flow,
+                        payload={
+                            "loop_step_id": step_id,
+                            "termination_reason": loop_state.termination_reason,
+                            "iters_used": loop_state.iters_used,
+                            "stop_condition_met": False,
+                        },
+                    )
+                    if action == "HITL":
+                        approval_payload = {"reason": "budget_exceeded", "loop_step_id": step_id}
+                        approval = self.hitl.create_approval(
+                            run_id=run_ctx.run_id,
+                            step_id=step_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            requested_by=requested_by,
+                            payload=approval_payload,
+                        )
+                        hitl_request = HitlRequest(
+                            request_id=approval.approval_id,
+                            request_type="APPROVAL",
+                            run_id=run_ctx.run_id,
+                            step_id=step_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            created_at=int(time.time()),
+                            payload={"approval_context": approval_payload},
+                        )
+                        self.memory.update_step(
+                            run_ctx.run_id,
+                            step_id,
+                            {
+                                "status": StepStatus.PENDING_HUMAN.value,
+                                "output": {"approval_id": approval.approval_id, "hitl_request": hitl_request.model_dump(mode="json")},
+                            },
+                        )
+                        self._transition_run_status(
+                            run_id=run_ctx.run_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            current_status=RunStatus.RUNNING,
+                            target_status=RunStatus.PENDING_HUMAN,
+                            step_id=step_id,
+                            summary=self._summary_with_counters(run_ctx, {"current_step_index": current_index}),
+                            reason="loop_budget_exceeded",
+                        )
+                        self._emit_event(
+                            kind="run_pending_human",
+                            run_id=run_ctx.run_id,
+                            step_id=step_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            payload={"reason": "loop_budget_exceeded", "approval_id": approval.approval_id},
+                        )
+                        self._persist_run_output(run_ctx)
+                        return RunStatus.PENDING_HUMAN.value
+                    return self._fail_step(
+                        run_ctx=run_ctx,
+                        step_id=step_id,
+                        reason="budget_exceeded",
+                        message="loop budget exceeded",
+                    )
+
+            self._emit_event(
+                kind="loop_iteration_started",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"loop_step_id": step_id, "iter_index": loop_state.iters_used},
+            )
+            iteration_result = self._execute_iteration_step(
+                flow_def=flow_def,
+                run_ctx=run_ctx,
+                step_def=iteration_def,
+                step_index=iteration_index,
+                requested_by=requested_by,
+            )
+            if iteration_result is not None:
+                loops[step_id] = loop_state.model_dump(mode="json")
+                run_ctx.meta["loops"] = loops
+                return iteration_result
+            loop_state.iters_used += 1
+            self._emit_event(
+                kind="loop_iteration_completed",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"loop_step_id": step_id, "iter_index": loop_state.iters_used - 1},
+            )
+
+        loop_state.ended_at = int(time.time())
+        loops[step_id] = loop_state.model_dump(mode="json")
+        run_ctx.meta["loops"] = loops
+
+        self.memory.update_step(
+            run_ctx.run_id,
+            step_id,
+            {
+                "status": StepStatus.COMPLETED.value,
+                "finished_at": int(time.time()),
+                "output": {"loop_state": loop_state.model_dump(mode="json")},
+            },
+        )
+        self._emit_event(
+            kind="loop_terminated",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={
+                "loop_step_id": step_id,
+                "termination_reason": loop_state.termination_reason,
+                "iters_used": loop_state.iters_used,
+                "stop_condition_met": loop_state.termination_reason == "STOP_CONDITION_MET",
+            },
+        )
+        self.memory.update_run_status(
+            run_ctx.run_id,
+            RunStatus.RUNNING.value,
+            summary=self._summary_with_counters(run_ctx, {"current_step_index": current_index + 1}),
+        )
+
+        next_index = current_index + 1
+        if step_def.on_terminate:
+            next_index = self._find_step_index(flow_def, step_def.on_terminate)
+        if next_index == iteration_index:
+            next_index = iteration_index + 1
+        if next_index <= current_index:
+            return self._fail_step(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="repeat_until_invalid_target",
+                message="repeat_until target must be a later step",
+            )
+        return next_index
+
+    def _execute_iteration_step(
+        self,
+        *,
+        flow_def: FlowDef,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_index: int,
+        requested_by: Optional[str],
+    ) -> Optional[str]:
+        step_id = step_def.id or f"loop_step_{step_index}"
+        step_record = StepRecord(
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            step_index=step_index,
+            name=step_def.name or step_id,
+            type=step_def.type.value,
+            status=StepStatus.RUNNING,
+            started_at=int(time.time()),
+            input={"params": step_def.params or {}},
+            meta={"backend": step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend},
+        )
+        self.memory.add_step(step_record)
+
+        step_ctx = run_ctx.new_step(
+            step_def=step_def,
+            step_id=step_id,
+            step_type=step_def.type.value,
+            backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
+            target=step_def.agent or step_def.tool,
+        )
+
+        decision = self.governance.before_step(step_ctx=step_ctx)
+        if not decision.allowed:
+            self._emit_event(
+                kind="before_step_denied",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": decision.reason},
+            )
+            self.memory.update_step(
+                run_ctx.run_id,
+                step_id,
+                {
+                    "status": StepStatus.FAILED.value,
+                    "finished_at": int(time.time()),
+                    "error": {"message": decision.reason, "type": "PermissionError"},
+                },
+            )
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=RunStatus.RUNNING,
+                target_status=RunStatus.FAILED,
+                step_id=step_id,
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id, "reason": decision.reason}),
+                reason="governance_denied",
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.FAILED.value
+
+        run_ctx.meta["steps_executed"] = int(run_ctx.meta.get("steps_executed", 0)) + 1
+        self._emit_event(
+            kind="step_started",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={"step_index": step_index, "type": step_def.type.value, "name": step_record.name},
+        )
+
+        if step_def.type in {StepType.HUMAN_APPROVAL, StepType.USER_INPUT, StepType.BRANCH, StepType.REPEAT_UNTIL, StepType.SUBFLOW}:
+            return self._fail_step(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="repeat_until_invalid_step",
+                message="repeat_until iteration_step type not supported",
+            )
+
+        if step_def.type == StepType.PLAN_PROPOSE:
+            handled = self._handle_plan_propose(
+                run_ctx=run_ctx,
+                step_def=step_def,
+                step_id=step_id,
+                step_record=step_record,
+                requested_by=requested_by,
+            )
+            if handled == "continue":
+                return None
+            return handled
+
+        if step_def.type == StepType.PLAN_GATE:
+            handled = self._handle_plan_gate(
+                run_ctx=run_ctx,
+                step_def=step_def,
+                step_id=step_id,
+                step_record=step_record,
+            )
+            if handled == "continue":
+                return None
+            return handled
+
+        if step_def.type == StepType.PLAN_EXECUTE:
+            handled = self._handle_plan_execute(
+                run_ctx=run_ctx,
+                step_def=step_def,
+                step_id=step_id,
+                step_record=step_record,
+                requested_by=requested_by,
+            )
+            if handled == "continue":
+                return None
+            return handled
+
+        try:
+            result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def, step_id=step_id)
+            result = self._persist_output_files(run_ctx, result)
+            if isinstance(result, dict):
+                data = result.get("data")
+                if isinstance(data, dict) and data:
+                    run_ctx.meta["last_result_data"] = data
+            self.memory.update_step(
+                run_ctx.run_id,
+                step_id,
+                {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": result},
+            )
+            self._emit_event(
+                kind="step_completed",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"ok": True},
+            )
+            return None
+        except Exception as exc:
+            self.memory.update_step(
+                run_ctx.run_id,
+                step_id,
+                {
+                    "status": StepStatus.FAILED.value,
+                    "finished_at": int(time.time()),
+                    "error": {"message": str(exc), "type": type(exc).__name__},
+                },
+            )
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=RunStatus.RUNNING,
+                target_status=RunStatus.FAILED,
+                step_id=step_id,
+                summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id}),
+                reason="step_failed",
+            )
+            self._emit_event(
+                kind="step_failed",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"error": {"message": str(exc), "type": type(exc).__name__}},
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.FAILED.value
+
+    def _find_step_def(self, flow_def: FlowDef, step_id: str) -> Optional[StepDef]:
+        for definition in flow_def.steps:
+            if (definition.id or "") == step_id:
+                return definition
+        return None
+
     def _execute_action_plan(self, run_ctx: RunContext, gate_obj: PlanGateResult) -> Optional[str]:
         for idx, step in enumerate(gate_obj.approved_steps):
             step_id = f"plan_step_{idx}"
@@ -2131,11 +2576,13 @@ class OrchestratorEngine:
         run_ctx.meta["steps_executed"] = steps_executed or 0
         run_ctx.meta["tool_calls"] = _as_int(summary.get("tool_calls")) or 0
         run_ctx.meta["tokens_used"] = _as_int(summary.get("tokens_used")) or 0
+        loops = summary.get("loops")
+        run_ctx.meta["loops"] = loops if isinstance(loops, dict) else {}
 
     @staticmethod
     def _summary_with_counters(run_ctx: RunContext, summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         merged = dict(summary or {})
-        for key in ("steps_executed", "tool_calls", "tokens_used"):
+        for key in ("steps_executed", "tool_calls", "tokens_used", "loops"):
             if key in run_ctx.meta:
                 merged[key] = run_ctx.meta.get(key)
         return merged

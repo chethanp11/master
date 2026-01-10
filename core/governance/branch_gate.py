@@ -43,6 +43,10 @@ def validate_branch_conditions(flow_def: FlowDef) -> List[str]:
     return errors
 
 
+def validate_condition_path(path: str, *, step_ids: Set[str], step_id: str) -> List[str]:
+    return _validate_path(path, step_ids=step_ids, step_id=step_id)
+
+
 def _validate_condition_expr(condition: ConditionExpr, *, step_ids: Set[str], step_id: str) -> List[str]:
     errors: List[str] = []
     if condition.path:

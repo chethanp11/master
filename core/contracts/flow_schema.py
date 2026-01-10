@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
 from core.contracts.branch_schema import ConditionExpr
+from core.contracts.loop_schema import StopConditionExpr
 from core.contracts.user_input_schema import UserInputRequest
 
 # ==============================
@@ -41,6 +42,7 @@ class StepType(str, Enum):
     PLAN_GATE = "plan_gate"
     PLAN_EXECUTE = "plan_execute"
     BRANCH = "branch"
+    REPEAT_UNTIL = "repeat_until"
     SUBFLOW = "subflow"
 
 
@@ -68,6 +70,7 @@ StepType.plan_propose = StepType.PLAN_PROPOSE  # type: ignore[attr-defined]
 StepType.plan_gate = StepType.PLAN_GATE  # type: ignore[attr-defined]
 StepType.plan_execute = StepType.PLAN_EXECUTE  # type: ignore[attr-defined]
 StepType.branch = StepType.BRANCH  # type: ignore[attr-defined]
+StepType.repeat_until = StepType.REPEAT_UNTIL  # type: ignore[attr-defined]
 StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
 
 AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
@@ -128,6 +131,10 @@ class StepDef(BaseModel):
         validation_alias=AliasChoices("else", "else_step"),
         serialization_alias="else",
     )
+    max_iters: Optional[int] = Field(default=None, description="Maximum iterations when type=repeat_until.")
+    stop_condition: Optional[StopConditionExpr] = Field(default=None, description="Stop condition when type=repeat_until.")
+    iteration_step: Optional[str] = Field(default=None, description="Step id executed per iteration.")
+    on_terminate: Optional[str] = Field(default=None, description="Optional next step id after loop termination.")
 
     @model_validator(mode="after")
     def _validate_target_fields(self) -> "StepDef":
@@ -142,6 +149,11 @@ class StepDef(BaseModel):
         if self.type == StepType.BRANCH:
             if self.when is None or not self.then or not self.else_step:
                 raise ValueError("branch steps require when/then/else")
+        if self.type == StepType.REPEAT_UNTIL:
+            if self.max_iters is None or self.max_iters < 1:
+                raise ValueError("repeat_until steps require max_iters >= 1")
+            if self.stop_condition is None or not self.iteration_step:
+                raise ValueError("repeat_until steps require stop_condition and iteration_step")
         if self.type == StepType.USER_INPUT:
             UserInputRequest.model_validate(self.params or {})
         if self.type == StepType.SUBFLOW:

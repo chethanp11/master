@@ -27,6 +27,7 @@ from core.contracts.flow_schema import AutonomyLevel, FlowDef
 from core.contracts.budget_schema import Budget, BudgetState
 from core.governance.policies import PolicyDecision, PolicyEngine
 from core.governance.branch_gate import validate_branch_conditions
+from core.governance.loop_gate import validate_loop_conditions
 from core.governance.security import SecurityRedactor
 from core.governance.budgeting import consume_budget
 from core.orchestrator.context import RunContext, StepContext
@@ -97,6 +98,22 @@ class GovernanceHooks:
                 reason="branch_condition_disallowed",
                 details={"errors": errors, "flow": flow_def.id, "product": run_ctx.product},
                 scrubbed={"branch_errors": errors},
+            )
+        return self._decision(
+            allowed=True,
+            reason="ok",
+            details={"flow": flow_def.id, "product": run_ctx.product},
+            scrubbed={},
+        )
+
+    def validate_loop_conditions(self, *, flow_def: FlowDef, run_ctx: RunContext) -> HookDecision:
+        errors = validate_loop_conditions(flow_def)
+        if errors:
+            return self._decision(
+                allowed=False,
+                reason="loop_condition_disallowed",
+                details={"errors": errors, "flow": flow_def.id, "product": run_ctx.product},
+                scrubbed={"loop_errors": errors},
             )
         return self._decision(
             allowed=True,
