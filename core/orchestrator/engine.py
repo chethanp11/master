@@ -17,6 +17,7 @@ from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
 from core.contracts.action_plan_schema import ActionPlan, PlanGateResult, PlanStep, PlanToolCall, PlanAgentCall
 from core.contracts.budget_schema import Budget
+from core.contracts.context_pack_schema import ContextPack
 from core.contracts.loop_schema import LoopState
 from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
@@ -35,6 +36,7 @@ from core.contracts.user_input_schema import (
     UserInputRequest,
     UserInputResponse,
 )
+from core.contracts.question_schema import QuestionSet, UserAnswers
 from core.governance.hooks import GovernanceHooks
 from core.orchestrator.branching import evaluate_condition, summarize_condition
 from core.orchestrator.looping import evaluate_stop_condition, summarize_stop_condition
@@ -49,6 +51,7 @@ from core.orchestrator.hitl import HitlService
 from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
 from core.orchestrator.templating import render_params
+from core.knowledge.context_pack_merge import merge_answers_into_context_pack
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 from core.governance.plan_gate import gate_action_plan
@@ -617,8 +620,11 @@ class OrchestratorEngine:
         response_payload = user_input_response or {}
         answer: Optional[UserInputAnswer] = None
         response: Optional[UserInputResponse] = None
+        question_answers: Optional[UserAnswers] = None
         try:
-            if _looks_like_user_input_answer(response_payload):
+            if _looks_like_question_set_answers(response_payload):
+                question_answers = UserAnswers.model_validate(response_payload)
+            elif _looks_like_user_input_answer(response_payload):
                 answer = UserInputAnswer.model_validate(response_payload)
             else:
                 response = UserInputResponse.model_validate(response_payload)
@@ -646,6 +652,8 @@ class OrchestratorEngine:
         try:
             context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
             rendered_params = render_params(step_def.params or {}, context)
+            question_set_payload = rendered_params.pop("question_set", None)
+            context_pack_key = rendered_params.pop("context_pack_key", None)
             required = rendered_params.get("required")
             if isinstance(required, list):
                 flattened = []
@@ -655,7 +663,17 @@ class OrchestratorEngine:
                     else:
                         flattened.append(item)
                 rendered_params["required"] = flattened
-            request = UserInputRequest.model_validate(rendered_params)
+            if question_set_payload is not None:
+                question_set = QuestionSet.model_validate(question_set_payload)
+                question_set_key = f"question_set.{question_set.id}"
+                run_ctx.artifacts.setdefault(question_set_key, question_set.model_dump(mode="json"))
+                request = _build_question_set_request(
+                    question_set=question_set,
+                    question_set_key=question_set_key,
+                    context_pack_key=context_pack_key,
+                )
+            else:
+                request = UserInputRequest.model_validate(rendered_params)
         except Exception as exc:
             return RunOperationResult.failure(code="invalid_state", message=str(exc))
 
@@ -664,12 +682,12 @@ class OrchestratorEngine:
                 return RunOperationResult.failure(code="invalid_input", message="prompt_id does not match pending request.")
             response = _answer_to_response(request, answer, comment=comment)
 
-        if response is None:
+        if response is None and question_answers is None:
             return RunOperationResult.failure(code="invalid_input", message="Missing user input response.")
 
-        if response.form_id != request.form_id:
+        if response is not None and response.form_id != request.form_id:
             return RunOperationResult.failure(code="invalid_input", message="form_id does not match pending request.")
-        if response.metadata and "metadata" not in response.values:
+        if response is not None and response.metadata and "metadata" not in response.values:
             response.values["metadata"] = response.metadata
 
         step_ctx = run_ctx.new_step(
@@ -679,9 +697,10 @@ class OrchestratorEngine:
             backend=step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
             target=step_def.agent or step_def.tool,
         )
+        response_payload_json = response.model_dump(mode="json") if response is not None else question_answers.model_dump(mode="json")
         decision = self.governance.before_user_input_response(
             request=request.model_dump(mode="json"),
-            response=response.model_dump(mode="json"),
+            response=response_payload_json,
             ctx=step_ctx,
         )
         if not decision.allowed:
@@ -695,17 +714,50 @@ class OrchestratorEngine:
             )
             return RunOperationResult.failure(code="policy_blocked", message=decision.reason, details=decision.details)
 
-        errors = _validate_user_input_values(request, response.values)
+        question_set = _resolve_question_set_from_request(request, run_ctx)
+        if question_set is not None:
+            if question_answers is None:
+                question_answers = UserAnswers(question_set_id=question_set.id, answers=response.values if response else {})
+            errors = _validate_question_set_answers(question_set, question_answers)
+        else:
+            errors = _validate_user_input_values(request, response.values if response else {})
         if errors:
+            self.memory.update_step(
+                bundle.run.run_id,
+                step_id,
+                {
+                    "status": StepStatus.PENDING_USER_INPUT.value,
+                    "output": {"validation_errors": errors},
+                },
+            )
             self._emit_event(
                 kind="user_input_validation_failed",
                 run_id=bundle.run.run_id,
                 step_id=step_id,
                 product=bundle.run.product,
                 flow=bundle.run.flow,
-                payload={"form_id": request.form_id, "errors": errors},
+                payload={
+                    "form_id": request.form_id,
+                    "question_set_id": question_set.id if question_set is not None else None,
+                    "errors": errors,
+                },
             )
             return RunOperationResult.failure(code="invalid_input", message="User input validation failed.", details={"errors": errors})
+
+        if question_set is not None and question_answers is not None:
+            context_pack_key = _context_pack_key_from_request(request)
+            merged_pack = _merge_context_pack_if_present(
+                run_ctx=run_ctx,
+                question_set=question_set,
+                answers=question_answers,
+                context_pack_key=context_pack_key,
+            )
+        else:
+            merged_pack = None
+            context_pack_key = None
+
+        accepted_values = response.values if response is not None else question_answers.answers
+        accepted_comment = response.comment if response is not None else (comment or "")
 
         self.memory.update_step(
             bundle.run.run_id,
@@ -714,16 +766,20 @@ class OrchestratorEngine:
                 "status": StepStatus.COMPLETED.value,
                 "finished_at": int(time.time()),
                 "output": {
-                    "user_input": response.model_dump(mode="json"),
+                    "user_input": response.model_dump(mode="json") if response is not None else question_answers.model_dump(mode="json"),
                     "hitl_resolution": HitlResolution(
                         request_id=request.form_id,
                         request_type="INPUT",
                         status="PROVIDED",
                         resolved_at=int(time.time()),
-                        values=response.values,
-                        comment=response.comment or comment,
+                        values=accepted_values,
+                        comment=accepted_comment,
                         resolved_by=resolved_by,
                     ).model_dump(mode="json"),
+                    "question_set": question_set.model_dump(mode="json") if question_set is not None else None,
+                    "question_set_key": _question_set_key_from_request(request),
+                    "context_pack_key": context_pack_key if question_set is not None else None,
+                    "context_pack": merged_pack.model_dump(mode="json") if merged_pack is not None else None,
                 },
             },
         )
@@ -732,7 +788,7 @@ class OrchestratorEngine:
             product=bundle.run.product,
             run_id=bundle.run.run_id,
             form_id=request.form_id,
-            payload=response.model_dump(mode="json"),
+            payload=response_payload_json,
         )
 
         self._emit_event(
@@ -744,10 +800,30 @@ class OrchestratorEngine:
             payload={
                 "form_id": request.form_id,
                 "mode": request.mode,
-                "values": response.values,
-                "comment": response.comment or comment or "",
+                "values": accepted_values,
+                "comment": accepted_comment,
             },
         )
+        self._emit_event(
+            kind="user_input_accepted",
+            run_id=bundle.run.run_id,
+            step_id=step_id,
+            product=bundle.run.product,
+            flow=bundle.run.flow,
+            payload={"question_set_id": question_set.id if question_set is not None else None},
+        )
+        if question_set is not None and merged_pack is not None:
+            self._emit_event(
+                kind="context_pack_merged",
+                run_id=bundle.run.run_id,
+                step_id=step_id,
+                product=bundle.run.product,
+                flow=bundle.run.flow,
+                payload={
+                    "question_set_id": question_set.id,
+                    "keys_added_count": len(question_answers.answers),
+                },
+            )
 
         next_index = self._find_step_index(flow_def, step_id) + 1
         self._transition_run_status(
@@ -771,7 +847,7 @@ class OrchestratorEngine:
 
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
-        _store_user_input_artifacts(run_ctx, request.form_id, response.values, response.comment)
+        _store_user_input_artifacts(run_ctx, request.form_id, accepted_values, accepted_comment)
 
         status = self._execute_from_index(
             flow_def=flow_def,
@@ -1152,6 +1228,10 @@ class OrchestratorEngine:
             if step_def.type == StepType.USER_INPUT:
                 context = {"payload": run_ctx.payload, "artifacts": run_ctx.artifacts}
                 rendered_params = render_params(step_def.params or {}, context)
+                question_set_payload = rendered_params.pop("question_set", None)
+                context_pack_key = rendered_params.pop("context_pack_key", None)
+                question_set = None
+                question_set_key = None
                 required = rendered_params.get("required")
                 if isinstance(required, list):
                     flattened = []
@@ -1163,7 +1243,29 @@ class OrchestratorEngine:
                     rendered_params["required"] = flattened
                 step_def = step_def.model_copy(update={"params": rendered_params})
                 try:
-                    request = UserInputRequest.model_validate(step_def.params or {})
+                    if question_set_payload is not None:
+                        question_set = QuestionSet.model_validate(question_set_payload)
+                        question_set_key = f"question_set.{question_set.id}"
+                        run_ctx.artifacts[question_set_key] = question_set.model_dump(mode="json")
+                        request = _build_question_set_request(
+                            question_set=question_set,
+                            question_set_key=question_set_key,
+                            context_pack_key=context_pack_key,
+                        )
+                        self._emit_event(
+                            kind="question_set_created",
+                            run_id=run_ctx.run_id,
+                            step_id=step_id,
+                            product=run_ctx.product,
+                            flow=run_ctx.flow,
+                            payload={
+                                "question_set_id": question_set.id,
+                                "question_count": len(question_set.questions),
+                                "required_fields": question_set.required_fields,
+                            },
+                        )
+                    else:
+                        request = UserInputRequest.model_validate(step_def.params or {})
                 except Exception as exc:
                     self.memory.update_step(
                         run_ctx.run_id,
@@ -1284,6 +1386,8 @@ class OrchestratorEngine:
                         "output": {
                             "user_input_request": {"form_id": request.form_id, "prompt": prompt.model_dump(mode="json")},
                             "hitl_request": hitl_request.model_dump(mode="json"),
+                            "question_set": question_set.model_dump(mode="json") if question_set_payload is not None else None,
+                            "question_set_key": question_set_key if question_set_payload is not None else None,
                         },
                     },
                 )
@@ -1296,7 +1400,12 @@ class OrchestratorEngine:
                     step_id=step_id,
                     summary=self._summary_with_counters(
                         run_ctx,
-                        {"current_step_index": idx, "form_id": request.form_id, "pending_user_input": prompt.model_dump(mode="json")},
+                        {
+                            "current_step_index": idx,
+                            "form_id": request.form_id,
+                            "pending_user_input": prompt.model_dump(mode="json"),
+                            "question_set_id": question_set.id if question_set_payload is not None else None,
+                        },
                     ),
                     reason="user_input_requested",
                 )
@@ -1307,6 +1416,14 @@ class OrchestratorEngine:
                     product=run_ctx.product,
                     flow=run_ctx.flow,
                     payload={"reason": "user_input_requested", "form_id": request.form_id},
+                )
+                self._emit_event(
+                    kind="run_paused_for_user_input",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"question_set_id": request.constraints.get("question_set_id") if isinstance(request.constraints, dict) else None},
                 )
                 self._persist_run_output(run_ctx)
                 return RunStatus.PAUSED_WAITING_FOR_USER.value
@@ -2536,6 +2653,16 @@ class OrchestratorEngine:
             plan_gate_payload = output.get("plan_gate")
             if isinstance(plan_gate_payload, dict):
                 run_ctx.artifacts["plan.gate_result"] = plan_gate_payload
+            question_set_payload = output.get("question_set")
+            if isinstance(question_set_payload, dict):
+                question_set_key = output.get("question_set_key") or f"question_set.{question_set_payload.get('id', 'unknown')}"
+                if isinstance(question_set_key, str):
+                    run_ctx.artifacts[question_set_key] = question_set_payload
+            context_pack_payload = output.get("context_pack")
+            if isinstance(context_pack_payload, dict):
+                context_pack_key = output.get("context_pack_key") or "context_pack"
+                if isinstance(context_pack_key, str):
+                    run_ctx.artifacts[context_pack_key] = context_pack_payload
             meta = output.get("meta")
             data = output.get("data")
             if not isinstance(meta, dict) or data is None:
@@ -2670,6 +2797,12 @@ def _looks_like_user_input_answer(payload: Dict[str, Any]) -> bool:
     return any(key in payload for key in ("prompt_id", "selected_option_ids", "free_text"))
 
 
+def _looks_like_question_set_answers(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return "question_set_id" in payload or "answers" in payload
+
+
 def _primary_selection_key(request: UserInputRequest) -> str:
     props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
     if isinstance(props, dict) and len(props) == 1:
@@ -2798,6 +2931,138 @@ def _store_user_input_artifacts(run_ctx: RunContext, form_id: str, values: Dict[
     bucket = run_ctx.artifacts.setdefault("user_input", {})
     if isinstance(bucket, dict):
         bucket[form_id] = {"values": values, "comment": comment or "", "metadata": values.get("metadata", {})}
+
+
+def _build_question_set_request(
+    *,
+    question_set: QuestionSet,
+    question_set_key: str,
+    context_pack_key: Optional[str],
+) -> UserInputRequest:
+    schema = question_set.validation_schema or _question_set_schema(question_set)
+    constraints = {"question_set_id": question_set.id, "question_set_key": question_set_key}
+    if context_pack_key:
+        constraints["context_pack_key"] = context_pack_key
+    return UserInputRequest(
+        form_id=question_set.id,
+        prompt=question_set.title,
+        title=question_set.title,
+        mode=UserInputModes.CHOICE_INPUT,
+        input_type="text",
+        schema=schema,
+        defaults={},
+        required=list(question_set.required_fields),
+        constraints=constraints,
+        description=question_set.guidance,
+    )
+
+
+def _question_set_schema(question_set: QuestionSet) -> Dict[str, Any]:
+    properties: Dict[str, Any] = {}
+    required: List[str] = []
+    for question in question_set.questions:
+        spec: Dict[str, Any] = {}
+        if question.type == "enum":
+            spec["type"] = "string"
+            if question.enum:
+                spec["enum"] = list(question.enum)
+        elif question.type == "number":
+            spec["type"] = "number"
+        elif question.type == "boolean":
+            spec["type"] = "boolean"
+        elif question.type == "object":
+            spec["type"] = "object"
+        else:
+            spec["type"] = "string"
+        properties[question.key] = spec
+        if question.required or question.key in question_set.required_fields:
+            required.append(question.key)
+    return {"type": "object", "properties": properties, "required": required}
+
+
+def _resolve_question_set_from_request(request: UserInputRequest, run_ctx: RunContext) -> Optional[QuestionSet]:
+    constraints = request.constraints if isinstance(request.constraints, dict) else {}
+    question_set_id = constraints.get("question_set_id")
+    if not question_set_id:
+        return None
+    question_set_key = constraints.get("question_set_key") or f"question_set.{question_set_id}"
+    payload = run_ctx.artifacts.get(question_set_key)
+    if isinstance(payload, dict):
+        try:
+            return QuestionSet.model_validate(payload)
+        except Exception:
+            return None
+    return None
+
+
+def _question_set_key_from_request(request: UserInputRequest) -> Optional[str]:
+    constraints = request.constraints if isinstance(request.constraints, dict) else {}
+    key = constraints.get("question_set_key")
+    return key if isinstance(key, str) else None
+
+
+def _context_pack_key_from_request(request: UserInputRequest) -> Optional[str]:
+    constraints = request.constraints if isinstance(request.constraints, dict) else {}
+    key = constraints.get("context_pack_key")
+    return key if isinstance(key, str) else None
+
+
+def _validate_question_set_answers(question_set: QuestionSet, answers: UserAnswers) -> List[str]:
+    errors: List[str] = []
+    if answers.question_set_id != question_set.id:
+        errors.append("question_set_id_mismatch")
+        return errors
+    question_map = {q.key: q for q in question_set.questions}
+    for key in answers.answers.keys():
+        if key not in question_map:
+            errors.append(f"unexpected_field:{key}")
+    for key in question_set.required_fields:
+        if key not in answers.answers:
+            errors.append(f"missing_required:{key}")
+    for question in question_set.questions:
+        if question.required and question.key not in answers.answers:
+            errors.append(f"missing_required:{question.key}")
+        if question.key not in answers.answers:
+            continue
+        value = answers.answers.get(question.key)
+        if question.type == "number" and not isinstance(value, (int, float)):
+            errors.append(f"type_mismatch:{question.key}")
+        elif question.type == "boolean" and not isinstance(value, bool):
+            errors.append(f"type_mismatch:{question.key}")
+        elif question.type == "object" and not isinstance(value, dict):
+            errors.append(f"type_mismatch:{question.key}")
+        elif question.type in {"string", "enum"} and not isinstance(value, str):
+            errors.append(f"type_mismatch:{question.key}")
+        if question.enum and value not in question.enum:
+            errors.append(f"enum_mismatch:{question.key}")
+    return errors
+
+
+def _merge_context_pack_if_present(
+    *,
+    run_ctx: RunContext,
+    question_set: QuestionSet,
+    answers: UserAnswers,
+    context_pack_key: Optional[str],
+) -> Optional[ContextPack]:
+    key = context_pack_key
+    if key is None:
+        for candidate in sorted(run_ctx.artifacts.keys()):
+            if candidate == "context_pack" or candidate.startswith("context_pack."):
+                key = candidate
+                break
+    if key is None:
+        return None
+    payload = run_ctx.artifacts.get(key)
+    if not isinstance(payload, dict):
+        return None
+    try:
+        context_pack = ContextPack.model_validate(payload)
+    except Exception:
+        return None
+    merged = merge_answers_into_context_pack(context_pack, question_set, answers)
+    run_ctx.artifacts[key] = merged.model_dump(mode="json")
+    return merged
 
 
 def _is_step_status(value: Any, status: StepStatus) -> bool:

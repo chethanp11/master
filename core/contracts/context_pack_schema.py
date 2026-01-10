@@ -63,6 +63,15 @@ class DocumentsSummary(BaseModel):
     metadata: List[DocumentMetadata] = Field(default_factory=list)
 
 
+class UserProvidedInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question_set_id: str
+    created_from: str
+    evidence_refs: List[str] = Field(default_factory=list)
+    answers: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ContextPack(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +79,7 @@ class ContextPack(BaseModel):
     evidence_index: List[EvidenceIndexEntry]
     tables_summary: TablesSummary
     documents_summary: DocumentsSummary
+    user_provided: Optional[UserProvidedInfo] = None
     assumptions: List[str] = Field(default_factory=list)
     limits: Dict[str, Any] = Field(default_factory=dict)
     pack_hash: Optional[str] = None

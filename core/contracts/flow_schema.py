@@ -155,7 +155,9 @@ class StepDef(BaseModel):
             if self.stop_condition is None or not self.iteration_step:
                 raise ValueError("repeat_until steps require stop_condition and iteration_step")
         if self.type == StepType.USER_INPUT:
-            UserInputRequest.model_validate(self.params or {})
+            params = self.params or {}
+            if "question_set" not in params:
+                UserInputRequest.model_validate(params)
         if self.type == StepType.SUBFLOW:
             raise ValueError("subflow steps are not supported in v1; compose flows at the entrypoint")
         return self
