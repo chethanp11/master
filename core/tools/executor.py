@@ -188,6 +188,8 @@ class ToolExecutor:
     ) -> ToolResult:
         if result.evidence:
             return result
+        if result.error and result.error.code == ToolErrorCode.PERMISSION_DENIED:
+            return result
         safe_params = self.redactor.sanitize(params)
         payload = result.data if result.ok else {"error": result.error.model_dump(mode="json") if result.error else {}}
         summary = _summarize_payload(payload)
