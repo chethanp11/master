@@ -4,19 +4,22 @@ from __future__ import annotations
 # Step Executor
 # ==============================
 
+import hashlib
 import time
-from typing import Callable, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Dict, Optional, List, Tuple, Any
 
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
 from core.governance.hooks import GovernanceHooks
-from core.contracts.flow_schema import StepDef, StepType, RetryPolicy
+from core.contracts.flow_schema import StepDef, StepType, RetryPolicy, ToolBatchItem
 from core.contracts.plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
 from core.orchestrator.templating import render_params
 from core.tools.executor import ToolExecutor
+from core.tools.registry import ToolRegistry
 from core.orchestrator.error_policy import evaluate_retry
 
 
@@ -63,6 +66,9 @@ class StepExecutor:
                 run_ctx.artifacts[f"tool.{step_def.tool}.output"] = tool_result.data
                 run_ctx.artifacts[f"tool.{step_def.tool}.meta"] = tool_result.meta.model_dump(mode="json")
             return tool_result.model_dump(mode="json")
+
+        if step_def.type == StepType.TOOL_BATCH:
+            return self._execute_tool_batch(run_ctx=run_ctx, step_def=step_def, step_ctx=step_ctx)
 
         if step_def.type == StepType.USER_INPUT:
             raise ValueError("user_input steps are orchestrator-managed; use OrchestratorEngine to pause/resume.")
@@ -179,6 +185,129 @@ class StepExecutor:
             if delay > 0:
                 self.sleep_fn(delay)
             attempt += 1
+
+    def _execute_tool_batch(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_ctx: StepContext,
+    ) -> Dict[str, Any]:
+        items = step_def.tools or []
+        if not items:
+            raise ValueError("tool_batch requires tools")
+
+        for item in items:
+            if not ToolRegistry.has(item.tool_name):
+                step_ctx.emit("tool_batch_rejected", {"tool": item.tool_name, "reason": "tool_not_registered"})
+                raise RuntimeError(f"tool_batch_rejected:{item.tool_name}")
+            descriptor = ToolRegistry.get_descriptor(item.tool_name)
+            if not descriptor.read_only:
+                step_ctx.emit("tool_batch_rejected", {"tool": item.tool_name, "reason": "tool_not_read_only"})
+                raise RuntimeError(f"tool_batch_rejected:{item.tool_name}")
+            if descriptor.side_effect:
+                step_ctx.emit("tool_batch_rejected", {"tool": item.tool_name, "reason": "tool_has_side_effect"})
+                raise RuntimeError(f"tool_batch_rejected:{item.tool_name}")
+
+        parallel_requested = bool(step_def.parallel)
+        parallel_effective = parallel_requested
+        budget = run_ctx.meta.get("budget")
+        if parallel_effective and budget is not None:
+            max_parallel = getattr(budget, "max_parallel_calls", None)
+            if isinstance(max_parallel, int) and max_parallel < len(items):
+                parallel_effective = False
+                step_ctx.emit(
+                    "tool_batch_degraded",
+                    {"reason": "max_parallel_calls_exceeded", "requested": len(items), "limit": max_parallel},
+                )
+
+        step_ctx.emit(
+            "tool_batch_started",
+            {"count": len(items), "parallel": parallel_requested, "parallel_effective": parallel_effective},
+        )
+
+        results: List[Tuple[int, ToolBatchItem, ToolResult]] = []
+        if parallel_effective:
+            with ThreadPoolExecutor(max_workers=len(items)) as executor:
+                futures = {
+                    executor.submit(self._run_batch_tool, run_ctx, step_ctx.step_id, idx, item): (idx, item)
+                    for idx, item in enumerate(items)
+                }
+                for future in as_completed(futures):
+                    idx, item = futures[future]
+                    results.append((idx, item, future.result()))
+        else:
+            for idx, item in enumerate(items):
+                results.append((idx, item, self._run_batch_tool(run_ctx, step_ctx.step_id, idx, item)))
+
+        results.sort(key=lambda entry: entry[0])
+        merged_evidence = []
+        merged_artifacts: Dict[str, Any] = {}
+        merged_results: List[Dict[str, Any]] = []
+
+        for idx, item, result in results:
+            if not result.ok:
+                raise RuntimeError(f"tool_batch_tool_failed:{item.tool_name}")
+            tool_results_data = result.data or {}
+            merged_results.append({"tool": item.tool_name, "alias": item.alias, "data": tool_results_data})
+
+            for evidence_index, evidence in enumerate(result.evidence or []):
+                stable_id = _stable_batch_evidence_id(
+                    step_ctx.step_id,
+                    item.tool_name,
+                    idx,
+                    evidence_index,
+                )
+                merged_evidence.append(evidence.model_copy(update={"id": stable_id}))
+
+            if result.artifacts:
+                prefix = item.alias or item.tool_name
+                for key, ref in result.artifacts.items():
+                    merged_artifacts[f"{prefix}.{key}"] = ref
+
+        step_ctx.emit(
+            "tool_batch_completed",
+            {"count": len(items), "evidence_count": len(merged_evidence)},
+        )
+
+        meta = result.meta.model_copy(update={"tool_name": "tool_batch"}) if results else None
+        envelope = ToolResult(
+            ok=True,
+            data={"results": merged_results},
+            error=None,
+            meta=meta or ToolResult.ok().meta,
+            evidence=merged_evidence,
+            artifacts=merged_artifacts or None,
+        )
+        return envelope.model_dump(mode="json")
+
+    def _run_batch_tool(
+        self,
+        run_ctx: RunContext,
+        batch_step_id: str,
+        idx: int,
+        item: ToolBatchItem,
+    ) -> ToolResult:
+        sub_step_id = f"{batch_step_id}/tool[{idx}]"
+        sub_ctx = run_ctx.new_step(step_id=sub_step_id, step_type="tool", backend="local", target=item.tool_name)
+        sub_ctx.emit("tool_call_started", {"tool": item.tool_name, "index": idx, "alias": item.alias})
+        result = self.tool_executor.execute(tool_name=item.tool_name, params=item.inputs, ctx=sub_ctx)
+        evidence_ids = [e.id for e in result.evidence] if result.evidence else []
+        sub_ctx.emit(
+            "tool_call_completed",
+            {"tool": item.tool_name, "index": idx, "alias": item.alias, "ok": result.ok, "evidence_ids": evidence_ids},
+        )
+        return result
+
+
+def _stable_batch_evidence_id(
+    step_id: str,
+    tool_name: str,
+    tool_index: int,
+    evidence_index: int,
+) -> str:
+    seed = f"{step_id}:{tool_name}:{tool_index}:{evidence_index}"
+    return f"batch_{hashlib.sha256(seed.encode('utf-8')).hexdigest()}"
 
 def build_step_context(run_ctx: RunContext, *, step_id: Optional[str], step_def: StepDef) -> StepContext:
     resolved_step_id = step_id or step_def.id or "step"

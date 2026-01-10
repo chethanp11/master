@@ -43,6 +43,7 @@ class StepType(str, Enum):
     PLAN_EXECUTE = "plan_execute"
     BRANCH = "branch"
     REPEAT_UNTIL = "repeat_until"
+    TOOL_BATCH = "tool_batch"
     SUBFLOW = "subflow"
 
 
@@ -71,6 +72,7 @@ StepType.plan_gate = StepType.PLAN_GATE  # type: ignore[attr-defined]
 StepType.plan_execute = StepType.PLAN_EXECUTE  # type: ignore[attr-defined]
 StepType.branch = StepType.BRANCH  # type: ignore[attr-defined]
 StepType.repeat_until = StepType.REPEAT_UNTIL  # type: ignore[attr-defined]
+StepType.tool_batch = StepType.TOOL_BATCH  # type: ignore[attr-defined]
 StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
 
 AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
@@ -135,6 +137,8 @@ class StepDef(BaseModel):
     stop_condition: Optional[StopConditionExpr] = Field(default=None, description="Stop condition when type=repeat_until.")
     iteration_step: Optional[str] = Field(default=None, description="Step id executed per iteration.")
     on_terminate: Optional[str] = Field(default=None, description="Optional next step id after loop termination.")
+    tools: List["ToolBatchItem"] = Field(default_factory=list, description="Tool batch items when type=tool_batch.")
+    parallel: bool = Field(default=False, description="Whether to run tool batch items in parallel.")
 
     @model_validator(mode="after")
     def _validate_target_fields(self) -> "StepDef":
@@ -154,6 +158,11 @@ class StepDef(BaseModel):
                 raise ValueError("repeat_until steps require max_iters >= 1")
             if self.stop_condition is None or not self.iteration_step:
                 raise ValueError("repeat_until steps require stop_condition and iteration_step")
+        if self.type == StepType.TOOL_BATCH:
+            if not self.tools:
+                raise ValueError("tool_batch steps require tools")
+            if len(self.tools) > 20:
+                raise ValueError("tool_batch steps exceed max tools")
         if self.type == StepType.USER_INPUT:
             params = self.params or {}
             if "question_set" not in params:
@@ -161,6 +170,17 @@ class StepDef(BaseModel):
         if self.type == StepType.SUBFLOW:
             raise ValueError("subflow steps are not supported in v1; compose flows at the entrypoint")
         return self
+
+
+class ToolBatchItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool_name: str
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    alias: Optional[str] = None
+
+
+StepDef.model_rebuild()
 
 
 class FlowDef(BaseModel):
