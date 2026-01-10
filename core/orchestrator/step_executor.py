@@ -18,6 +18,7 @@ from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext
 from core.orchestrator.templating import render_params
+from core.orchestrator._types import ToolBatchResultItem
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 from core.orchestrator.error_policy import evaluate_retry
@@ -243,7 +244,7 @@ class StepExecutor:
         results.sort(key=lambda entry: entry[0])
         merged_evidence = []
         merged_artifacts: Dict[str, Any] = {}
-        merged_results: List[Dict[str, Any]] = []
+        merged_results: List[ToolBatchResultItem] = []
 
         for idx, item, result in results:
             if not result.ok:

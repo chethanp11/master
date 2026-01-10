@@ -24,9 +24,8 @@ from __future__ import annotations
 # Imports
 # ==============================
 
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.flow_schema import StepDef
 from core.contracts.run_schema import RunStatus, StepStatus
@@ -34,7 +33,8 @@ from core.contracts.run_schema import RunStatus, StepStatus
 TraceHook = Callable[[str, Dict[str, Any]], None]
 
 
-class RunContext(BaseModel):
+@dataclass
+class RunContext:
     """
     Lightweight run context shared across step execution.
 
@@ -45,16 +45,14 @@ class RunContext(BaseModel):
     RunContext is request-scoped; do not reuse across runs.
     """
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
     run_id: str
     product: str
     flow: str
     status: RunStatus = RunStatus.RUNNING
-    payload: Dict[str, Any] = Field(default_factory=dict)
-    artifacts: Dict[str, Any] = Field(default_factory=dict)
-    meta: Dict[str, Any] = Field(default_factory=dict)
-    trace: Optional[TraceHook] = Field(default=None)
+    payload: Dict[str, Any] = field(default_factory=dict)
+    artifacts: Dict[str, Any] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
+    trace: Optional[TraceHook] = None
 
     def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         if self.trace is None:
@@ -77,23 +75,15 @@ class RunContext(BaseModel):
             target = target or step_def.agent or step_def.tool
         if step_id is None or step_type is None:
             raise ValueError("step_id and step_type are required when step_def is not provided")
-        return StepContext(
-            run=self,
-            step=step_def,
-            step_id=step_id,
-            type=step_type,
-            backend=backend,
-            target=target,
-        )
+        return StepContext(run=self, step=step_def, step_id=step_id, type=step_type, backend=backend, target=target)
 
 
-class StepContext(BaseModel):
+@dataclass
+class StepContext:
     """Execution context for a single step."""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
     run: RunContext
-    step: Optional[StepDef] = Field(default=None)
+    step: Optional[StepDef]
     step_id: str
     type: str
     backend: Optional[str] = None
