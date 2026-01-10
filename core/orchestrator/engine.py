@@ -15,6 +15,8 @@ from uuid import uuid4
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
+from core.contracts.action_plan_schema import ActionPlan, PlanGateResult, PlanStep, PlanToolCall, PlanAgentCall
+from core.contracts.budget_schema import Budget
 from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
     RunOperationResult,
@@ -33,6 +35,7 @@ from core.contracts.user_input_schema import (
     UserInputResponse,
 )
 from core.governance.hooks import GovernanceHooks
+from core.orchestrator.branching import evaluate_condition, summarize_condition
 from core.contracts.budget_schema import BudgetPolicy
 from core.governance.budgeting import resolve_budget, init_budget_state
 from core.governance.security import SecurityRedactor
@@ -46,6 +49,8 @@ from core.orchestrator.step_executor import StepExecutor
 from core.orchestrator.templating import render_params
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
+from core.governance.plan_gate import gate_action_plan
+from core.contracts.run_schema import ArtifactRef
 from core.utils.reasoning_exporter import build_reasoning_markdown
 
 
@@ -197,6 +202,19 @@ class OrchestratorEngine:
                 return RunOperationResult.failure(
                     code="autonomy_denied",
                     message=autonomy_decision.reason or "Autonomy denied by policy.",
+                )
+
+            branch_decision = self.governance.validate_branch_conditions(flow_def=flow_def, run_ctx=run_ctx)
+            if not branch_decision.allowed:
+                return self._reject_run(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    autonomy_level=str(flow_def.autonomy_level.value),
+                    payload=payload,
+                    code="branch_condition_disallowed",
+                    message=branch_decision.reason or "Branch condition disallowed.",
+                    details=branch_decision.details,
                 )
 
             run_record = RunRecord(
@@ -550,6 +568,20 @@ class OrchestratorEngine:
         run_ctx.trace = self._trace_hook(run_ctx)
         self._attach_run_dirs(run_ctx)
         self._rehydrate_artifacts(bundle.steps, run_ctx)
+
+        step_def = next((s for s in flow_def.steps if (s.id or "") == approval.step_id), None)
+        if step_def is not None and step_def.type == StepType.PLAN_EXECUTE:
+            gate = self._get_artifact_payload(run_ctx, "plan.gate_result")
+            if gate is None:
+                return RunOperationResult.failure(code="invalid_state", message="plan.gate_result missing for plan_execute")
+            gate_obj = PlanGateResult.model_validate(gate)
+            executed = self._execute_action_plan(run_ctx, gate_obj)
+            if executed is not None:
+                return RunOperationResult.success({"run_id": run_id, "status": executed})
+            run_ctx.meta["last_result_data"] = {
+                "summary": "plan_executed",
+                "details": {"plan_id": gate_obj.plan_id, "status": gate_obj.status},
+            }
 
         status = self._execute_from_index(
             flow_def=flow_def,
@@ -946,6 +978,74 @@ class OrchestratorEngine:
                 payload={"step_index": idx, "type": step_def.type.value, "name": step_record.name},
             )
 
+            if step_def.type == StepType.BRANCH:
+                if step_def.when is None:
+                    return self._fail_step(
+                        run_ctx=run_ctx,
+                        step_id=step_id,
+                        reason="branch_missing_condition",
+                        message="branch condition missing",
+                    )
+                decision_result = evaluate_condition(step_def.when, run_ctx=run_ctx, memory=self.memory)
+                chosen = step_def.then if decision_result else step_def.else_step
+                self.memory.update_step(
+                    run_ctx.run_id,
+                    step_id,
+                    {
+                        "status": StepStatus.COMPLETED.value,
+                        "finished_at": int(time.time()),
+                        "output": {
+                            "branch": {
+                                "result": decision_result,
+                                "chosen_next_step": chosen,
+                                "when": summarize_condition(step_def.when),
+                            }
+                        },
+                    },
+                )
+                self._emit_event(
+                    kind="branch_evaluated",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "when": summarize_condition(step_def.when),
+                        "result": decision_result,
+                        "chosen_next_step": chosen,
+                    },
+                )
+                self._emit_event(
+                    kind="step_completed",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"ok": True},
+                )
+                if not chosen:
+                    return self._fail_step(
+                        run_ctx=run_ctx,
+                        step_id=step_id,
+                        reason="branch_missing_target",
+                        message="branch target missing",
+                    )
+                next_index = self._find_step_index(flow_def, chosen)
+                if next_index <= idx:
+                    return self._fail_step(
+                        run_ctx=run_ctx,
+                        step_id=step_id,
+                        reason="branch_invalid_target",
+                        message="branch target must be a later step",
+                    )
+                self.memory.update_run_status(
+                    run_ctx.run_id,
+                    RunStatus.RUNNING.value,
+                    summary=self._summary_with_counters(run_ctx, {"current_step_index": next_index}),
+                )
+                idx = next_index
+                continue
+
             if step_def.type == StepType.HUMAN_APPROVAL:
                 approval_payload = self._build_approval_payload(run_ctx, step_record, step_def)
                 approval = self.hitl.create_approval(
@@ -1205,6 +1305,47 @@ class OrchestratorEngine:
                     self._persist_run_output(run_ctx)
                     return RunStatus.FAILED.value
 
+            if step_def.type == StepType.PLAN_PROPOSE:
+                handled = self._handle_plan_propose(
+                    run_ctx=run_ctx,
+                    step_def=step_def,
+                    step_id=step_id,
+                    step_record=step_record,
+                    requested_by=requested_by,
+                )
+                if handled == "continue":
+                    idx += 1
+                    continue
+                if handled is not None:
+                    return handled
+
+            if step_def.type == StepType.PLAN_GATE:
+                handled = self._handle_plan_gate(
+                    run_ctx=run_ctx,
+                    step_def=step_def,
+                    step_id=step_id,
+                    step_record=step_record,
+                )
+                if handled == "continue":
+                    idx += 1
+                    continue
+                if handled is not None:
+                    return handled
+
+            if step_def.type == StepType.PLAN_EXECUTE:
+                handled = self._handle_plan_execute(
+                    run_ctx=run_ctx,
+                    step_def=step_def,
+                    step_id=step_id,
+                    step_record=step_record,
+                    requested_by=requested_by,
+                )
+                if handled == "continue":
+                    idx += 1
+                    continue
+                if handled is not None:
+                    return handled
+
             try:
                 result = self.step_executor.execute(run_ctx=run_ctx, step_def=step_def, step_id=step_id)
                 result = self._persist_output_files(run_ctx, result)
@@ -1347,6 +1488,10 @@ class OrchestratorEngine:
             idx = next_index
 
         if last_result_data is None:
+            fallback_output = run_ctx.meta.get("last_result_data")
+            if isinstance(fallback_output, dict):
+                last_result_data = fallback_output
+        if last_result_data is None:
             self._transition_run_status(
                 run_id=run_ctx.run_id,
                 product=run_ctx.product,
@@ -1475,6 +1620,312 @@ class OrchestratorEngine:
         updated_data["output_files"] = stored
         updated["data"] = updated_data
         return updated
+
+    def _handle_plan_propose(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_id: str,
+        step_record: StepRecord,
+        requested_by: Optional[str],
+    ) -> Optional[str]:
+        plan_payload = (step_def.params or {}).get("plan")
+        if plan_payload is None:
+            if step_def.agent is None:
+                return self._fail_step(
+                    run_ctx=run_ctx,
+                    step_id=step_id,
+                    reason="plan_propose_missing_agent",
+                    message="plan_propose step missing agent",
+                )
+            agent = AgentRegistry.resolve(step_def.agent)
+            step_ctx = run_ctx.new_step(step_def=step_def, step_id=step_id)
+            result = agent.run(step_ctx)
+            if not result.ok:
+                return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_propose_failed", message="agent_failed")
+            decision = self.governance.validate_agent_output(
+                agent_name=step_def.agent,
+                output=result.data or {},
+                ctx=step_ctx,
+            )
+            if not decision.allowed:
+                return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason=decision.reason, message="agent_output_denied")
+            plan_payload = result.data or {}
+
+        try:
+            plan = ActionPlan.model_validate(plan_payload)
+        except Exception as exc:
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_invalid", message=str(exc))
+
+        plan_ref = self._store_artifact(run_ctx, "plan.action_plan", plan.model_dump(mode="json"))
+        self.memory.update_step(
+            run_ctx.run_id,
+            step_id,
+            {
+                "status": StepStatus.COMPLETED.value,
+                "finished_at": int(time.time()),
+                "output": {"plan_ref": plan_ref.model_dump(), "plan": plan.model_dump(mode="json")},
+            },
+        )
+        run_ctx.meta["last_result_data"] = {"summary": "plan_proposed", "details": {"plan_id": plan.id}}
+        self._emit_event(
+            kind="plan_proposed",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={"plan_id": plan.id, "step_count": len(plan.steps), "confidence": plan.confidence},
+        )
+        return "continue"
+
+    def _handle_plan_gate(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_id: str,
+        step_record: StepRecord,
+    ) -> Optional[str]:
+        plan = self._get_artifact_payload(run_ctx, "plan.action_plan")
+        if plan is None:
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_missing", message="plan.action_plan missing")
+        try:
+            plan_obj = ActionPlan.model_validate(plan)
+        except Exception as exc:
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_invalid", message=str(exc))
+        budget = run_ctx.meta.get("budget")
+        if isinstance(budget, dict):
+            try:
+                budget = Budget.model_validate(budget)
+            except Exception:
+                budget = None
+        sensitivity = str(run_ctx.payload.get("_budget_sensitivity") or "LOW")
+        gate_result = gate_action_plan(
+            plan_obj,
+            allow_tools=step_def.allow_tools,
+            allow_agents=step_def.allow_agents,
+            budget=budget,
+            sensitivity=sensitivity,
+        )
+        gate_ref = self._store_artifact(run_ctx, "plan.gate_result", gate_result.model_dump(mode="json"))
+        self.memory.update_step(
+            run_ctx.run_id,
+            step_id,
+            {
+                "status": StepStatus.COMPLETED.value,
+                "finished_at": int(time.time()),
+                "output": {"plan_gate_ref": gate_ref.model_dump(), "plan_gate": gate_result.model_dump(mode="json")},
+            },
+        )
+        run_ctx.meta["last_result_data"] = {
+            "summary": "plan_gated",
+            "details": {"plan_id": gate_result.plan_id, "status": gate_result.status},
+        }
+        self._emit_event(
+            kind="plan_gated",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={
+                "status": gate_result.status,
+                "approved_count": len(gate_result.approved_steps),
+                "rejected_count": len(gate_result.rejected_steps),
+                "requires_hitl_count": len(gate_result.requires_hitl_for_steps),
+                "reasons": gate_result.reasons,
+            },
+        )
+        return "continue"
+
+    def _handle_plan_execute(
+        self,
+        *,
+        run_ctx: RunContext,
+        step_def: StepDef,
+        step_id: str,
+        step_record: StepRecord,
+        requested_by: Optional[str],
+    ) -> Optional[str]:
+        gate = self._get_artifact_payload(run_ctx, "plan.gate_result")
+        if gate is None:
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_gate_missing", message="plan.gate_result missing")
+        try:
+            gate_obj = PlanGateResult.model_validate(gate)
+        except Exception as exc:
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_gate_invalid", message=str(exc))
+
+        if gate_obj.status == "REJECTED":
+            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_rejected", message="plan rejected")
+
+        if gate_obj.status == "REQUIRES_HITL":
+            approval_payload = {"plan_id": gate_obj.plan_id, "requires_hitl_steps": gate_obj.requires_hitl_for_steps}
+            approval = self.hitl.create_approval(
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                requested_by=requested_by,
+                payload=approval_payload,
+            )
+            hitl_request = HitlRequest(
+                request_id=approval.approval_id,
+                request_type="APPROVAL",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                created_at=int(time.time()),
+                payload={"approval_context": approval_payload},
+            )
+            self.memory.update_step(
+                run_ctx.run_id,
+                step_id,
+                {
+                    "status": StepStatus.PENDING_HUMAN.value,
+                    "output": {"approval_id": approval.approval_id, "hitl_request": hitl_request.model_dump(mode="json")},
+                },
+            )
+            self._transition_run_status(
+                run_id=run_ctx.run_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                current_status=RunStatus.RUNNING,
+                target_status=RunStatus.PENDING_HUMAN,
+                step_id=step_id,
+                summary=self._summary_with_counters(run_ctx, {"current_step_index": step_record.step_index}),
+                reason="plan_execute_requires_hitl",
+            )
+            self._emit_event(
+                kind="run_pending_human",
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": "plan_execute_requires_hitl", "approval_id": approval.approval_id},
+            )
+            self._persist_run_output(run_ctx)
+            return RunStatus.PENDING_HUMAN.value
+
+        executed = self._execute_action_plan(run_ctx, gate_obj)
+        if executed is not None:
+            return executed
+        run_ctx.meta["last_result_data"] = {
+            "summary": "plan_executed",
+            "details": {"plan_id": gate_obj.plan_id, "status": gate_obj.status},
+        }
+        self.memory.update_step(
+            run_ctx.run_id,
+            step_id,
+            {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": {"plan_execute": "ok"}},
+        )
+        self._emit_event(
+            kind="step_completed",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={"ok": True},
+        )
+        return "continue"
+
+    def _execute_action_plan(self, run_ctx: RunContext, gate_obj: PlanGateResult) -> Optional[str]:
+        for idx, step in enumerate(gate_obj.approved_steps):
+            step_id = f"plan_step_{idx}"
+            if isinstance(step, PlanToolCall):
+                step_ctx = run_ctx.new_step(step_id=step_id, step_type="tool", backend="local", target=step.tool_name)
+                self._emit_event(
+                    kind="plan_step_started",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"kind": "tool", "tool": step.tool_name},
+                )
+                result = self.step_executor.tool_executor.execute(tool_name=step.tool_name, params=step.inputs, ctx=step_ctx)
+                if not result.ok:
+                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_step_failed", message="tool_failed")
+                evidence_ids = [item.id for item in result.evidence]
+                run_ctx.artifacts.setdefault("plan.evidence", []).extend(result.evidence)
+                self._emit_event(
+                    kind="plan_step_completed",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"kind": "tool", "tool": step.tool_name, "evidence_ids": evidence_ids},
+                )
+            elif isinstance(step, PlanAgentCall):
+                step_ctx = run_ctx.new_step(step_id=step_id, step_type="agent", backend="local", target=step.agent_name)
+                self._emit_event(
+                    kind="plan_step_started",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"kind": "agent", "agent": step.agent_name},
+                )
+                agent = AgentRegistry.resolve(step.agent_name)
+                agent_result = agent.run(step_ctx)
+                if not agent_result.ok:
+                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_step_failed", message="agent_failed")
+                decision = self.governance.validate_agent_output(
+                    agent_name=step.agent_name,
+                    output=agent_result.data or {},
+                    ctx=step_ctx,
+                )
+                if not decision.allowed:
+                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason=decision.reason, message="agent_output_denied")
+                run_ctx.artifacts.setdefault("plan.agent_outputs", []).append(agent_result.data or {})
+                self._emit_event(
+                    kind="plan_step_completed",
+                    run_id=run_ctx.run_id,
+                    step_id=step_id,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={"kind": "agent", "agent": step.agent_name},
+                )
+        return None
+
+    def _store_artifact(self, run_ctx: RunContext, key: str, payload: Dict[str, Any]) -> ArtifactRef:
+        full_key = key
+        uri = f"memory://{full_key}"
+        ref = ArtifactRef(key=full_key, kind="json", uri=uri)
+        run_ctx.artifacts[full_key] = payload
+        return ref
+
+    def _get_artifact_payload(self, run_ctx: RunContext, key: str) -> Optional[Dict[str, Any]]:
+        value = run_ctx.artifacts.get(key)
+        if isinstance(value, dict):
+            return value
+        return None
+
+    def _fail_step(self, *, run_ctx: RunContext, step_id: str, reason: str, message: str) -> str:
+        self.memory.update_step(
+            run_ctx.run_id,
+            step_id,
+            {"status": StepStatus.FAILED.value, "finished_at": int(time.time()), "error": {"message": message}},
+        )
+        self._transition_run_status(
+            run_id=run_ctx.run_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            current_status=RunStatus.RUNNING,
+            target_status=RunStatus.FAILED,
+            step_id=step_id,
+            summary=self._summary_with_counters(run_ctx, {"failed_step_id": step_id, "reason": reason}),
+            reason=reason,
+        )
+        self._emit_event(
+            kind="step_failed",
+            run_id=run_ctx.run_id,
+            step_id=step_id,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={"error": {"message": message, "type": "ValueError"}},
+        )
+        self._persist_run_output(run_ctx)
+        return RunStatus.FAILED.value
 
     def _find_step_index(self, flow_def: FlowDef, step_id: str) -> int:
         for idx, definition in enumerate(flow_def.steps):
@@ -1634,6 +2085,12 @@ class OrchestratorEngine:
             output = step.output or {}
             if not isinstance(output, dict):
                 continue
+            plan_payload = output.get("plan")
+            if isinstance(plan_payload, dict):
+                run_ctx.artifacts["plan.action_plan"] = plan_payload
+            plan_gate_payload = output.get("plan_gate")
+            if isinstance(plan_gate_payload, dict):
+                run_ctx.artifacts["plan.gate_result"] = plan_gate_payload
             meta = output.get("meta")
             data = output.get("data")
             if not isinstance(meta, dict) or data is None:

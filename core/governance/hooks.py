@@ -23,9 +23,10 @@ from typing import Any, Dict, Optional
 from core.config.schema import Settings
 from core.contracts.agent_schema import find_control_fields, validate_agent_output_payload
 from core.contracts.reasoning_schema import ReasoningPurpose
-from core.contracts.flow_schema import AutonomyLevel
+from core.contracts.flow_schema import AutonomyLevel, FlowDef
 from core.contracts.budget_schema import Budget, BudgetState
 from core.governance.policies import PolicyDecision, PolicyEngine
+from core.governance.branch_gate import validate_branch_conditions
 from core.governance.security import SecurityRedactor
 from core.governance.budgeting import consume_budget
 from core.orchestrator.context import RunContext, StepContext
@@ -86,6 +87,22 @@ class GovernanceHooks:
                 "step_type": step_ctx.step.type.value if step_ctx.step is not None else step_ctx.type,
             },
             scrubbed={"step": self.redactor.sanitize(step_payload)},
+        )
+
+    def validate_branch_conditions(self, *, flow_def: FlowDef, run_ctx: RunContext) -> HookDecision:
+        errors = validate_branch_conditions(flow_def)
+        if errors:
+            return self._decision(
+                allowed=False,
+                reason="branch_condition_disallowed",
+                details={"errors": errors, "flow": flow_def.id, "product": run_ctx.product},
+                scrubbed={"branch_errors": errors},
+            )
+        return self._decision(
+            allowed=True,
+            reason="ok",
+            details={"flow": flow_def.id, "product": run_ctx.product},
+            scrubbed={},
         )
 
     def before_complete(self, *, run_ctx: RunContext, output: Dict[str, Any]) -> HookDecision:

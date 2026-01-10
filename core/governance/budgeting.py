@@ -67,7 +67,11 @@ def consume_budget(
 
     if violations:
         if budget.on_exceed == "DEGRADE":
+            if not budget.degrade_to:
+                return False, "DEGRADE", updated
             degraded = _apply_degrade(budget, budget.degrade_to)
+            if degraded.model_dump() == budget.model_dump():
+                return False, "DEGRADE", updated
             return _recheck(degraded, updated, kind, amount, cost_units, latency_bucket)
         return False, budget.on_exceed, updated
     return True, "OK", updated

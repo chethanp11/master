@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
+from core.contracts.branch_schema import ConditionExpr
 from core.contracts.user_input_schema import UserInputRequest
 
 # ==============================
@@ -36,6 +37,10 @@ class StepType(str, Enum):
     HUMAN_APPROVAL = "human_approval"
     USER_INPUT = "user_input"
     PLAN_PROPOSAL = "plan_proposal"
+    PLAN_PROPOSE = "plan_propose"
+    PLAN_GATE = "plan_gate"
+    PLAN_EXECUTE = "plan_execute"
+    BRANCH = "branch"
     SUBFLOW = "subflow"
 
 
@@ -59,6 +64,10 @@ StepType.tool = StepType.TOOL  # type: ignore[attr-defined]
 StepType.human_approval = StepType.HUMAN_APPROVAL  # type: ignore[attr-defined]
 StepType.user_input = StepType.USER_INPUT  # type: ignore[attr-defined]
 StepType.plan_proposal = StepType.PLAN_PROPOSAL  # type: ignore[attr-defined]
+StepType.plan_propose = StepType.PLAN_PROPOSE  # type: ignore[attr-defined]
+StepType.plan_gate = StepType.PLAN_GATE  # type: ignore[attr-defined]
+StepType.plan_execute = StepType.PLAN_EXECUTE  # type: ignore[attr-defined]
+StepType.branch = StepType.BRANCH  # type: ignore[attr-defined]
 StepType.subflow = StepType.SUBFLOW  # type: ignore[attr-defined]
 
 AutonomyLevel.suggest_only = AutonomyLevel.SUGGEST_ONLY  # type: ignore[attr-defined]
@@ -109,6 +118,16 @@ class StepDef(BaseModel):
 
     params: Dict[str, Any] = Field(default_factory=dict, description="Step parameters/arguments.")
     retry: Optional[RetryPolicy] = Field(default=None, description="Retry policy for the step.")
+    allow_tools: List[str] = Field(default_factory=list, description="Optional allowlist for plan execution tools.")
+    allow_agents: List[str] = Field(default_factory=list, description="Optional allowlist for plan execution agents.")
+    when: Optional[ConditionExpr] = Field(default=None, description="Branch condition when type=branch.")
+    then: Optional[str] = Field(default=None, description="Next step id when branch condition is true.")
+    else_step: Optional[str] = Field(
+        default=None,
+        description="Next step id when branch condition is false.",
+        validation_alias=AliasChoices("else", "else_step"),
+        serialization_alias="else",
+    )
 
     @model_validator(mode="after")
     def _validate_target_fields(self) -> "StepDef":
@@ -118,6 +137,11 @@ class StepDef(BaseModel):
             raise ValueError("agent steps require the 'agent' field")
         if self.type == StepType.PLAN_PROPOSAL and not self.agent:
             raise ValueError("plan_proposal steps require the 'agent' field")
+        if self.type == StepType.PLAN_PROPOSE and not self.agent and "plan" not in (self.params or {}):
+            raise ValueError("plan_propose steps require 'agent' or params.plan")
+        if self.type == StepType.BRANCH:
+            if self.when is None or not self.then or not self.else_step:
+                raise ValueError("branch steps require when/then/else")
         if self.type == StepType.USER_INPUT:
             UserInputRequest.model_validate(self.params or {})
         if self.type == StepType.SUBFLOW:
