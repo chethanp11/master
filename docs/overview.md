@@ -36,6 +36,7 @@ flowchart TB
     O[orchestrator]
     G[governance]
     M[memory]
+    K[knowledge]
     T[tools executor]
     R[models router]
     L[tracing/observability]
@@ -55,6 +56,7 @@ flowchart TB
 
   O --> G
   O --> M
+  O --> K
   O --> T
   O --> R
   O --> L
@@ -69,8 +71,8 @@ sequenceDiagram
   participant User
   participant Gateway as API/CLI/UI
   participant Orchestrator
+  participant StepExec as StepExecutor
   participant ToolExec as ToolExecutor
-  participant Tool
   participant HITL
   participant Agent
   participant Memory
@@ -80,15 +82,13 @@ sequenceDiagram
   Gateway->>Orchestrator: run_flow
   Orchestrator->>Memory: create_run
   Orchestrator->>Observability: stage inputs + start runtime log
-  Orchestrator->>ToolExec: tool step
-  ToolExec->>Tool: run(params)
-  Tool-->>ToolExec: ToolResult
-  ToolExec-->>Orchestrator: ToolResult
+  Orchestrator->>StepExec: execute step
+  StepExec->>ToolExec: execute tool (when tool step)
   Orchestrator->>Observability: append step/tool events
-  Orchestrator-->>Gateway: PENDING_USER_INPUT
+  Orchestrator-->>Gateway: PENDING_USER_INPUT (when user_input step)
   User->>Gateway: submit input
   Gateway->>Orchestrator: resume_run (user_input_response)
-  Orchestrator-->>Gateway: PENDING_HUMAN
+  Orchestrator-->>Gateway: PENDING_HUMAN (when approval required)
   User->>Gateway: approve
   Gateway->>Orchestrator: resume_run
   Orchestrator->>Agent: run(step)
@@ -104,12 +104,13 @@ sequenceDiagram
 - Governance is centralized in `core/governance`.
 - Policies are loaded from `configs/policies.yaml`.
 - Autonomy is checked at run start.
+- Branch and loop conditions are validated before execution.
 - Tool calls are checked before execution.
 - Model calls are checked before invocation and require a reasoning purpose.
 - Payloads are redacted before persistence/logging.
-- User input ingestion and run output/export are governed before persistence.
+- User input ingestion and run output/output files are governed before persistence.
 - Run limits are enforced (max steps, tool calls, tokens per run).
-- Runs pause only for `user_input` or `human_approval` steps; every state transition is traced.
+- Runs pause for `user_input`, `human_approval`, and plan gating that requires HITL; every state transition is traced.
 
 ```mermaid
 flowchart LR
@@ -145,7 +146,7 @@ Core **must not**:
 Thin plug-ins built on top of core.
 
 Each product defines:
-- Flows (YAML / JSON)
+- Flows (YAML)
 - Agents (Python)
 - Tools (Python)
 - Product-level config
@@ -163,9 +164,13 @@ Products **must not**:
 ### API
 - `GET /api/products`
 - `GET /api/products/{product}/flows`
+- `GET /api/runs`
+- `GET /api/approvals`
+- `GET /api/run/{run_id}`
+- `GET /api/runs/{run_id}/pending_input`
+- `POST /api/runs/{run_id}/user_input`
 - `POST /api/run/{product}/{flow}`
 - `POST /api/resume_run/{run_id}`
-- `GET /api/run/{run_id}`
 - `GET /api/output/{product}/{run_id}/{filename}`
 
 Run and resume endpoints execute orchestration work in a threadpool to keep the API responsive during long-running flows.
@@ -184,7 +189,7 @@ Run and resume endpoints execute orchestration work in a threadpool to keep the 
 
 - Configs live in `configs/*.yaml`.
 - Secrets live in `secrets/secrets.yaml`.
-- `.env` is optional and only read by the config loader.
+- `.env` is optional and only read by the config loader (it does not override real env vars).
 - All components receive validated `Settings` objects.
 - Paths are resolved through `app.paths.*` (repo_root, storage_dir, observability_dir).
 

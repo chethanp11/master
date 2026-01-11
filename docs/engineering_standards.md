@@ -56,6 +56,7 @@ Rules:
 core/tools/executor.py
 
 - Tool backends are implementation details, never invoked directly.
+- `tool_batch` may execute only tools marked `read_only` and `side_effect=false`.
 
 ---
 
@@ -91,6 +92,12 @@ Rules:
 
 ---
 
+### 1.5 Contracts at Boundaries
+- ❌ **FORBIDDEN**: Unstructured payloads crossing core boundaries.
+- ✅ **MANDATORY**: Use Pydantic contracts for flows, runs, user input, plans, and tool/agent envelopes.
+
+---
+
 ## 2. Core Execution Philosophy (Foundational)
 
 ### 2.1 Goal-Driven, Not Template-Driven
@@ -121,6 +128,8 @@ Templates (if present at all):
   - retries and backoff
   - tool authorization
   - HITL pauses and resumes
+  - deterministic branching and looping
+  - plan gating and plan execution
   - state transitions
 
 Rules:
@@ -254,6 +263,7 @@ core/memory/tracing.py
 
 Runtime traces are also written to:
 - `observability/<product>/<run_id>/runtime/events.jsonl`
+- `observability/<product>/<run_id>/output/response.json`
 
 Rules:
 - ❌ No `print()`
@@ -328,6 +338,7 @@ Products **do NOT** define:
 - model invocation logic
 - template-based behavior control
 - cross-run or module-level mutable state
+- subflow composition or dynamic flow mutation
 
 Registries:
 - Product agents/tools must be registered as factories (no shared instances).
@@ -374,9 +385,9 @@ Everything must be configurable via YAML.
 
 ### 8.2 Config Precedence
 Highest → Lowest:
-1. Runtime overrides
-2. Product config
-3. Global config
+1. Environment overrides (`MASTER__*`)
+2. `secrets/secrets.yaml`
+3. `configs/*.yaml`
 4. Code defaults (safe only)
 
 ---
@@ -398,11 +409,12 @@ If unsure:
 ## 10. Configuration & Secrets Rules
 
 ### 10.1 Config Sources and Precedence (Highest → Lowest)
-1. Runtime overrides
-2. `.env` (non-secret flags only)
-3. Product config (`products/<product>/config/product.yaml`)
-4. Global config (`configs/*.yaml`)
-5. Code defaults (safe, minimal)
+1. Environment overrides (`MASTER__*`)
+2. `secrets/secrets.yaml`
+3. `configs/*.yaml`
+4. Code defaults (safe, minimal)
+
+`.env` is optional and only fills missing env vars; it never overrides real environment values.
 
 ---
 
@@ -439,6 +451,9 @@ Rules:
 - Must never be logged
 - Must be redacted by governance
 - Missing secrets fail fast
+
+#### D) Product Config (`products/<product>/config/product.yaml`)
+Product config is loaded by the product loader and surfaced via the catalog/API. It is not merged into global Settings unless explicitly injected by callers.
 
 ---
 

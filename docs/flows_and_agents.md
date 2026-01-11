@@ -40,7 +40,7 @@ sequenceDiagram
 ```
 
 Flows:
-- Are defined in YAML or JSON
+- Are defined in YAML for products (JSON supported by the loader when called directly)
 - Are loaded and validated by the orchestrator
 - Contain **no executable logic**
 - Describe intent, not implementation
@@ -69,6 +69,8 @@ Flows live under:
 
 products/<product>/flows/
 
+Flow discovery uses `.yaml`/`.yml` files under this directory.
+
 Example:
 
 products/hello_world/flows/hello_world.yaml
@@ -84,6 +86,9 @@ This section defines the V1 flow composition guardrails.
 - Flows do not call other flows.
 - The orchestrator does not dynamically jump across flow boundaries.
 - Products must select which flow to run at the entrypoint (API/CLI/UI).
+
+Branching and looping are supported only via declarative step types (`branch`, `repeat_until`).
+`subflow` steps are rejected in v1.
 
 ### Example: multiple flows per product
 
@@ -123,9 +128,9 @@ steps:
     params:
       instruction: "Generate an execution plan"
 
-  - id: approve
-    type: human_approval
-    message: "Approve generated plan?"
+  - id: propose_plan
+    type: plan_proposal
+    agent: hello_world.planner
 
   - id: execute
     type: agent
@@ -217,9 +222,13 @@ Behavior:
 
 Behavior:
 - Pauses execution
-- Sets run status to PENDING_USER_INPUT
+- Sets run status to PENDING_USER_INPUT (and may stage inputs as PAUSED_WAITING_FOR_USER)
 - Requires resume with `user_input_response` payload (schema-validated)
 - User input steps are orchestrator-managed; they are not executed by StepExecutor
+
+Question sets:
+- `params.question_set` can provide a structured `QuestionSet` contract.
+- Answers are validated and merged into a `ContextPack` artifact when present.
 
 ---
 
@@ -233,7 +242,85 @@ Behavior:
 - Invokes a planner agent that returns a structured PlanProposal (JSON)
 - Validates proposal against schema
 - Emits plan proposal trace events
-- Does not execute the plan automatically
+- Creates a HITL approval request and pauses the run
+
+---
+
+### Plan Propose / Gate / Execute Steps
+
+These steps operate on an executable ActionPlan.
+
+Plan propose (`plan_propose`):
+- Accepts `params.plan` or calls an agent to return an ActionPlan
+- Stores the plan as `plan.action_plan` in artifacts
+
+Plan gate (`plan_gate`):
+- Evaluates tool/agent allowlists (`allow_tools`, `allow_agents`) and optional budget/sensitivity
+- Produces a `PlanGateResult` artifact
+
+Plan execute (`plan_execute`):
+- Executes only approved steps from the gated plan
+- Pauses for HITL if the gate result requires approval
+
+---
+
+### Branch Step
+
+- id: branch_if_ok
+  type: branch
+  when:
+    path: artifacts.some_key.value
+    op: "=="
+    value: true
+  then: next_step
+  else: fallback_step
+
+Behavior:
+- Evaluates deterministic condition expressions over artifacts/step outputs
+- Jumps to `then` or `else` (must be later steps)
+- Invalid conditions are rejected before run start
+Constraints:
+- Condition paths must reference `steps.<step_id>.output.*` or `artifacts.*`
+- Disallowed segments include raw text/prompt-like fields
+
+---
+
+### Repeat-Until Step
+
+- id: loop
+  type: repeat_until
+  iteration_step: refine
+  max_iters: 3
+  stop_condition:
+    kind: confidence_threshold
+    path: artifacts.summary.confidence
+    op: ">="
+    value: 0.8
+
+Behavior:
+- Executes the `iteration_step` until the stop condition is met or `max_iters` reached
+- Iteration steps must be executable (agent/tool/plan steps only)
+- Loop state is tracked and persisted in run metadata
+Stop conditions:
+- `confidence_threshold`, `no_missing_evidence`, and `all`/`any` groups
+
+---
+
+### Tool Batch Step
+
+- id: bulk_fetch
+  type: tool_batch
+  parallel: true
+  tools:
+    - tool_name: product.read_tool
+      inputs: { query: "..." }
+    - tool_name: product.read_tool
+      inputs: { query: "..." }
+
+Behavior:
+- Executes a list of read-only, no-side-effect tools
+- May run in parallel; parallelism can be degraded by budgets
+- Aggregates results and evidence into a single ToolResult envelope
 
 ---
 
@@ -337,7 +424,7 @@ Resolution:
 	2.	RunContext initialized
 	3.	Step loop begins
 	4.	Governance checks applied
-	5.	Step executed (agent/tool/HITL/user_input)
+	5.	Step executed (agent/tool/plan/branch/loop/HITL/user_input)
 	6.	Trace events emitted
 	7.	State persisted via memory backend
 	8.	HITL/user_input pause or continuation

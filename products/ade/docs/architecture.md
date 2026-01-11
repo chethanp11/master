@@ -1,34 +1,76 @@
 # Analytical Decision Engine — Architecture (v1)
 
 ## Overview
-ADE is an intent-driven analysis runner for analysts. The orchestrator owns flow control; tools only compute facts. ADE supports HITL inputs and approvals, and produces a business insight HTML plus an evidence pack derived from events.
+ADE turns analyst questions and CSV datasets into structured business outputs. Product behavior is deterministic; ADE agents and tools do not call LLMs directly.
 
-## Run Lifecycle
-- **Input staging**: files are staged under `products/ade/staging/input/`, then moved into the run’s observability input directory.
-- **Intent understanding**: agent interprets the question and extracts scope (entities, timeframe, metrics).
-- **Clarification**: user inputs are requested when intent is ambiguous or underspecified.
-- **Planning**: an explicit plan is created (steps, tools, decision points).
-- **Execution**: tools run deterministically via the orchestrator; optional hypotheses only when required by plan.
-- **Decision gates**: approvals are required for key choices (hypotheses, charting, final framing).
-- **Synthesis**: LLMs are used only for interpretation and synthesis from tool outputs.
-- **Outputs**: business insight HTML and evidence pack are written to the observability store.
+## Flows
 
-## Orchestrator Responsibilities
-- Controls the run lifecycle and step order based on the flow definition.
-- Emits trace events per step/tool call into `<observability_root>/<product>/<run_id>/runtime/events.jsonl`.
-- Enforces HITL pause/resume and governance checks.
-- Ensures tools execute only through `core/tools/executor.py`.
+### ade_v1
+Purpose: free-text analyst workflow with conditional clarification and plan approval.
 
-## Artifacts and Data Flow
-- **Business Insight HTML**: shareable summary for business stakeholders (no debug dumps).
-- **Evidence Pack**: audit trail reconstructed from `events.jsonl` and structured run state.
-- Output files are persisted by the observability store; datasets are referenced, not duplicated.
+Step outline:
+1. Interpret intent (`intent_agent`).
+2. Request clarifications when required (`clarify_intent`, `clarify_followup`).
+3. Build plan spec (`plan_agent`) and request approval (`plan_proposal_agent`).
+4. Read data and compute metrics (`data_reader`, `compute_business_metrics`).
+5. Run anomaly and hypothesis checks when enabled (`detect_anomalies`, `hypothesis_test_*`).
+6. Build chart spec and reasoning narrative (`build_chart_spec`, `build_reasoning_narrative`).
+7. Assemble decision packet and business report (`assemble_decision_packet`, `assemble_business_report`).
+8. Render HTML outputs (`render_business_report_html`, `render_decision_packet_html`).
 
-## Determinism and LLM Usage
-- Tools are deterministic and compute structured facts.
-- LLMs are used only for interpretation and synthesis, never for tool selection or control flow.
+Inputs:
+- `prompt` is the primary analyst question.
+- `intent`, `question`, or `instructions` are accepted as alternates.
+- Dataset is inferred from the prompt or `dataset`.
 
-## Governance
-- Trace events record step outcomes and decisions.
-- User inputs and approvals are logged and replayable.
-- Redaction is enforced by core governance hooks before trace/log emission.
+### visualization
+Purpose: dataset-first visualization workflow with explicit preference input.
+
+Step outline:
+1. Interpret intent (`planning_agent`).
+2. Read dataset (`data_reader`).
+3. Collect visualization preferences (`viz_preferences` user input).
+4. Compute metrics and evaluate sufficiency (`compute_business_metrics`, `sufficiency_evaluator`).
+5. Request plan approval (`plan_proposal_agent`).
+6. Run anomaly and hypothesis checks (`detect_anomalies`, `hypothesis_test_*`).
+7. Build chart spec, assemble packet/report, and render HTML outputs.
+
+Inputs:
+- `dataset` is required.
+- `prompt` is optional and used in summaries.
+
+## Inputs and Datasets
+- CSV files are expected to be staged under the ADE input directory; dataset names are file names.
+- Built-in dataset: `branded_cards_transactions`.
+
+## Outputs
+- `business_report.html` (primary report).
+- `decision_packet.html` (supporting decision summary).
+- `build_reasoning_narrative` supplies a short narrative used in the decision packet.
+- `export_pdf` can emit `ade.pdf`, `ade.html`, and `ade_stub.json` when invoked.
+
+## Agents (Reasoning Roles)
+- `intent_agent`: extracts intent summary, dataset, metric, time window, and clarification needs.
+- `plan_agent`: produces a deterministic plan spec and tool flags.
+- `plan_proposal_agent`: generates a PlanProposal for approval.
+- `planning_agent`: proposes replan notes and a restart step after rejection.
+- `sufficiency_evaluator`: scores data sufficiency from data-reader output.
+- `dashboard_agent`: builds a short narrative summary from dataset summaries.
+
+## Tools (Facts/Computation)
+- `data_reader`: reads CSV data and derives column/series metadata.
+- `compute_business_metrics`: aggregates totals, movers, anomalies, and evidence.
+- `detect_anomalies`: z-score anomaly detection (skippable).
+- `hypothesis_test_data_outage`: checks for recent outage patterns (skippable).
+- `hypothesis_test_seasonality`: checks for seasonal signals (skippable).
+- `driver_analysis`: identifies top drivers from computed metrics.
+- `recommend_chart`: suggests a chart type using heuristics.
+- `build_chart_spec`: builds a chart specification from data.
+- `assemble_insight_card`: creates InsightCard objects from metrics and evidence.
+- `assemble_decision_packet`: builds DecisionPacket structures.
+- `assemble_business_report`: builds BusinessReport structures.
+- `assemble_evidence_bundle`: aggregates EvidenceItem objects into a bundle.
+- `build_reasoning_narrative`: summarizes run events into a short narrative.
+- `render_business_report_html`: renders the BusinessReport HTML.
+- `render_decision_packet_html`: renders the DecisionPacket HTML.
+- `export_pdf`: exports insight cards to HTML/PDF/JSON.

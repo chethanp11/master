@@ -121,6 +121,22 @@ Policies can cap demo usage to prevent runaway cost or abuse:
 - `max_payload_bytes` caps the size of the initial run payload.
 
 Limits are enforced in the governance hooks and orchestrator. Violations fail the run with a structured error.
+Model calls also apply prompt-injection pattern checks before invocation.
+Payload size limits are also enforced on user input responses and output/output file payloads.
+
+### 3.5 Execution Budgets (Optional)
+
+Runs may supply a `_budget_policy` payload that conforms to `BudgetPolicy`.
+Budgets enforce:
+- Max tool calls and passes
+- Max parallel tool calls
+- Max total cost units
+- Optional HITL escalation when exceeded
+
+### 3.6 Retrieval Policies
+
+Approved retrieval is constrained via `retrieval_allowed_sources` and optional per-flow overrides under `by_product`.
+The `approved_retrieval` tool enforces these policies at runtime.
 
 ## 4. Human-in-the-Loop (HITL)
 
@@ -166,6 +182,7 @@ User input pauses are triggered when:
 Behavior:
 	•	Execution pauses immediately
 	•	Run status transitions to PENDING_USER_INPUT
+	•	Inputs may be staged as PAUSED_WAITING_FOR_USER
 	•	Run and step context are persisted
 	•	Resume requires validated `user_input_response`
 
@@ -179,6 +196,8 @@ Governance hooks are mandatory enforcement points executed by the runtime.
 
 Hook Name	Trigger
 check_autonomy	Run initialization (autonomy policy enforcement)
+validate_branch_conditions	Flow validation (branch condition policy)
+validate_loop_conditions	Flow validation (loop condition policy)
 before_step	Step execution
 before_tool_call	Tool invocation
 before_model_call	Model invocation
@@ -202,6 +221,8 @@ Hooks must NOT:
 	•	Execute tools
 	•	Modify flow structure
 	•	Call external systems
+
+Agent output validation rejects control fields (next-step directives) and invalid payload shapes.
 
 ---
 
@@ -272,6 +293,8 @@ policy_blocked	Disallowed action
 autonomy_denied	Autonomy exceeded
 tool_blocked	Tool not permitted
 model_blocked	Model not permitted
+branch_condition_disallowed	Branch condition policy blocked
+loop_condition_disallowed	Loop condition policy blocked
 
 Errors are returned as structured data, not exceptions.
 

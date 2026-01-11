@@ -52,6 +52,7 @@ flowchart TB
     ORC[orchestrator]
     GOV[governance]
     MEM[memory]
+    KNO[knowledge]
     MOD[models]
     LOG[observability]
   end
@@ -71,6 +72,7 @@ flowchart TB
   ORC --> MEM
   ORC --> LOG
   ORC --> MOD
+  ORC --> KNO
 ```
 
 ---
@@ -105,7 +107,10 @@ flowchart LR
   - `manifest.yaml`
   - `config/product.yaml`
   - `registry.py`
-- Flows are loaded from `products/<product>/flows/*.yaml` or `*.json`.
+- Flows are discovered from `products/<product>/flows/*.yaml`/`*.yml`.
+- Enablement is controlled by `configs/products.yaml` (`enabled` + `auto_enable`).
+- Manifest fields drive catalog metadata, default flow, API exposure, and UI panels.
+- Product config is stored in the product catalog and exposed via API; it is not merged into global Settings automatically.
 
 ```mermaid
 flowchart TB
@@ -138,13 +143,17 @@ core/orchestrator/
 ```
 
 ### Responsibilities
-- Load flow definitions (YAML/JSON) via `FlowLoader` from `products/<product>/flows/`.
+- Load flow definitions (YAML) via `FlowLoader` from `products/<product>/flows/`.
 - Enforce autonomy policy **before** a run starts.
 - Execute steps in order, honoring tool retry policies & backoff.
 - Pause execution for HITL approvals and user_input steps; persist approvals and user input requests.
+- Evaluate branch conditions and loop stop conditions deterministically.
+- Execute plan steps (`plan_propose`, `plan_gate`, `plan_execute`) using stored plan artifacts.
+- `plan_proposal` steps create HITL approvals before proceeding.
 - Resume execution deterministically using stored run/step snapshots.
 - Emit trace events for every transition (run, step, tool, approval, user_input, plan proposals).
 - Govern output persistence (run output + output files) before write.
+- Apply optional run budgets when `_budget_policy` is supplied in the payload.
 
 ### Session Isolation (Gateway)
 The Gateway API constructs an `OrchestratorEngine` per request to avoid cross-user state leakage. Registries, settings, and the memory/tracing backends remain cached, but run context and execution state are request-scoped. Run ids include a timestamp plus a random suffix to avoid collisions under concurrent starts.
@@ -221,8 +230,9 @@ Templating lives in `core/orchestrator/templating.py` and is used by:
 **Source of truth:** `core/contracts/flow_schema.py`.
 
 - `FlowDef` is the canonical flow structure.
-- Step types: `agent`, `tool`, `human_approval`, `user_input`, `plan_proposal`, `subflow` (subflow is not implemented in v1).
+- Step types: `agent`, `tool`, `human_approval`, `user_input`, `plan_proposal`, `plan_propose`, `plan_gate`, `plan_execute`, `branch`, `repeat_until`, `tool_batch` (subflow is rejected in v1).
 - Retry policy is declarative (`max_attempts`, `backoff_seconds`, `retry_on_codes`) and applies to tool steps.
+- `user_input` steps validate against `UserInputRequest` and may embed `QuestionSet` payloads.
 
 ---
 
@@ -233,6 +243,8 @@ Templating lives in `core/orchestrator/templating.py` and is used by:
 - `PolicyEngine` enforces tool/model allowlists and autonomy rules.
 - `GovernanceHooks` are the standard integration point for orchestrator and tools.
 - `SecurityRedactor` sanitizes payloads before persistence or logging.
+- Branch/loop validation blocks disallowed condition paths.
+- Agent output validation rejects control fields and invalid payloads.
 
 Hooks run:
 - At run initialization (autonomy check)
@@ -260,10 +272,13 @@ flowchart LR
 **Source of truth:** `core/tools/*`.
 
 - Tools execute only through `ToolExecutor`.
+- ToolExecutor attaches evidence artifacts for every tool call.
 - Backends:
   - `LocalToolBackend` (in-process)
   - `RemoteToolBackend` (stub, not implemented)
-  - `MCPBackend` (stub, disabled by default)
+  - `MCPBackend` (stub, disabled unless explicitly enabled)
+ToolExecutor routes by `backend_mode` (`local`, `remote_agent`, `mcp`).
+`tool_batch` steps are limited to read-only, no-side-effect tools.
 
 ```mermaid
 sequenceDiagram
@@ -295,8 +310,8 @@ sequenceDiagram
 Memory is the only layer allowed to persist state.
 
 ### Backends
-- `SQLiteBackend` (durable; default)
-- `InMemoryBackend` (test/dev; non-durable)
+- `InMemoryBackend` (default unless SQLite is enabled)
+- `SQLiteBackend` (durable; enabled via `app.features.enable_sqlite_backend`)
 
 ### SQLite Tables (v1)
 - `runs`
@@ -375,6 +390,9 @@ erDiagram
   - `runtime/`
   - `output/`
 The observability root is configurable via `app.paths.observability_dir`.
+- Final run responses are written to `observability/<product>/<run_id>/output/response.json`.
+- The orchestrator can emit a derived `reasoning.md` artifact from runtime events.
+Input mirroring is optional and controlled by `app.features.observability_input_mirroring`.
 
 ```mermaid
 flowchart TB
@@ -404,6 +422,7 @@ flowchart TB
 
 - `AgentResult` and `ToolResult` are mandatory envelopes.
 - Run records (`RunRecord`, `StepRecord`, `TraceEvent`) enforce stable persistence and serialization.
+- External boundaries use Pydantic contracts (flows, run operations, user input, plans, budgets).
 
 ---
 
@@ -427,10 +446,11 @@ The CLI calls the orchestrator directly; the UI talks only to the API.
 stateDiagram-v2
   [*] --> RUNNING
   RUNNING --> PENDING_HUMAN: approval needed
-  RUNNING --> PENDING_USER_INPUT: user input needed
+  RUNNING --> PAUSED_WAITING_FOR_USER: user input needed
+  PAUSED_WAITING_FOR_USER --> RUNNING: input received
+  RUNNING --> PENDING_USER_INPUT: legacy user input state
   PENDING_HUMAN --> RUNNING: approved
   PENDING_HUMAN --> FAILED: rejected
-  PENDING_USER_INPUT --> RUNNING: input received
   RUNNING --> COMPLETED: success
   RUNNING --> FAILED: error
   RUNNING --> CANCELLED

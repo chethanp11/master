@@ -16,8 +16,8 @@ highlights how components collaborate at runtime.
 | `/docs` | Knowledge base | Internal documentation (architecture, flows, governance, product HOWTOs). | Markdown assets referenced by onboarding and governance processes. |
 | `/gateway` | Entry points | API/CLI/UI shells that expose the orchestrator to users/services. | FastAPI app (`gateway/api`), argparse-based CLI (`gateway/cli`), and Streamlit UI (`gateway/ui`). |
 | `/infra` | Deployment glue | Container/K8s definitions and platform scripts used for shipping the stack. | Dockerfile, docker-compose, and k8s manifests. |
-| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/memory/observability_store.py` defines the directory layout; root is configurable via `app.paths.observability_dir`. |
-| `/products` | Product packs | Individual product definitions (flows, agents, tools, assets). | Each product ships a `manifest.yaml` plus `config/product.yaml`, custom agents/tools, templates. |
+| `/observability` | Run observability | Per-run input/runtime/output artifacts for all products. | `core/memory/observability_store.py` defines the directory layout and `response.json`; input mirroring is optional. |
+| `/products` | Product packs | Individual product definitions (flows, agents, tools, assets). | Each product ships a `manifest.yaml`, `config/product.yaml`, `registry.py`, and flow YAML. |
 | `/storage` | Persistent state | Default runtime storage path for memory DB files and other artifacts. | Used by `core/memory` as the default storage root; overridable via `app.paths.storage_dir`. |
 | `/tests` | Automated tests | Pytest suites covering core units, integration flows, CLI/API/UI, and product regressions. | Organized into `tests/core`, `tests/integration`, and `products/*/tests`. |
 | `/pyproject.toml` / `/requirements.txt` | Build metadata | PEP‑621 project definition and pip requirements for production tooling. | Used by CI/CD; coordinates dependency versions. |
@@ -41,14 +41,20 @@ flowchart LR
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy and governance checks, persists runs/steps, emits trace events. |
-| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML/JSON. | Validates and normalizes step ids; no execution or persistence. |
-| `core/orchestrator/step_executor.py` | Step executor | Executes tool/agent/plan_proposal steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, enforces agent output governance; tool retries only. |
+| `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy and governance checks, persists runs/steps, emits trace events, handles branch/loop/plan steps. |
+| `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML. | Validates and normalizes step ids; no execution or persistence (JSON supported by loader when called directly). |
+| `core/orchestrator/step_executor.py` | Step executor | Executes tool/agent/tool_batch/plan_proposal steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, enforces agent output governance; tool retries only. |
+| `core/orchestrator/branching.py` | Branch evaluator | Deterministic branch evaluation. | Evaluates safe condition expressions over artifacts and step outputs. |
+| `core/orchestrator/looping.py` | Loop evaluator | Deterministic stop-condition evaluation. | Evaluates bounded repeat-until conditions against artifacts and memory. |
+| `core/orchestrator/templating.py` | Template renderer | Param/message rendering for steps. | Supports payload/artifact interpolation; strict for messages, lenient for params. |
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
-| `core/contracts/user_input_schema.py` | User input contracts | Typed request/response for `user_input` steps. | Supports choice and free-text modes. |
-| `core/contracts/plan_schema.py` | Plan proposal contracts | Structured plan proposal schema. | Used by `plan_proposal` steps. |
-| `core/contracts/reasoning_schema.py` | Reasoning purpose contract | Enum for required LLM reasoning purposes. | Used by LLM routing, governance, and tracing. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
+| `core/contracts/user_input_schema.py` | User input contracts | Typed request/response for `user_input` steps. | Supports choice and free-text modes. |
+| `core/contracts/question_schema.py` | Question set contracts | Structured missing-info collection. | Used by question_set-based user input. |
+| `core/contracts/context_pack_schema.py` | Context pack contracts | Evidence-backed context summaries. | Used to merge user answers into context. |
+| `core/contracts/plan_schema.py` | Plan proposal contracts | Structured plan proposal schema. | Used by `plan_proposal` steps. |
+| `core/contracts/action_plan_schema.py` | Action plan contracts | Executable plan schema. | Used by `plan_propose`/`plan_gate`/`plan_execute`. |
+| `core/contracts/reasoning_schema.py` | Reasoning purpose contract | Enum for required LLM reasoning purposes. | Used by LLM routing, governance, and tracing. |
 
 ```mermaid
 sequenceDiagram
@@ -80,7 +86,9 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | `core/agents/base.py` | `BaseAgent` | Abstract contract for agents. | `run(step_context)` returns `AgentResult`. |
 | `core/agents/registry.py` | Agent registry | Global DI container for agent factories. | Case-normalized name resolution; new instance per resolution; exposes descriptor catalog. |
-| `core/agents/llm_reasoner.py` | LLM reasoner | Built-in LLM agent. | Invokes models via `core/models/router.py` and emits governance/tracing hooks. |
+| `core/agents/llm_reasoner.py` | LLM reasoner | Built-in LLM agent and role-specific helpers. | Invokes models via `core/models/router.py` and emits governance/tracing hooks. |
+| `core/agents/advisory.py` | Advisory agents | Tool/agent selectors, gap finder, summarizer, risk explainer. | Structured outputs used for advisory steps; registered as core agents. |
+| `core/agents/reasoning_ladder.py` | Reasoning ladder | Multi-pass reasoning helper. | Deterministic interpret → propose → select flow with budget awareness. |
 
 ### Tools
 
@@ -89,12 +97,14 @@ sequenceDiagram
 | `core/tools/base.py` | `BaseTool` | Tool contract used by products. | `run(params, ctx)` returns `ToolResult`. |
 | `core/tools/registry.py` | Tool registry | Global DI container for tool factories. | Case-normalized name resolution; exposes descriptor catalog. |
 | `core/tools/executor.py` | Tool executor | Central dispatcher for tool execution. | Applies governance hooks and redaction; emits trace events; wraps outputs as evidence. |
+| `core/tools/retrieval.py` | Approved retrieval tool | Read-only retrieval across run records and trace events. | Enforces retrieval policies; returns evidence + citations. |
 | `core/tools/backends/local_backend.py` | Local backend | In-process tool execution. | Calls Python tool implementation directly. |
 | `core/tools/backends/remote_backend.py` | Remote backend (stub) | Placeholder for HTTP/gRPC tools. | Returns error in v1. |
 | `core/tools/backends/mcp_backend.py` | MCP backend (stub) | Placeholder for MCP tools. | Disabled by default; returns error in v1. |
 
 ### Descriptors
 - `core/contracts/descriptors_schema.py` defines the `ToolDescriptor` and `AgentDescriptor` catalog contracts used by registries.
+- Tool descriptors declare `read_only` and `side_effect`, which gate `tool_batch` eligibility.
 
 ### Evidence
 - `core/contracts/evidence_schema.py` defines `EvidenceItem` and `EvidenceSource` for tool output provenance.
@@ -125,9 +135,10 @@ sequenceDiagram
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/memory/base.py` | Memory interfaces | Contracts for adapters (runs, steps, events, approvals). | Base classes consumed by routers/backends. |
-| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence. | Stores runs, steps, events, approvals in SQLite. |
-| `core/memory/in_memory.py` | In-memory backend | Lightweight store for tests/dev. | Dict-backed, non-durable. |
-| `core/memory/router.py` | Memory router | Chooses appropriate backend and exposes CRUD. | Used by orchestrator, API, CLI, tracer. |
+| `core/memory/sqlite_backend.py` | SQLite backend | Durable run/memory persistence. | Stores runs, steps, events, approvals in SQLite (enabled via feature flag). |
+| `core/memory/in_memory.py` | In-memory backend | Lightweight store for tests/dev. | Default backend unless SQLite is enabled. |
+| `core/memory/router.py` | Memory router | Chooses appropriate backend and exposes CRUD. | Used by orchestrator, API, CLI, tracer; owns observability store. |
+| `core/memory/observability_store.py` | Observability store | Filesystem run artifacts. | Writes `input/`, `runtime/`, `output/` and `response.json`. |
 
 ```mermaid
 erDiagram
@@ -187,6 +198,17 @@ erDiagram
   RUNS ||--o{ APPROVALS : has
 ```
 
+### Knowledge
+
+| Code Path | Code Name | Functional Details | Technical Details |
+| --- | --- | --- | --- |
+| `core/knowledge/base.py` | Knowledge contracts | Typed retrieval/ingestion interfaces. | Defines Chunk, Query, VectorStore. |
+| `core/knowledge/retriever.py` | Retriever | Query execution helper. | Works with vector store or lexical fallback. |
+| `core/knowledge/vector_store.py` | Vector store | Optional embedding store. | Enabled only when feature flags are set. |
+| `core/knowledge/context_pack.py` | Context pack builder | Evidence-backed summaries. | Builds ContextPack artifacts from evidence. |
+| `core/knowledge/context_pack_merge.py` | Context merge | Merge answers into context packs. | Used for question_set user input. |
+| `core/knowledge/structured.py` | Structured accessor | Minimal CSV querying helpers. | No persistence; optional pandas use. |
+
 ### Governance & Security
 
 | Code Path | Code Name | Functional Details | Technical Details |
@@ -194,6 +216,11 @@ erDiagram
 | `core/governance/policies.py` | Policy engine | Evaluates tool/model allowlists and autonomy rules. | Per-product overrides supported. |
 | `core/governance/hooks.py` | Governance hooks | Integration point for orchestrator/tools. | Autonomy, step/tool/model checks; agent output validation; user input/output gating. |
 | `core/governance/security.py` | Redaction | Scrubs secrets/PII from payloads. | Regex + key-hint based sanitization. |
+| `core/governance/branch_gate.py` | Branch gating | Validates branch conditions. | Rejects disallowed paths or targets. |
+| `core/governance/loop_gate.py` | Loop gating | Validates loop stop conditions. | Rejects disallowed paths or targets. |
+| `core/governance/budgeting.py` | Budgeting | Tracks run budgets. | Consumes tool/pass/parallel budgets with actions. |
+| `core/governance/plan_gate.py` | Plan gating | Gates ActionPlans. | Applies allowlists and budget sensitivity. |
+| `core/governance/retrieval_policy.py` | Retrieval policy | Allowed retrieval sources. | Per-product/per-flow source allowlists. |
 
 ```mermaid
 flowchart LR
@@ -215,7 +242,8 @@ flowchart LR
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/memory/tracing.py` | Tracer | Persists trace events with redaction. | Writes to memory backend; MemoryRouter mirrors to observability runtime logs. |
-| `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/`. Root is configurable. |
+| `core/memory/observability_store.py` | Observability store | Filesystem layout for run artifacts. | Creates `input/`, `runtime/`, `output/` and writes `response.json`. |
+| `core/utils/reasoning_exporter.py` | Reasoning exporter | Builds reasoning markdown. | Extracts runtime events into `reasoning.md`. |
 
 ---
 
@@ -224,7 +252,7 @@ flowchart LR
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `gateway/api/http_app.py` | FastAPI factory | Builds API router and app. | `/api` routes wired in `routes_run.py`. |
-| `gateway/api/routes_run.py` | Run routes | Starts/resumes flows and reads runs. | Uses orchestrator + product catalog. |
+| `gateway/api/routes_run.py` | Run routes | Starts/resumes flows and reads runs/approvals. | Uses orchestrator + product catalog; exposes pending user input endpoints. |
 | `gateway/cli/main.py` | CLI entry | Argparse CLI for local runs. | Directly calls orchestrator. |
 | `gateway/ui/platform_app.py` | Streamlit UI | Control center for products, runs, approvals, user inputs. | Talks to API only. |
 

@@ -1,45 +1,35 @@
 # Analytical Decision Engine — Requirements (v1)
 
 ## Objective
-ADE is an analyst-facing business analysis runner. It accepts open-ended analysis questions, executes deterministic tools where possible, and uses LLMs only for interpretation and synthesis. ADE produces a shareable Business Insight HTML and an auditable Evidence Pack derived from events.
+ADE accepts analyst questions and CSV datasets to produce a business report and decision packet using deterministic agents and tools.
 
----
+## In Scope
 
-## In-Scope (v1)
+### Inputs
+- Analyst question via `prompt` (or `intent` / `question` / `instructions`).
+- CSV datasets referenced by name, staged under the ADE input directory.
+- Built-in dataset: `branded_cards_transactions`.
 
-### Supported Inputs
-- Uploaded datasets (CSV) staged under product input directories.
-- Analyst intent as free-text `prompt`.
+### Flows
+- `ade_v1`: free-text analyst flow with conditional clarification and plan approval.
+- `visualization`: dataset-first flow with explicit visualization preferences.
 
-### Flow Behavior
-- Intent-driven analysis flow with explicit planning.
-- User inputs for clarification when intent is ambiguous.
-- Approvals for decision gates (hypothesis inclusion, charting, final framing).
-- Optional hypothesis checks only if required by the plan.
+### User Input
+- Clarification prompts for missing dataset/metric/time window (`ade_v1`).
+- Visualization preferences (`visualization`): `chart_type`, `metric_focus`, `include_hypothesis_checks`, `notes`.
 
 ### Outputs
-- Business Insight HTML (primary, shareable, no debug dumps).
-- Evidence Pack (secondary, audit trail derived from events.jsonl).
-- `response.json` with run status and output files.
+- `business_report.html` (primary).
+- `decision_packet.html` (supporting).
+- Optional exports from `export_pdf` when used.
 
-### Observability
-- `events.jsonl` must be written for every ADE run.
-- Output files stored under `<observability_root>/ade/<run_id>/output/`.
-- Datasets are referenced, not duplicated.
-
----
-
-## Out of Scope (v1)
-- BI dashboards or fixed analytics pipelines.
+## Out of Scope
 - Live database connectors or streaming inputs.
 - Multi-dataset joins.
-- Auto tool discovery.
-- Agent-to-agent autonomy.
+- Automatic tool discovery or dynamic flow mutation.
+- BI dashboarding as a primary product surface.
 
----
-
-## Governance & Trust Requirements
-- Trace events emitted per step/tool call.
-- User inputs and approvals are logged and replayable.
-- Evidence Pack is derived from events; no chain-of-thought storage.
-- Redaction enforced by core governance hooks before trace/log emission.
+## Trust and Audit Expectations
+- Outputs must be reproducible from the same inputs.
+- Evidence references are embedded in decision packets and reports.
+- No chain-of-thought storage is produced by ADE tools.

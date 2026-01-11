@@ -10,7 +10,7 @@ Products are thin bundles that plug into the shared runtime; **no core changes a
 - Thin: products only define flows, agents, tools, and config.
 - Safe: obey the platform laws (no env reads outside config loader, no persistence outside `core/memory`, no direct tool execution).
 - Declarative: flows/policies belong in YAML; behavior is wired via manifests.
-- Testable: each product can ship regression suites that run via sqlite.
+- Testable: each product can ship regression suites that run via sqlite when enabled.
 
 ## 2. Product Layout
 
@@ -20,7 +20,7 @@ Products live under `products/<product_name>/` with the following required struc
 products/<product>/
 ├── manifest.yaml                  # Metadata + flows + UI/API flags
 ├── config/
-│   └── product.yaml               # Product-specific defaults injected into Settings
+│   └── product.yaml               # Product-specific defaults (required)
 ├── flows/                         # Flow definitions (YAML)
 ├── agents/                        # BaseAgent implementations
 ├── tools/                         # BaseTool implementations
@@ -46,15 +46,19 @@ There is no scaffolding script; create the product layout manually following thi
 
 - `name`, `display_name`, `description`, `version`
 - `default_flow`
-- `exposed_api` / `ui` flags+panels (used by gateway & Streamlit UI)
-- `flows`: list of flow IDs published by the product
-- Optional metadata (category, icon, gallery)
+- `exposed_api` (enabled + allowed_flows)
+- `ui_enabled` and `ui` (nav label, panels, icon, category)
+- `flows`: optional curated list of flow IDs published by the product
 
-`config/product.yaml` stores product defaults (autonomy, budgets, flags). It is merged into the global Settings object and can be injected into agents/tools via dependency injection. Optional UI hints live under `metadata.ui` to drive dynamic inputs/intent in the Streamlit UI.
+`config/product.yaml` is required and may include:
+- `name` (required; defaults to manifest name if omitted)
+- `defaults`, `limits`, `flags`, `metadata` (freeform dictionaries)
+
+Product config is surfaced via the product catalog/API and can be injected into agents/tools by the caller; it is not merged into the global Settings loader automatically.
 
 ## 4. Flow Definitions
 
-Flows live under `flows/*.yaml`. Each flow defines a linear sequence of steps referencing registered agents/tools, `human_approval`, or `user_input`. Example snippet:
+Flows live under `flows/*.yaml`. Each flow defines a sequence of steps referencing registered agents/tools, `human_approval`, `user_input`, and control steps (`branch`, `repeat_until`, `plan_*`, `tool_batch`). Example snippet:
 
 ```yaml
 id: hello_world
@@ -112,16 +116,18 @@ Product tests belong under `products/<name>/tests/`. Hello World ships `products
 - Discovers/registers the hello_world product
 - Runs `hello_world`, asserts the run pauses for HITL, resumes with an approval payload, and inspects persisted step outputs (echo + summary)
 
-Use pytest to keep the golden path deterministic (sqlite backend only, no network).
+Use pytest to keep the golden path deterministic (sqlite backend only when enabled, no network).
 
 ## 8. Running the Product
 
 Once registered, the gateway exposes:
 
 - `GET /api/products` + `/api/products/{product}/flows` (driven by manifests + discovery)
-- `POST /api/run/{product}/{flow}` to start flows
+- `GET /api/runs` and `GET /api/approvals` for run/approval lists
+- `GET /api/runs/{run_id}/pending_input` for pending user input prompts
+- `POST /api/runs/{run_id}/user_input` to submit user input answers
+- `POST /api/run/{product}/{flow}` to start flows (payload or optional `text` field)
 - `POST /api/resume_run/{run_id}` to resolve HITL approvals
-- `POST /api/resume_run/{run_id}` with `user_input_response` to resume `user_input` steps
 - CLI commands (`master list-products`, `master run`, `master resume`, `master approvals`)
 - Streamlit control center (`gateway/ui/platform_app.py`) that lists products, flows, run history, and approvals
 
