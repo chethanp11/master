@@ -358,7 +358,7 @@ Consolidate gate files into a unified gates.py module.
      - retrieval_policy.py → RetrievalGate class
 
 2. Gate interface:
-   ```python
+      python
    class Gate(Protocol):
        name: str
        def evaluate(self, context: GateContext) -> GateResult: ...
@@ -367,7 +367,7 @@ Consolidate gate files into a unified gates.py module.
        def register(self, gate: Gate) -> None: ...
        def get(self, name: str) -> Gate: ...
        def evaluate_all(self, context: GateContext) -> list[GateResult]: ...
-   ```
+   
 
 3. Update hooks.py to use GateRegistry instead of direct imports.
 
@@ -386,7 +386,7 @@ I'm implementing Phase 5 of refactor_plan.md - Registry Unification.
 Create a generic ComponentRegistry base class.
 
 1. Create `core/utils/registry.py`:
-   ```python
+      python
    from typing import Generic, TypeVar, Callable, Dict
    
    T = TypeVar("T")
@@ -403,7 +403,7 @@ Create a generic ComponentRegistry base class.
        def get_factory(self, name: str) -> Callable[..., T]: ...
        def list_registered(self) -> list[str]: ...
        def has(self, name: str) -> bool: ...
-   ```
+  
 
 2. Refactor `core/agents/registry.py`:
    - Make AgentRegistry inherit from ComponentRegistry[BaseAgent]
@@ -428,7 +428,7 @@ I'm implementing Phase 6 of refactor_plan.md - UI Modularization.
 Split platform_app.py (1,046 lines) into page modules.
 
 1. Create directory structure:
-   ```
+   
    gateway/ui/
    ├── platform_app.py      # Slim entry point (~150 lines)
    ├── api_client.py        # HTTP client for API calls
@@ -442,7 +442,7 @@ Split platform_app.py (1,046 lines) into page modules.
        ├── __init__.py
        ├── run_card.py      # Reusable run display widget
        └── approval_form.py # Approval interaction widget
-   ```
+   
 
 2. Create `gateway/ui/api_client.py`:
    - Wrap all HTTP calls to the FastAPI backend
@@ -501,7 +501,7 @@ Add intelligence capabilities while maintaining governance. Medium risk, done in
 I'm implementing Phase 7 of refactor_plan.md - Enhanced Descriptors & Evidence Model.
 
 1. Expand `core/contracts/descriptors_schema.py`:
-   ```python
+      python
    class ToolDescriptor(BaseModel):
        name: str
        description: str
@@ -521,10 +521,10 @@ I'm implementing Phase 7 of refactor_plan.md - Enhanced Descriptors & Evidence M
        output_schema_ref: str | None = None
        cost_hint: str = "low"
        allowed_step_types: list[str] = []  # e.g., ["advisory"]
-   ```
+   
 
 2. Add `EvidenceItem` to `core/contracts/context_pack_schema.py`:
-   ```python
+      python
    class EvidenceItem(BaseModel):
        id: str
        type: str  # "table" | "document" | "text" | "metric"
@@ -534,7 +534,7 @@ I'm implementing Phase 7 of refactor_plan.md - Enhanced Descriptors & Evidence M
        content_ref: str | None = None  # artifact reference
        summary: str = ""
        provenance: dict = {}  # filters, params used
-   ```
+   
 
 3. Update `core/contracts/tool_schema.py`:
    - Add `evidence: list[EvidenceItem] = []` to ToolResult
@@ -557,7 +557,7 @@ I'm implementing Phase 8 of refactor_plan.md - Context Pack Builder.
 Enhance the ContextPackBuilder for deterministic LLM context curation.
 
 1. Update `core/knowledge/context_pack.py`:
-   ```python
+      python
    class ContextPackBuilder:
        """Builds deterministic context packs from evidence items."""
        
@@ -577,10 +577,10 @@ Enhance the ContextPackBuilder for deterministic LLM context curation.
        def _summarize_documents(self, items: list[EvidenceItem]) -> list[DocSummary]: ...
        def _build_evidence_index(self, items: list[EvidenceItem]) -> list[str]: ...
        def _compute_hash(self, pack: ContextPack) -> str: ...
-   ```
+   
 
 2. Update `core/contracts/context_pack_schema.py`:
-   ```python
+      python
    class TableSummary(BaseModel):
        source: str
        row_count: int
@@ -602,7 +602,7 @@ Enhance the ContextPackBuilder for deterministic LLM context curation.
        assumptions: list[str] = []
        limits: dict = {}  # data coverage info
        hash: str = ""  # for reproducibility verification
-   ```
+   
 
 3. Update LLM reasoner to use ContextPack:
    - llm_reasoner.py should accept ContextPack instead of raw text
@@ -620,7 +620,7 @@ Enhance the ContextPackBuilder for deterministic LLM context curation.
 I'm implementing Phase 9 of refactor_plan.md - Bounded Reasoning & Critic Pattern.
 
 1. Refactor `core/agents/reasoning_ladder.py`:
-   ```python
+      python
    class ReasoningLadder:
        """Bounded multi-pass reasoning with governance."""
        
@@ -639,10 +639,10 @@ I'm implementing Phase 9 of refactor_plan.md - Bounded Reasoning & Critic Patter
                select=select,
                ...
            )
-   ```
+   
 
 2. Refactor `core/agents/critic_evaluator.py`:
-   ```python
+      python
    class CriticEvaluator:
        """Bounded critic for quality/completeness checks."""
        
@@ -655,10 +655,10 @@ I'm implementing Phase 9 of refactor_plan.md - Bounded Reasoning & Critic Patter
                confidence_adjustment=...,
                recommended_action="NONE"  # or "USER_INPUT" | "HITL" | "FETCH_MORE_EVIDENCE"
            )
-   ```
+   
 
 3. Expand `core/governance/budgeting.py`:
-   ```python
+      python
    class ReasoningBudget(BaseModel):
        max_passes: int = 3
        max_tool_calls: int = 10
@@ -666,7 +666,7 @@ I'm implementing Phase 9 of refactor_plan.md - Bounded Reasoning & Critic Patter
        max_total_cost_units: float = 100.0
        max_latency_bucket: str = "medium"
        escalate_on_exceed: bool = True  # trigger HITL if exceeded
-   ```
+   
 
 4. Add governance integration:
    - Budget checks before each reasoning pass
@@ -684,13 +684,13 @@ I'm implementing Phases 10-12 of refactor_plan.md - Parallel Tools, Question Loo
 Phase 10 - TOOL_BATCH step type:
 
 1. Add to `core/contracts/flow_schema.py`:
-   ```python
+      python
    class ToolBatchStepDef(BaseModel):
        id: str
        type: Literal["tool_batch"]
        tools: list[str]
        parallel: bool = True
-   ```
+   
 
 2. Update step_executor.py to handle tool_batch:
    - Validate all tools are read_only and side_effect=false
@@ -701,7 +701,7 @@ Phase 10 - TOOL_BATCH step type:
 Phase 11 - Missing-info question loop:
 
 1. Add to `core/contracts/interaction_schema.py`:
-   ```python
+      python
    class Question(BaseModel):
        id: str
        text: str
@@ -714,7 +714,7 @@ Phase 11 - Missing-info question loop:
        questions: list[Question]
        context: str = ""
        validation_schema: dict = {}
-   ```
+   
 
 2. Update user_input_handler.py to support QuestionSet:
    - Validate answers against QuestionSet schema
@@ -728,14 +728,14 @@ Phase 12 - Retrieval augmentation:
    - Return EvidenceItems with full provenance
 
 2. Add retrieval policy to configs/policies.yaml structure:
-   ```yaml
+      yaml
    retrieval_policy:
      allowed_sources:
        - "runs:current_product"
        - "knowledge:approved_docs"
      blocked_sources:
        - "runs:other_products"
-   ```
+   
 
 3. Update governance hooks to enforce retrieval policy.
 
@@ -750,7 +750,7 @@ I'm implementing Phase 13 of refactor_plan.md - Advisory Agent Set.
 Refactor advisory.py into bounded advisory agents.
 
 1. Create `core/agents/advisors/` directory with:
-   ```
+   
    core/agents/advisors/
    ├── __init__.py
    ├── base.py           # AdvisoryAgent base class
@@ -759,10 +759,10 @@ Refactor advisory.py into bounded advisory agents.
    ├── gap_finder.py     # GapFinder agent
    ├── summarizer.py     # Summarizer agent
    └── risk_explainer.py # RiskExplainer agent
-   ```
+   
 
 2. Base class in `core/agents/advisors/base.py`:
-   ```python
+      python
    class AdvisoryAgent(BaseAgent):
        """Base for advisory agents that cannot execute tools."""
        
@@ -772,7 +772,7 @@ Refactor advisory.py into bounded advisory agents.
        
        @abstractmethod
        def advise(self, context: StepContext) -> AdvisoryResult: ...
-   ```
+   
 
 3. Implement each advisor:
    - ToolSelector: Recommend tools based on descriptors + context
@@ -782,14 +782,14 @@ Refactor advisory.py into bounded advisory agents.
    - RiskExplainer: Explain confidence/risk factors
 
 4. Each advisor outputs structured results:
-   ```python
+      python
    class ToolSelectionResult(BaseModel):
        recommended_tools: list[str]
        rationale: str
        confidence: float
    
    # Similar for other advisors...
-   ```
+   
 
 5. Add governance check:
    - Advisors cannot invoke ToolExecutor
@@ -835,7 +835,7 @@ I'm implementing Phase 14 of refactor_plan.md - Product Contract Simplification.
 Add auto-discovery and decorator-based registration for products.
 
 1. Add decorators to `core/agents/base.py`:
-   ```python
+      python
    def agent(
        name: str,
        purpose: str,
@@ -852,10 +852,10 @@ Add auto-discovery and decorator-based registration for products.
            )
            return cls
        return decorator
-   ```
+
 
 2. Add decorators to `core/tools/base.py`:
-   ```python
+      python
    def tool(
        name: str,
        description: str,
@@ -867,10 +867,10 @@ Add auto-discovery and decorator-based registration for products.
    ):
        """Decorator for tool auto-discovery."""
        ...
-   ```
+   
 
 3. Add auto-discovery to `core/utils/product_loader.py`:
-   ```python
+      python
    def auto_discover_agents(product_path: Path) -> list[tuple[str, Callable]]:
        """Discover all @agent decorated classes in product/agents/."""
        ...
@@ -885,7 +885,7 @@ Add auto-discovery and decorator-based registration for products.
            registries.agent_registry.register(name, factory)
        for name, factory in auto_discover_tools(product_path):
            registries.tool_registry.register(name, factory)
-   ```
+   
 
 4. Update hello_world product to use decorators:
    - Add @agent decorator to simple_agent.py
@@ -912,7 +912,7 @@ Reorganize tests for clear ownership.
    - Move tests/integration/test_business_report_html.py → products/ade/tests/integration/
 
 2. Create standard conftest.py for products:
-   ```python
+      python
    # products/ade/tests/conftest.py
    import pytest
    from pathlib import Path
@@ -924,7 +924,7 @@ Reorganize tests for clear ownership.
    @pytest.fixture
    def ade_test_data_path():
        return Path(__file__).parent.parent / "data"
-   ```
+   
 
 3. Update test documentation:
    - Add README.md to tests/ explaining test organization
@@ -933,10 +933,10 @@ Reorganize tests for clear ownership.
 4. Update CI configuration (if exists) to run product tests in parallel.
 
 5. Verify all tests still discoverable:
-   ```bash
+      bash
    pytest tests/ --collect-only
    pytest products/*/tests/ --collect-only
-   ```
+   
 ```
 
 ### Prompt 18: Test Infrastructure Hardening
@@ -947,7 +947,7 @@ I'm implementing Phases 16-17 of refactor_plan.md - Test Infrastructure Hardenin
 Add comprehensive test suites for critical gaps.
 
 1. Create `tests/core/test_hitl_edge_cases.py`:
-   ```python
+      python
    def test_double_resume_idempotent():
        """Resuming an already-resumed run is safe."""
        ...
@@ -959,10 +959,10 @@ Add comprehensive test suites for critical gaps.
    def test_concurrent_approvals_serialized():
        """Multiple approvers on same run are serialized."""
        ...
-   ```
+   
 
 2. Create `tests/core/test_budget_enforcement.py`:
-   ```python
+      python
    def test_max_passes_enforced():
        """Loop terminates at max_passes."""
        ...
@@ -974,10 +974,10 @@ Add comprehensive test suites for critical gaps.
    def test_budget_exceeded_triggers_hitl():
        """Budget exceeded with escalation policy pauses for approval."""
        ...
-   ```
+   
 
 3. Create `tests/architecture/test_product_isolation.py`:
-   ```python
+      python
    def test_no_cross_product_imports():
        """No product imports another product."""
        ...
@@ -985,10 +985,10 @@ Add comprehensive test suites for critical gaps.
    def test_product_cannot_access_other_product_runs():
        """API enforces product isolation."""
        ...
-   ```
+   
 
 4. Create `tests/acceptance_intelligence/test_golden_paths.py`:
-   ```python
+      python
    GOLDEN_PATHS = [
        ("hello_world", "hello_world", {"message": "test"}, "hello_world_expected.json"),
    ]
@@ -997,7 +997,7 @@ Add comprehensive test suites for critical gaps.
    def test_golden_path(product, flow, payload, expected_file):
        """Run golden path and compare to stored expected output."""
        ...
-   ```
+   
 
 5. Create golden path expected outputs:
    - tests/acceptance_intelligence/golden/hello_world_expected.json
