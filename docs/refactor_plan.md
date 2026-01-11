@@ -6,6 +6,18 @@
 
 ---
 
+## Guiding Constraints (Non-Negotiable)
+
+| Constraint | Implementation Implication |
+|------------|---------------------------|
+| **Orchestrator remains control plane** | Agents never decide control flow; they only propose |
+| **Tools only via ToolExecutor** | All tool calls routed through core executor |
+| **LLM calls centralized** | Only via LLM reasoner/router path |
+| **Auditability mandatory** | Every feature emits structured trace + artifacts |
+| **Enterprise-safe** | Side-effects require HITL; read-only loops allowed under budgets |
+
+---
+
 ## A) Architectural Diagnosis
 
 ### What Works ✓
@@ -81,9 +93,9 @@
 | `agents/base.py` | BaseAgent contract | **A-CORE** | Keep | — |
 | `agents/registry.py` | Agent registration/lookup | **C-SIMPLIFY** | Unify with tool registry base class | Low |
 | `agents/llm_reasoner.py` | LLM invocation wrapper | **A-CORE** | Keep | — |
-| `agents/advisory.py` | Advisory agent pattern | **D-DEPRECATE** | Feature-flag out; remove after audit | Low |
-| `agents/reasoning_ladder.py` | Multi-step reasoning | **E-REMOVE** | Delete; no product references | Very low |
-| `agents/critic_evaluator.py` | Output critique | **D-DEPRECATE** | Feature-flag; remove if unused after 90 days | Low |
+| `agents/advisory.py` | Advisory agent pattern | **C-SIMPLIFY** | Refactor into bounded advisory agents (selector, gap-finder, summarizer) | Medium |
+| `agents/reasoning_ladder.py` | Multi-step reasoning | **C-SIMPLIFY** | Refactor into bounded interpret→propose→select pattern | Medium |
+| `agents/critic_evaluator.py` | Output critique | **C-SIMPLIFY** | Refactor into bounded critic with structured recommendations | Medium |
 
 ### Core Tools
 
@@ -150,13 +162,15 @@
 | `evidence_schema.py` | **B-CONSOLIDATE** | Merge into context_pack_schema.py |
 | `branch_schema.py` + `loop_schema.py` | **B-CONSOLIDATE** | Merge into flow_schema.py |
 | `reasoning_schema.py` | **A-CORE** | Keep |
-| `reasoning_ladder_schema.py` | **E-REMOVE** | Delete with reasoning_ladder.py |
-| `critic_schema.py` | **D-DEPRECATE** | Remove with critic_evaluator |
-| `descriptors_schema.py` | **A-CORE** | Keep |
+| `reasoning_ladder_schema.py` | **C-SIMPLIFY** | Refactor for bounded multi-pass reasoning |
+| `critic_schema.py` | **C-SIMPLIFY** | Refactor for structured recommendations |
+| `descriptors_schema.py` | **A-CORE** | Expand with capability tags, cost hints, sensitivity class |
 | `retrieval_schema.py` | **A-CORE** | Keep |
-| `advisory_schema.py` | **D-DEPRECATE** | Remove with advisory.py |
+| `advisory_schema.py` | **C-SIMPLIFY** | Refactor for bounded advisory outputs |
 
-**Contract Consolidation Summary:** 21 files → 12 files (43% reduction)
+**Contract Consolidation Summary:** 21 files → 14 files (33% reduction)
+
+Note: Reasoning ladder, critic, and advisory schemas retained and simplified for intelligence capabilities rather than removed.
 
 ### Gateway
 
@@ -171,6 +185,27 @@
 ---
 
 ## C) Simplification-Oriented Refactor Plan
+
+### Phase 0: Baseline & Safety Net (1 week)
+
+**Goals:**
+- Lock current behavior before touching anything
+- Create acceptance tests that prevent regressions
+- Enable confident refactoring
+
+**Deliverables:**
+- Tests that assert:
+  - Deterministic step transitions (same input → same output)
+  - Pause/resume correctness for HITL and user_input
+  - Governance denies disallowed tools/models
+  - Trace emission for every tool/model call
+  - Proposal steps do not execute tools directly
+
+**Exit Criteria:**
+- All acceptance tests pass on current codebase
+- Tests added to CI as blocking gates
+
+---
 
 ### Phase 1: Contract Consolidation (2 weeks)
 
@@ -213,11 +248,7 @@
 | `mcp_backend.py` | Disabled in executor |
 | `remote_backend.py` | Disabled in executor |
 
-| Deprecate (feature-flag) | Review after 90 days |
-|--------------------------|---------------------|
-| `advisory.py` | No active usage |
-| `critic_evaluator.py` | No active usage |
-| `vector_store.py` | No active usage |
+**Note:** `advisory.py`, `critic_evaluator.py`, and `vector_store.py` previously marked for deprecation are now retained for intelligence capabilities (see Phase 7-9).
 
 **Exit Criteria:**
 - Deleted modules have no import references
@@ -368,6 +399,284 @@ gateway/ui/
 
 ---
 
+### Phase 7: Enhanced Descriptors & Evidence Model (2 weeks)
+
+**Goals:**
+- Build semantic catalog for intelligent tool/agent selection
+- Standardize evidence-based reasoning with provenance
+
+**Deliverables:**
+
+**7.1 Expand ToolDescriptor & AgentDescriptor:**
+```python
+class ToolDescriptor:
+    name: str
+    description: str
+    capabilities: list[str]  # semantic tags
+    input_schema_ref: str
+    output_schema_ref: str
+    read_only: bool
+    side_effect: bool
+    sensitivity_class: str  # "public" | "internal" | "confidential" | "restricted"
+    cost_hint: str  # "low" | "medium" | "high"
+
+class AgentDescriptor:
+    name: str
+    purpose: str
+    capabilities: list[str]
+    input_schema_ref: str
+    output_schema_ref: str
+    cost_hint: str
+    allowed_step_types: list[str]  # advisory only
+```
+
+**7.2 Introduce EvidenceItem model:**
+```python
+class EvidenceItem:
+    id: str
+    type: str  # "table" | "document" | "text" | "metric"
+    source: str  # tool name + uri
+    timestamp: datetime
+    confidence: float
+    content_ref: str  # artifact reference
+    summary: str
+    provenance: dict  # filters, params used
+```
+
+**7.3 Update ToolResult contract:**
+- Add `evidence: list[EvidenceItem]` field
+- Compatibility shim: existing tools auto-wrap output into minimal EvidenceItem
+
+**Exit Criteria:**
+- Every registered tool/agent has complete descriptor
+- Every tool run yields at least one EvidenceItem
+- Trace contains evidence IDs and source mapping
+
+---
+
+### Phase 8: Context Pack Builder (2 weeks)
+
+**Goals:**
+- Curate LLM inputs deterministically
+- Enable auditable, reproducible reasoning
+
+**Deliverables:**
+
+**8.1 ContextPack schema:**
+```python
+class ContextPack:
+    question: str
+    tables_summary: list[TableSummary]  # stats, key rows, column profiles
+    documents_summary: list[DocSummary]  # excerpts, metadata
+    evidence_index: list[str]  # EvidenceItem references
+    assumptions: list[str]  # system-applied
+    limits: dict  # data coverage, sampling info
+```
+
+**8.2 ContextPackBuilder utility:**
+- Takes EvidenceItems + question
+- Generates context pack deterministically (no LLM)
+- Stores as artifact with hash for reproducibility
+
+**Exit Criteria:**
+- Same inputs → same context pack (hash-verified)
+- Context pack contains provenance links to all evidence
+- LLM calls receive ContextPack, not raw blobs
+
+---
+
+### Phase 9: Bounded Reasoning & Critic Pattern (3 weeks)
+
+**Goals:**
+- Enable multi-pass reasoning with governance
+- Add critic for quality/completeness checks
+- Enforce reasoning budgets
+
+**Deliverables:**
+
+**9.1 ReasoningLadder refactor:**
+```python
+class ReasoningLadderOutput:
+    interpret: InterpretResult  # intent, entities, constraints
+    propose: ProposeResult      # candidates, tool_candidates, agent_candidates
+    select: SelectResult        # chosen, rationale, evidence_refs
+    confidence: float
+    assumptions: list[str]
+    unknowns: list[str]
+```
+
+Each pass:
+- Uses same ContextPack
+- Yields structured output
+- Emits trace events
+- Bounded by config budgets
+
+**9.2 Bounded Critic refactor:**
+```python
+class CriticResult:
+    completeness_score: float
+    inconsistency_flags: list[str]
+    missing_evidence: list[str]
+    confidence_adjustment: float
+    recommended_action: str  # "NONE" | "USER_INPUT" | "HITL" | "FETCH_MORE_EVIDENCE"
+```
+
+Rules:
+- Critic cannot call tools; only analyzes artifacts
+- Critic cannot produce "execute tool X"; only recommendations
+- Orchestrator gates all recommendations via policy
+
+**9.3 Reasoning Budgets (expand existing budgeting.py):**
+```python
+class ReasoningBudget:
+    max_passes: int
+    max_tool_calls: int
+    max_parallel_calls: int
+    max_total_cost_units: float
+    max_latency_bucket: str
+    policy_by_sensitivity: dict
+```
+
+Enforcement:
+- Exceeding budgets → deterministic stop or HITL escalation
+- No runaway loops
+
+**Exit Criteria:**
+- Reasoning ladder bounded by budgets
+- Critic output validates; failures are safe
+- Budget violations produce deterministic, traceable outcomes
+
+---
+
+### Phase 10: Parallel Read-Only Tool Execution (1 week)
+
+**Goals:**
+- Enable efficient evidence gathering
+- Maintain determinism and auditability
+
+**Deliverables:**
+
+**10.1 Add TOOL_BATCH step type:**
+```yaml
+- id: gather_evidence
+  type: tool_batch
+  tools:
+    - tool_a
+    - tool_b
+    - tool_c
+  parallel: true
+```
+
+Rules:
+- All tools must have `read_only=true` and `side_effect=false`
+- Merge strategy: deterministic ordering by tool name
+- EvidenceItems appended with stable IDs
+
+**Exit Criteria:**
+- Batch rejects any tool not marked read_only
+- Deterministic merge order (reproducible)
+- Trace contains each tool call as separate event
+
+---
+
+### Phase 11: Missing-Info Question Loop (1 week)
+
+**Goals:**
+- Structured information gathering from users
+- Validated, schema-driven input
+
+**Deliverables:**
+
+**11.1 QuestionSet artifact:**
+```python
+class QuestionSet:
+    questions: list[Question]
+    required_fields: list[str]
+    validation_schema: dict
+```
+
+**11.2 Flow pattern:**
+```yaml
+- id: check_completeness
+  type: agent
+  agent: critic
+
+- id: ask_questions
+  type: user_input
+  when: "{{artifacts.critic_result.recommended_action}} == 'USER_INPUT'"
+  params:
+    question_set: "{{artifacts.question_set}}"
+```
+
+Rules:
+- Invalid user input does not resume flow
+- Resume merges validated answers into ContextPack deterministically
+
+**Exit Criteria:**
+- User input validated against schema before resume
+- Answers appear in ContextPack with provenance
+
+---
+
+### Phase 12: Retrieval Augmentation (1 week)
+
+**Goals:**
+- Enable approved-evidence-only retrieval
+- Support cross-run learning (within governance)
+
+**Deliverables:**
+
+**12.1 Retrieval tool enhancement:**
+- Query prior RunRecords/TraceEvents
+- Query approved knowledge sources (per-product whitelist)
+- Output as EvidenceItems with citations
+
+**12.2 Policy enforcement:**
+```yaml
+retrieval_policy:
+  allowed_sources:
+    - "runs:current_product"
+    - "knowledge:approved_docs"
+  blocked_sources:
+    - "runs:other_products"
+```
+
+**Exit Criteria:**
+- Retrieval cannot pull from disallowed sources
+- Every retrieved item has provenance (run_id, timestamp, artifact_ref)
+
+---
+
+### Phase 13: Advisory Agent Set (2 weeks)
+
+**Goals:**
+- Structured intelligence without control-flow authority
+- Bank-safe advisory patterns
+
+**Deliverables:**
+
+**13.1 Refactor advisory.py into bounded agents:**
+
+| Agent | Purpose | Output |
+|-------|---------|--------|
+| `ToolSelector` | Recommend tools based on descriptors + context | `ToolSelectionResult` |
+| `AgentSelector` | Recommend agents for subtasks | `AgentSelectionResult` |
+| `GapFinder` | Identify missing evidence | `GapAnalysisResult` |
+| `Summarizer` | Condense evidence into narrative | `SummaryResult` |
+| `RiskExplainer` | Explain confidence/risk factors | `RiskExplanationResult` |
+
+Rules:
+- None can invoke ToolExecutor directly
+- All outputs are structured; no free-form control
+- Orchestrator uses them only via proposal→gate pattern
+
+**Exit Criteria:**
+- Advisory agents cannot call tools
+- All outputs validate against schemas
+- Orchestrator gates all recommendations
+
+---
+
 ## D) Target End-State Architecture
 
 ```
@@ -461,6 +770,38 @@ products/{name}/
 | Add GraphQL | REST is sufficient; GraphQL adds complexity |
 | Add event sourcing | Current snapshot model works; event sourcing is overkill |
 | Add microservices | Single deployable is a strength; splitting adds operational cost |
+| Allow agents to control flow | Agents propose; orchestrator decides |
+| Allow tools to call tools | Single-level execution only |
+| Unbounded loops | All loops must have max_iters and budget caps |
+| Raw LLM context | LLM must receive curated ContextPack with evidence |
+
+---
+
+## E.1) Intelligence Upgrade Reconciliation
+
+The following changes from the "Master v2 Intelligence Upgrade Plan" were reviewed and incorporated:
+
+| Change # | Description | Decision | Rationale |
+|----------|-------------|----------|-----------|
+| 1 | Tool/agent selection with metadata | ✓ Incorporated | Phase 7 + 13: Enables intelligent selection without bypassing governance |
+| 2 | Loops and conditional branching | ✓ Already exists | Branching/looping already in orchestrator; enhanced with budget enforcement |
+| 3 | Multi-pass reasoning ladder | ✓ Incorporated | Phase 9: Refactored from "remove" to "simplify with bounds" |
+| 4 | Proposal → Gate → Execute | ✓ Already exists | plan_propose/gate/execute pattern already implemented |
+| 5 | Context Pack Builder | ✓ Incorporated | Phase 8: Critical for auditable, reproducible LLM reasoning |
+| 6 | Bounded Critic | ✓ Incorporated | Phase 9: Refactored from "deprecate" to "simplify with bounds" |
+| 7 | Reduce schema overuse | ✓ Incorporated | Phase 1: Keep Pydantic at boundaries, lighter types internally |
+| 8 | Enhanced descriptors | ✓ Incorporated | Phase 7: Foundation for intelligent selection |
+| 9 | Missing-info question loop | ✓ Incorporated | Phase 11: Structured user input gathering |
+| 10 | Parallel read-only tools | ✓ Incorporated | Phase 10: New TOOL_BATCH step type |
+| 11 | Retrieval augmentation | ✓ Incorporated | Phase 12: Approved-source-only retrieval |
+| 12 | Reasoning budgets | ✓ Incorporated | Phase 9: Expanded beyond token limits |
+| 13 | Evidence model | ✓ Incorporated | Phase 7: EvidenceItem with provenance |
+| 14 | Advisory agent set | ✓ Incorporated | Phase 13: Bounded advisory agents |
+
+**Key Reconciliations:**
+- `reasoning_ladder.py`: Changed from E-REMOVE to C-SIMPLIFY (bounded multi-pass pattern is valuable)
+- `critic_evaluator.py`: Changed from D-DEPRECATE to C-SIMPLIFY (bounded critic adds value)
+- `advisory.py`: Changed from D-DEPRECATE to C-SIMPLIFY (structured advisory agents are useful)
 
 ---
 
@@ -492,12 +833,30 @@ products/{name}/
 | Planning action sequences | Step ordering |
 | Summarizing results | Artifact persistence |
 | Generating hypotheses | Approval state transitions |
+| Selecting tools/agents | Policy enforcement |
+| Identifying gaps | Budget limits |
+| Explaining risks | HITL triggers |
 
 **Pattern: "Reason, then Execute"**
 1. Agent reasons → produces structured decision (JSON)
-2. Orchestrator validates against governance
-3. Orchestrator executes deterministically
-4. All execution is traced and auditable
+2. Decision stored as proposal artifact
+3. Gate validates proposal against governance (allowlists, budgets, sensitivity)
+4. Orchestrator executes only approved steps deterministically
+5. All execution is traced and auditable
+
+**Pattern: "Bounded Multi-Pass Reasoning"**
+1. Interpret pass → structured intent
+2. Propose pass → candidates with evidence refs
+3. Select pass → chosen action with rationale
+4. Each pass bounded by budget (max passes, cost units)
+5. Exceeding budget → deterministic stop or HITL escalation
+
+**Pattern: "Evidence-Based Context"**
+1. Tools return EvidenceItems with provenance
+2. ContextPackBuilder curates evidence deterministically
+3. LLM receives ContextPack, not raw data
+4. Reasoning cites evidence by ID
+5. Audit trail links decisions to source evidence
 
 ### Product Isolation Rules
 
@@ -510,13 +869,52 @@ products/{name}/
 
 ## G) Summary: Simplification ROI
 
+### Simplification Phases (Weeks 1-10)
+
 | Phase | Effort | Complexity Reduction | Risk |
 |-------|--------|---------------------|------|
-| 1. Contract Consolidation | 2 weeks | 21 → 12 files (43%) | Low |
-| 2. Unused Module Removal | 1 week | -5 modules | Very Low |
+| 0. Baseline & Safety Net | 1 week | Acceptance test foundation | Very Low |
+| 1. Contract Consolidation | 2 weeks | 21 → 14 files (33%) | Low |
+| 2. Unused Module Removal | 1 week | -3 modules | Very Low |
 | 3. Engine Decomposition | 3 weeks | 3083 → ~500 lines in main file | Medium |
 | 4. Governance Consolidation | 1 week | 9 → 5 files | Low |
 | 5. Registry Unification | 1 week | -~100 lines duplication | Low |
 | 6. UI Modularization | 1 week | 1046 → ~150 lines in main file | Low |
 
-**Total: ~9 weeks for 40-50% reduction in surface complexity while preserving all capabilities.**
+### Intelligence Enhancement Phases (Weeks 11-22)
+
+| Phase | Effort | Capability Added | Risk |
+|-------|--------|-----------------|------|
+| 7. Descriptors & Evidence | 2 weeks | Semantic catalog + provenance | Medium |
+| 8. Context Pack Builder | 2 weeks | Deterministic LLM input curation | Low |
+| 9. Bounded Reasoning & Critic | 3 weeks | Multi-pass reasoning + quality checks | Medium |
+| 10. Parallel Tool Execution | 1 week | Efficient read-only batching | Low |
+| 11. Missing-Info Loop | 1 week | Structured user input gathering | Low |
+| 12. Retrieval Augmentation | 1 week | Approved cross-run learning | Medium |
+| 13. Advisory Agent Set | 2 weeks | Structured intelligence layer | Medium |
+
+### Dependency Map
+
+```
+Phase 0 (baseline)
+    │
+    ├── Phase 1 (contracts) ─────────────────────┐
+    │       │                                    │
+    │       └── Phase 7 (descriptors/evidence) ──┼── Phase 8 (context pack)
+    │                   │                        │           │
+    ├── Phase 2 (removal)                        │           └── Phase 9 (reasoning/critic)
+    │                                            │                   │
+    ├── Phase 3 (engine) ────────────────────────┼── Phase 10 (parallel tools)
+    │       │                                    │           │
+    │       └── Phase 11 (question loop) ────────┘           │
+    │                                                        │
+    ├── Phase 4 (governance) ── Phase 12 (retrieval) ────────┘
+    │
+    ├── Phase 5 (registry)
+    │
+    ├── Phase 6 (UI)
+    │
+    └── Phase 13 (advisory agents) ← depends on 7, 8, 9
+```
+
+**Total: ~22 weeks for simplification + intelligence upgrade while preserving governance and auditability.**
