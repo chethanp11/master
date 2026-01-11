@@ -126,14 +126,14 @@ Consolidate contract files as specified:
    - Update imports
 
 For deprecation warnings, use this pattern:
-```python
+   python
 import warnings
 warnings.warn(
     "Importing from {old_module} is deprecated. Use {new_module} instead.",
     DeprecationWarning,
     stacklevel=2
 )
-```
+
 
 Run tests after each merge to catch import errors early.
 ```
