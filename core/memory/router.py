@@ -202,7 +202,8 @@ class MemoryRouter(MemoryBackend):
         memory_dir.mkdir(parents=True, exist_ok=True)
 
         backend: MemoryBackend
-        if settings.app.features.enable_sqlite_backend:
+        enable_sqlite = settings.app.features.enable_sqlite_backend or bool(settings.secrets.memory_db_path)
+        if enable_sqlite:
             db_path = settings.secrets.memory_db_path
             db_file = _resolve(db_path) if db_path else (memory_dir / "master.sqlite")
             db_file.parent.mkdir(parents=True, exist_ok=True)

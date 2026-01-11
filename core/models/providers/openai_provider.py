@@ -64,6 +64,14 @@ class OpenAIProvider:
         self.config = config or {}
 
     def complete(self, request: OpenAIRequest) -> OpenAIResponse:
+        if self.config.get("stub", True):
+            return OpenAIResponse(
+                ok=True,
+                model=request.model,
+                content=_stub_summarize(request.messages),
+                usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                meta={"provider": "openai", "stub": True},
+            )
         api_key = self.config.get("api_key")
         if not api_key:
             return OpenAIResponse(

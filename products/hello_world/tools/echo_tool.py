@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 
 from core.tools.base import BaseTool
 from core.contracts.tool_schema import ToolResult, ToolError, ToolMeta, ToolErrorCode
-from core.orchestrator.context import StepContext
 
 
 class EchoParams(BaseModel):
@@ -27,7 +26,7 @@ class EchoTool(BaseTool):
     description: str = "Returns the provided message."
     risk: str = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             p = EchoParams.model_validate(params or {})
             timestamp = datetime.now(timezone.utc).isoformat()

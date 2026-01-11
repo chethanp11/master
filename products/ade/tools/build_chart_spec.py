@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
 ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
@@ -101,7 +100,7 @@ class BuildChartSpecTool(BaseTool):
     description = "Builds a chart specification from structured inputs."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = BuildChartSpecInput.model_validate(params or {})
             output = build_chart_spec(payload)

@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.tools.build_chart_spec import ChartType
 
@@ -62,7 +61,7 @@ class RecommendChartTool(BaseTool):
     description = "Recommends a chart type based on basic data heuristics."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = RecommendChartInput.model_validate(params or {})
             output = recommend_chart(payload)

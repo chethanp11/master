@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.card import InsightCard, KeyMetric
 from products.ade.schemas.citations import CitationRef
@@ -71,7 +70,7 @@ class AssembleInsightCardTool(BaseTool):
     description = "Assembles an InsightCard from validated inputs."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = AssembleInsightCardInput.model_validate(params or {})
             output = assemble_insight_card(payload)

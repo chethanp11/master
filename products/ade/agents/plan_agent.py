@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from core.orchestrator.context import StepContext
 from products.ade.schemas.plan_spec import PlanDecision, PlanSpec
 
 
@@ -33,7 +32,7 @@ class PlanAgent(BaseAgent):
             return "trend_summary"
         return "summary"
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
             plan_input = PlanInput(comment=payload.get("replan_comment", ""))

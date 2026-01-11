@@ -30,6 +30,7 @@ class ToolRegistration:
     factory: ToolFactory
     meta: Dict[str, Any]
     descriptor: ToolDescriptor
+    descriptor_auto: bool
 
 
 class ToolRegistry:
@@ -67,6 +68,7 @@ class ToolRegistry:
             factory=actual_factory,
             meta=meta or {},
             descriptor=resolved_descriptor,
+            descriptor_auto=descriptor is None,
         )
 
     @classmethod
@@ -91,11 +93,48 @@ class ToolRegistry:
         reg = cls._tools.get(norm)
         if reg is None:
             raise KeyError(f"Unknown tool: {name}")
+        if reg.descriptor_auto:
+            reg = cls._hydrate_descriptor(reg)
         return reg.descriptor
 
     @classmethod
     def list_descriptors(cls) -> Iterable[ToolDescriptor]:
-        return [reg.descriptor for reg in cls._tools.values()]
+        descriptors: List[ToolDescriptor] = []
+        for reg in cls._tools.values():
+            if reg.descriptor_auto:
+                reg = cls._hydrate_descriptor(reg)
+            descriptors.append(reg.descriptor)
+        return descriptors
+
+    @classmethod
+    def _hydrate_descriptor(cls, reg: ToolRegistration) -> ToolRegistration:
+        try:
+            tool = reg.factory()
+        except Exception:
+            return reg
+        description = reg.descriptor.description or getattr(tool, "description", "") or ""
+        read_only = reg.descriptor.read_only
+        side_effect = reg.descriptor.side_effect
+        risk = getattr(tool, "risk", None)
+        if isinstance(risk, str) and risk.lower() == "read_only":
+            read_only = True
+            side_effect = False
+        updated = reg.descriptor.model_copy(
+            update={
+                "description": description,
+                "read_only": read_only,
+                "side_effect": side_effect,
+            }
+        )
+        hydrated = ToolRegistration(
+            name=reg.name,
+            factory=reg.factory,
+            meta=reg.meta,
+            descriptor=updated,
+            descriptor_auto=False,
+        )
+        cls._tools[_norm(reg.name)] = hydrated
+        return hydrated
 
     @classmethod
     def _coerce_descriptor(
@@ -112,12 +151,6 @@ class ToolRegistry:
 
         description = ""
         risk = None
-        try:
-            tool = factory()
-            description = getattr(tool, "description", "") or ""
-            risk = getattr(tool, "risk", None)
-        except Exception:
-            tool = None  # type: ignore[assignment]
         tags = list(meta.get("tags") or [])
 
         read_only = bool(meta.get("read_only")) if "read_only" in meta else False

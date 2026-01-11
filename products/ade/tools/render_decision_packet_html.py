@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.decision_packet import DecisionPacket
 
@@ -198,7 +197,7 @@ class RenderDecisionPacketHtmlTool(BaseTool):
     description = "Renders a DecisionPacket into a plain HTML summary."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = RenderDecisionPacketInput.model_validate(params or {})
             output = render_decision_packet_html(payload)

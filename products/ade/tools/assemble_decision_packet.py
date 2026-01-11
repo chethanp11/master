@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.decision_section import DecisionSection
@@ -50,7 +49,7 @@ class AssembleDecisionPacketTool(BaseTool):
     description = "Assembles a deterministic DecisionPacket from provided sections."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = AssembleDecisionPacketInput.model_validate(params or {})
             output = assemble_decision_packet(payload)

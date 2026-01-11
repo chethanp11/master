@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from core.orchestrator.context import StepContext
 from products.ade.schemas.intent_frame import IntentFrame
 
 
@@ -109,7 +108,7 @@ class IntentAgent(BaseAgent):
             f"{detail}. This ensures the analysis is correct and scoped."
         )
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
             params = step_context.step.params if step_context.step else {}

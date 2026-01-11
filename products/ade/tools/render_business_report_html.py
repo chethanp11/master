@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.business_report import BusinessReport
 
@@ -329,7 +328,7 @@ class RenderBusinessReportHtmlTool(BaseTool):
     description = "Renders a BusinessReport into an analyst-ready HTML report."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = RenderBusinessReportInput.model_validate(params or {})
             output = render_business_report_html(payload)

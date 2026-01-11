@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
-from core.orchestrator.context import StepContext
 
 
 class DashboardAgentParams(BaseModel):
@@ -22,7 +21,7 @@ class DashboardAgent(BaseAgent):
     name = "dashboard_agent"
     description = "Creates a narrative summary for the visual insights dashboard."
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             params = DashboardAgentParams.model_validate(step_context.step.params or {})
             artifacts = step_context.run.artifacts or {}

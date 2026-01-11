@@ -25,8 +25,8 @@ from core.contracts.advisory_schema import (
 from core.contracts.context_pack_schema import ContextPack
 from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.hooks import GovernanceHooks
-from core.models.providers.openai_provider import OpenAIRequest
-from core.models.router import ModelRouter
+from ..models.providers.openai_provider import OpenAIRequest
+from ..models.router import ModelRouter
 from core.orchestrator.context import StepContext
 
 AdvisoryReasoner = Callable[[Dict[str, Any]], Union[Dict[str, Any], str]]

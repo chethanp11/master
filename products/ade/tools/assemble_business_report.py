@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.business_report import (
@@ -203,7 +202,7 @@ class AssembleBusinessReportTool(BaseTool):
     description = "Assembles a business-ready report from ADE metrics and decision packet."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = AssembleBusinessReportInput.model_validate(params or {})
             output = assemble_business_report(payload)

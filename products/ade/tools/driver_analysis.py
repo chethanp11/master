@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
 
@@ -82,7 +81,7 @@ class DriverAnalysisTool(BaseTool):
     description = "Computes driver contributions for before/after segments."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = DriverAnalysisInput.model_validate(params or {})
             output = driver_analysis(payload)

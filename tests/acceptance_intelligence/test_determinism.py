@@ -27,16 +27,19 @@ def _get_step_sequence(engine, run_id: str) -> List[tuple[str, str, str]]:
     """Extract step sequence as (step_id, type, status) tuples."""
     bundle = engine.memory.get_run(run_id)
     assert bundle is not None
-    return [(step.step_id, step.type, step.status.value) for step in bundle.steps]
+    # step.status may be string or enum, handle both
+    return [(step.step_id, step.type, step.status.value if hasattr(step.status, 'value') else step.status) for step in bundle.steps]
 
 
-def _get_artifact_data(step_output: Dict[str, Any]) -> Any:
+def _get_artifact_data(step_output: Dict[str, Any], exclude_timestamps: bool = True) -> Any:
     """Extract artifact data from step output, handling various formats."""
     if not step_output:
         return None
-    if "data" in step_output:
-        return step_output["data"]
-    return step_output
+    data = step_output.get("data", step_output)
+    if exclude_timestamps and isinstance(data, dict):
+        # Remove timestamp fields that vary between runs
+        return {k: v for k, v in data.items() if k not in ("timestamp", "ts", "created_at", "updated_at")}
+    return data
 
 
 class TestSameInputProducesSameOutput:

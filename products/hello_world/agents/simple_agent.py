@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentMeta, AgentErrorCode
-from core.orchestrator.context import StepContext
 
 
 class SimpleAgentParams(BaseModel):
@@ -19,14 +18,14 @@ class SimpleAgentParams(BaseModel):
 
 class SimpleAgent(BaseAgent):
     """
-    A minimal agent that reads artifacts from the StepContext and produces a summary.
+    A minimal agent that reads artifacts from the Any and produces a summary.
     No model calls in v1 (keeps the golden path deterministic).
     """
 
     name: str = "simple_agent"
     description: str = "Deterministic summary agent for hello_world golden path."
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             params = SimpleAgentParams.model_validate(step_context.step.params or {})
             payload = step_context.run.payload or {}

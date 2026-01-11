@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.evidence import DataQualityEvidence, OutlierEvidence, TrendEvidence, EvidenceItem
 from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
@@ -220,7 +219,7 @@ class ComputeBusinessMetricsTool(BaseTool):
     description = "Computes deterministic business metrics for ADE reports."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = BusinessMetricsInput.model_validate(params or {})
             output = compute_business_metrics(payload)

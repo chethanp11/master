@@ -11,7 +11,6 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from core.contracts.tool_schema import ToolResult, ToolError, ToolErrorCode, ToolMeta
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
 
@@ -24,7 +23,7 @@ class DataReaderTool(BaseTool):
     description = "Returns a stubbed summary for a dataset"
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             validated = ReadParams.model_validate(params or {})
             dataset_path = _resolve_dataset_path(validated.dataset, ctx)
@@ -128,14 +127,27 @@ def build() -> DataReaderTool:
     return DataReaderTool()
 
 
-def _resolve_dataset_path(dataset: str, ctx: StepContext) -> Optional[Path]:
-    if dataset == "branded_cards_transactions":
-        product_root = Path(__file__).resolve().parents[1]
-        return product_root / "data" / "branded_cards_transactions.csv"
+def _resolve_dataset_path(dataset: str, ctx: Any) -> Optional[Path]:
+    product_root = Path(__file__).resolve().parents[1]
+    data_dir = product_root / "data"
+    candidate = data_dir / dataset
+    if candidate.exists():
+        return candidate
+    if Path(dataset).suffix == "":
+        candidate_csv = data_dir / f"{dataset}.csv"
+        if candidate_csv.exists():
+            return candidate_csv
     input_dir = (ctx.run.meta or {}).get("input_dir")
-    if not input_dir:
-        return None
-    return Path(str(input_dir)) / dataset
+    if input_dir:
+        candidate = Path(str(input_dir)) / dataset
+        if candidate.exists():
+            return candidate
+    staging = product_root / "staging" / "input" / dataset
+    if staging.exists():
+        return staging
+    if input_dir:
+        return Path(str(input_dir)) / dataset
+    return None
 
 
 def _is_number(value: str) -> bool:
@@ -182,29 +194,21 @@ def _read_csv(path: Path) -> Tuple[List[str], List[List[Any]], int]:
     columns: List[str] = []
     rows: List[List[Any]] = []
     row_count = 0
-    attempts = 3
-    for attempt in range(attempts):
-        if not path.exists():
-            time.sleep(0.2)
-            continue
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            reader = csv.reader(handle, skipinitialspace=True)
-            try:
-                columns = [str(c).strip() for c in next(reader)]
-                if columns and columns[0].startswith("\ufeff"):
-                    columns[0] = columns[0].lstrip("\ufeff")
-            except StopIteration:
-                columns = []
-            for raw_row in reader:
-                if not columns:
-                    continue
-                row = _normalize_row(raw_row, len(columns))
-                if row is None:
-                    continue
-                row_count += 1
-                if len(rows) < 50:
-                    rows.append(row)
-        if columns:
-            break
-        time.sleep(0.2)
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle, skipinitialspace=True)
+        try:
+            columns = [str(c).strip() for c in next(reader)]
+            if columns and columns[0].startswith("\ufeff"):
+                columns[0] = columns[0].lstrip("\ufeff")
+        except StopIteration:
+            columns = []
+        for raw_row in reader:
+            if not columns:
+                continue
+            row = _normalize_row(raw_row, len(columns))
+            if row is None:
+                continue
+            row_count += 1
+            if len(rows) < 50:
+                rows.append(row)
     return columns, rows, row_count

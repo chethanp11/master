@@ -250,6 +250,7 @@ class OrchestratorEngine:
                 },
             )
             self.memory.create_run(run_record)
+            self._precreate_steps(flow_def=flow_def, run_ctx=run_ctx)
             run_ctx.meta.update({"steps_executed": 0, "tool_calls": 0, "tokens_used": 0})
             self.memory.clear_staging(product=product, clear_input=False, clear_output=True)
             self._attach_run_dirs(run_ctx)
@@ -286,6 +287,23 @@ class OrchestratorEngine:
                 "approvals": [a.model_dump() for a in bundle.approvals],
             }
         )
+
+    def _precreate_steps(self, *, flow_def: FlowDef, run_ctx: RunContext) -> None:
+        for idx, step_def in enumerate(flow_def.steps):
+            step_id = step_def.id or f"step_{idx}"
+            step_record = StepRecord(
+                run_id=run_ctx.run_id,
+                step_id=step_id,
+                step_index=idx,
+                name=step_def.name or step_id,
+                type=step_def.type.value,
+                status=StepStatus.NOT_STARTED,
+                meta={
+                    "backend": step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
+                    "target": step_def.agent or step_def.tool,
+                },
+            )
+            self.memory.add_step(step_record)
 
     def get_pending_user_input(self, *, run_id: str) -> RunOperationResult:
         bundle = self.memory.get_run(run_id)

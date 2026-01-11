@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.evidence import EvidenceBundle, EvidenceItem
 
@@ -39,7 +38,7 @@ def _flatten_items(items: List[Any]) -> List[EvidenceItem]:
     return flattened
 
 
-def assemble_evidence_bundle(payload: AssembleEvidenceBundleInput, ctx: StepContext) -> AssembleEvidenceBundleOutput:
+def assemble_evidence_bundle(payload: AssembleEvidenceBundleInput, ctx: Any) -> AssembleEvidenceBundleOutput:
     items = _flatten_items(payload.items)
     summary_stats: Dict[str, Any] = {"total_items": len(items)}
     kind_counts: Dict[str, int] = {}
@@ -65,7 +64,7 @@ class AssembleEvidenceBundleTool(BaseTool):
     description = "Aggregates evidence items into a single evidence bundle."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = AssembleEvidenceBundleInput.model_validate(params or {})
             output = assemble_evidence_bundle(payload, ctx)

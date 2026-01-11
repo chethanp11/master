@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 
 
@@ -82,15 +81,15 @@ class BuildReasoningNarrativeTool(BaseTool):
     description = "Builds a concise reasoning narrative from observability events."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = BuildReasoningInput.model_validate(params or {})
             output_dir = (ctx.run.meta or {}).get("output_dir")
-            if not output_dir:
-                raise RuntimeError("output_dir_missing")
-            runtime_dir = Path(str(output_dir)).parent / "runtime"
-            events_path = runtime_dir / "events.jsonl"
-            events = _load_events(events_path)
+            events: List[Dict[str, Any]] = []
+            if output_dir:
+                runtime_dir = Path(str(output_dir)).parent / "runtime"
+                events_path = runtime_dir / "events.jsonl"
+                events = _load_events(events_path)
             output = _summarize(events)
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)

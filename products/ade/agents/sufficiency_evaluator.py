@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from core.orchestrator.context import StepContext
 
 MIN_ROWS = 30
 MIN_TIME_POINTS = 12
@@ -85,7 +84,7 @@ class SufficiencyEvaluatorAgent(BaseAgent):
     name = "sufficiency_evaluator"
     description = "Evaluates data sufficiency for ADE decisions without model calls."
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             artifacts = step_context.run.artifacts or {}
             tool_output = artifacts.get("tool.data_reader.output", {}) or {}

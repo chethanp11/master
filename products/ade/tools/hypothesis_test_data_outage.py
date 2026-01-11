@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.tools.detect_anomalies import Point
 from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
@@ -74,7 +73,7 @@ class HypothesisTestDataOutageTool(BaseTool):
     description = "Tests whether recent data indicates a potential outage."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = DataOutageInput.model_validate(params or {})
             output = hypothesis_test_data_outage(payload)

@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.tools.detect_anomalies import Point
 from products.ade.tools.hypothesis_test_data_outage import HypothesisTestOutput
@@ -82,7 +81,7 @@ class HypothesisTestSeasonalityTool(BaseTool):
     description = "Tests whether the series shows seasonality signals."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = SeasonalityInput.model_validate(params or {})
             output = hypothesis_test_seasonality(payload)

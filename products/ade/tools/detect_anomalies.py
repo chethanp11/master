@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.evidence import OutlierEvidence, EvidenceItem
 from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
@@ -87,7 +86,7 @@ class DetectAnomaliesTool(BaseTool):
     description = "Detects anomalies in a time series using z-score heuristics."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = DetectAnomaliesInput.model_validate(params or {})
             output = detect_anomalies(payload)

@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, ConfigDict, ValidationError
 from core.agents.base import BaseAgent
 from core.config.loader import load_settings
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult, AgentKind
+from core.contracts.flow_schema import StepType
+from core.contracts.plan_schema import EstimatedCost, PlanProposal, PlanStep
 from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.hooks import GovernanceHooks
 from ..models.providers.openai_provider import OpenAIRequest
@@ -166,6 +168,14 @@ class LlmReasoner(BaseAgent):
                     "provider": resp.meta.get("provider") if isinstance(resp.meta, dict) else None,
                 },
             )
+            if step_context.step and step_context.step.type == StepType.PLAN_PROPOSAL:
+                plan_payload = self._coerce_plan_proposal(
+                    content=resp.content,
+                    params=params,
+                    usage=usage,
+                )
+                return AgentResult(ok=True, data=plan_payload, error=None, meta=meta)
+
             data = {
                 "content": resp.content,
                 "model": resp.model,
@@ -190,6 +200,40 @@ class LlmReasoner(BaseAgent):
         if params.prompt:
             messages.append({"role": "user", "content": params.prompt})
         return messages
+
+    @staticmethod
+    def _coerce_plan_proposal(*, content: str, params: LlmReasonerParams, usage: Dict[str, Any]) -> Dict[str, Any]:
+        parsed: Optional[Dict[str, Any]] = None
+        if isinstance(content, str):
+            try:
+                parsed = json.loads(content)
+            except Exception:
+                parsed = None
+        if isinstance(parsed, dict):
+            try:
+                plan = PlanProposal.model_validate(parsed)
+                return plan.model_dump(mode="json")
+            except Exception:
+                pass
+        summary = params.prompt or "Plan proposal"
+        steps = [
+            PlanStep(
+                step_id="step_1",
+                description="Complete the requested task.",
+                step_type="tool",
+                tool=None,
+                agent=None,
+                requires_approval=False,
+            )
+        ]
+        estimated = EstimatedCost(
+            currency="USD",
+            amount=0.0,
+            tokens=int(usage.get("total_tokens") or 0),
+            details={},
+        )
+        plan = PlanProposal(summary=summary, steps=steps, required_tools=[], approvals=[], estimated_cost=estimated)
+        return plan.model_dump(mode="json")
 
 
 def build() -> LlmReasoner:

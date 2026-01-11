@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from products.ade.schemas.card import InsightCard
 from products.ade.tools.export_rendering import _build_html_bytes, _build_stub_payload, _render_cards_pdf
@@ -70,7 +69,7 @@ class ExportPdfTool(BaseTool):
     description = "Exports insight cards to a PDF artifact."
     risk = "read_only"
 
-    def run(self, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
+    def run(self, params: Dict[str, Any], ctx: Any) -> ToolResult:
         try:
             payload = ExportPdfInput.model_validate(params or {})
             output = export_pdf(payload)

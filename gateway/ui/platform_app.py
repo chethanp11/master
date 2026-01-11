@@ -403,6 +403,27 @@ def _resolve_intent_spec(config: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _list_dataset_candidates(product: str, *, allowed_types: List[str]) -> List[str]:
+    def _scan(dir_path: Path) -> List[str]:
+        if not dir_path.exists():
+            return []
+        names: List[str] = []
+        for path in dir_path.iterdir():
+            if not path.is_file():
+                continue
+            if allowed_types:
+                suffix = path.suffix.lower().lstrip(".")
+                if suffix not in allowed_types:
+                    continue
+            names.append(path.name)
+        return names
+
+    data_dir = REPO_ROOT / "products" / product / "data"
+    staging_dir = REPO_ROOT / "products" / product / "staging" / "input"
+    candidates = _scan(data_dir) + _scan(staging_dir)
+    return sorted(dict.fromkeys(candidates))
+
+
 def _render_product_summary(products: List[Dict[str, Any]]) -> None:
     st.subheader("Products")
     if not products:
@@ -960,6 +981,28 @@ def main() -> None:
             ok, payload, err = _safe_json_loads(payload_text)
             if not ok:
                 st.error(f"Invalid JSON: {err}")
+
+        if dataset_field:
+            candidates = _list_dataset_candidates(prod, allowed_types=allowed_types)
+            selected_value: Optional[str] = None
+            if candidates:
+                selection = st.selectbox(
+                    "Dataset",
+                    ["(none)"] + candidates + ["(custom)"],
+                    help="Select a staged or built-in dataset, or enter a custom dataset name.",
+                )
+                if selection == "(custom)":
+                    selected_value = st.text_input("Dataset name", value=str(payload.get(dataset_field, "")))
+                elif selection != "(none)":
+                    selected_value = selection
+            else:
+                selected_value = st.text_input(
+                    "Dataset name",
+                    value=str(payload.get(dataset_field, "")),
+                    help="Enter a dataset name staged under the product input directory.",
+                )
+            if selected_value:
+                payload[dataset_field] = selected_value.strip()
 
         if file_refs:
             payload.setdefault(files_field, file_refs)

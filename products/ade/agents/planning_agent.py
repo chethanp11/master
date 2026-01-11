@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
-from core.orchestrator.context import StepContext
 
 
 class PlanningInput(BaseModel):
@@ -88,7 +87,7 @@ class PlanningAgent(BaseAgent):
             return default
         return value
 
-    def run(self, step_context: StepContext) -> AgentResult:
+    def run(self, step_context: Any) -> AgentResult:
         try:
             payload = step_context.run.payload or {}
             plan = PlanningInput(

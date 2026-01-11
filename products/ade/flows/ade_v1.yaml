@@ -1,135 +1,96 @@
 # ==============================
-# Flow: ade_v1 (free-text analyst workflow)
+# Flow: ade_v1 (analyst workflow)
 # ==============================
 
 id: "ade_v1"
 version: "1.0.0"
-description: "Free-text ADE workflow with HITL pauses and business-ready outputs"
+description: "ADE workflow with visualization preferences, plan approval, and report outputs"
 autonomy_level: "suggest_only"
 
 steps:
-  - id: "intent_interpretation"
-    type: "agent"
-    backend: "local"
-    agent: "intent_agent"
-    params: {}
-
-  - id: "clarify_intent"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "clarify_intent"
-      title: "Analysis clarification"
-      prompt: "{{artifacts.agent.intent_agent.output.blocking_question}}"
-      input_type: "text"
-      mode: "free_text_input"
-      defaults: {}
-      schema: {}
-      required: []
-      constraints:
-        pause_if: "{{artifacts.agent.intent_agent.output.blocking_required}}"
-
-  - id: "intent_refinement"
-    type: "agent"
-    backend: "local"
-    agent: "intent_agent"
-    params:
-      input_text: "{{payload.prompt}} {{artifacts.user_input.clarify_intent.values.text}}"
-
-  - id: "clarify_followup"
-    type: "user_input"
-    params:
-      schema_version: "1.0"
-      form_id: "clarify_followup"
-      title: "Additional clarification"
-      prompt: "{{artifacts.agent.intent_agent.output.blocking_question}}"
-      input_type: "text"
-      mode: "free_text_input"
-      defaults: {}
-      schema: {}
-      required: []
-      constraints:
-        pause_if: "{{artifacts.agent.intent_agent.output.blocking_required}}"
-
-  - id: "intent_final"
-    type: "agent"
-    backend: "local"
-    agent: "intent_agent"
-    params:
-      input_text: "{{payload.prompt}} {{artifacts.user_input.clarify_intent.values.text}} {{artifacts.user_input.clarify_followup.values.text}}"
-
-  - id: "planning"
-    type: "agent"
-    backend: "local"
-    agent: "plan_agent"
-    params: {}
-
-  - id: "approve_plan"
-    type: "plan_proposal"
-    backend: "local"
-    agent: "plan_proposal_agent"
-    params: {}
-
   - id: "read"
     type: "tool"
     backend: "local"
     tool: "data_reader"
     params:
-      dataset: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+      dataset: "{{payload.dataset}}"
     retry:
       max_attempts: 2
       backoff_seconds: 1
+
+  - id: "viz_preferences"
+    type: "user_input"
+    params:
+      schema_version: "1.0"
+      form_id: "viz_preferences"
+      title: "Visualization preferences"
+      prompt: "Choose chart type + metrics focus"
+      input_type: "text"
+      mode: "choice_input"
+      required:
+        - "chart_type"
+        - "metric_focus"
+      defaults:
+        chart_type: "bar"
+        metric_focus: "mean"
+        include_hypothesis_checks: true
+        notes: ""
+      schema:
+        type: "object"
+        properties:
+          chart_type:
+            type: "string"
+            enum: ["bar", "line", "area", "scatter"]
+          metric_focus:
+            type: "string"
+            enum: ["mean", "sum", "median", "growth_rate", "anomalies"]
+          include_hypothesis_checks:
+            type: "boolean"
+          notes:
+            type: "string"
 
   - id: "compute_business_metrics"
     type: "tool"
     backend: "local"
     tool: "compute_business_metrics"
     params:
-      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+      dataset_id: "{{payload.dataset}}"
       columns: "{{artifacts.tool.data_reader.output.columns}}"
       rows: "{{artifacts.tool.data_reader.output.rows}}"
-      metric_focus: "{{artifacts.agent.intent_agent.output.inferred_metrics.0}}"
-      chart_type: "{{artifacts.agent.plan_agent.output.chart_type}}"
-      include_hypothesis_checks: false
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
-  - id: "detect_anomalies"
+  - id: "sufficiency_eval"
+    type: "agent"
+    backend: "local"
+    agent: "sufficiency_evaluator"
+    params: {}
+
+  - id: "plan_proposal"
+    type: "plan_proposal"
+    backend: "local"
+    agent: "plan_proposal_agent"
+    params: {}
+
+  - id: "compute_anomalies"
     type: "tool"
     backend: "local"
     tool: "detect_anomalies"
     params:
-      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+      dataset_id: "{{payload.dataset}}"
       series: "{{artifacts.tool.data_reader.output.series}}"
-      data:
-        columns: "{{artifacts.tool.data_reader.output.columns}}"
-        rows: "{{artifacts.tool.data_reader.output.rows}}"
-      enabled: "{{artifacts.agent.plan_agent.output.tool_flags.detect_anomalies}}"
-
-  - id: "hypothesis_data_outage"
-    type: "tool"
-    backend: "local"
-    tool: "hypothesis_test_data_outage"
-    params:
-      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
-      series: "{{artifacts.tool.data_reader.output.series}}"
-      enabled: "{{artifacts.agent.plan_agent.output.tool_flags.hypothesis_data_outage}}"
-
-  - id: "hypothesis_seasonality"
-    type: "tool"
-    backend: "local"
-    tool: "hypothesis_test_seasonality"
-    params:
-      dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
-      series: "{{artifacts.tool.data_reader.output.series}}"
-      enabled: "{{artifacts.agent.plan_agent.output.tool_flags.hypothesis_seasonality}}"
+      data: "{{artifacts.tool.data_reader.output.data}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
   - id: "build_chart_spec"
     type: "tool"
     backend: "local"
     tool: "build_chart_spec"
     params:
-      chart_type: "{{artifacts.agent.plan_agent.output.chart_type}}"
-      fallback_chart_type: "line"
-      title: "Primary chart"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      fallback_chart_type: "bar"
+      title: "Evidence chart"
       x: "{{artifacts.tool.data_reader.output.x_field}}"
       y: "{{artifacts.tool.data_reader.output.y_field}}"
       series: "{{artifacts.tool.data_reader.output.category_field}}"
@@ -137,59 +98,92 @@ steps:
         columns: "{{artifacts.tool.data_reader.output.columns}}"
         rows: "{{artifacts.tool.data_reader.output.rows}}"
       evidence_ref:
-        dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+        dataset_id: "{{payload.dataset}}"
         columns: "{{artifacts.tool.data_reader.output.columns}}"
 
-  - id: "build_reasoning_narrative"
+  - id: "hypothesis_data_outage"
     type: "tool"
     backend: "local"
-    tool: "build_reasoning_narrative"
-    params: {}
+    tool: "hypothesis_test_data_outage"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
+
+  - id: "hypothesis_seasonality"
+    type: "tool"
+    backend: "local"
+    tool: "hypothesis_test_seasonality"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      series: "{{artifacts.tool.data_reader.output.series}}"
+      enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
   - id: "assemble_decision_packet"
     type: "tool"
     backend: "local"
     tool: "assemble_decision_packet"
     params:
-      question: "{{artifacts.agent.intent_agent.output.intent_summary}}"
-      decision_summary: "Plan aligned to intent and executed with configured tools."
-      confidence_level: "{{artifacts.agent.intent_agent.output.confidence_label}}"
+      question: "{{payload.prompt}}"
+      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}."
+      confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
       assumptions:
         - "Inputs reflect the provided dataset."
         - "No external data sources are used."
       limitations:
-        - "Analyst inputs may change interpretation."
-      reasoning_narrative: "{{artifacts.tool.build_reasoning_narrative.output.narrative}}"
+        - "Hypothesis checks are heuristic."
+        - "Evidence tables are limited to uploaded rows."
+      reasoning_narrative: ""
       trace_refs:
         - step_id: "read"
         - step_id: "compute_business_metrics"
-        - step_id: "detect_anomalies"
+        - step_id: "compute_anomalies"
         - step_id: "build_chart_spec"
+        - step_id: "hypothesis_data_outage"
+        - step_id: "hypothesis_seasonality"
+        - user_inputs:
+            chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+            metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+            include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
       sections:
-        - section_id: "analysis"
-          title: "Analysis summary"
-          intent: "{{artifacts.agent.intent_agent.output.intent_summary}}"
-          narrative: "Key metrics computed and summarized for analyst review."
-          claim_strength: "{{artifacts.agent.intent_agent.output.confidence_label}}"
+        - section_id: "sufficiency"
+          title: "Data sufficiency"
+          intent: "{{payload.prompt}}"
+          narrative: "Confidence: {{artifacts.agent.sufficiency_evaluator.output.confidence_level}}. Downgrade reasons: {{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}."
+          claim_strength: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
           visuals:
             - chart_spec: "{{artifacts.tool.build_chart_spec.output.chart_spec}}"
             - table:
                 columns: "{{artifacts.tool.data_reader.output.columns}}"
                 rows: "{{artifacts.tool.data_reader.output.rows}}"
           evidence_refs:
-            - dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+            - dataset_id: "{{payload.dataset}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
         - section_id: "hypotheses"
           title: "Hypothesis checks"
-          intent: "Conditional hypothesis checks"
+          intent: "Evaluate alternative explanations"
           narrative: "Data outage: {{artifacts.tool.hypothesis_test_data_outage.output.status}} ({{artifacts.tool.hypothesis_test_data_outage.output.reasoning}}). Seasonality: {{artifacts.tool.hypothesis_test_seasonality.output.status}} ({{artifacts.tool.hypothesis_test_seasonality.output.reasoning}})."
           claim_strength: "medium"
           rejected_alternatives:
             - "data_outage={{artifacts.tool.hypothesis_test_data_outage.output.status}}"
             - "seasonality={{artifacts.tool.hypothesis_test_seasonality.output.status}}"
           evidence_refs:
-            - dataset_id: "{{artifacts.agent.intent_agent.output.inferred_entities.0}}"
+            - dataset_id: "{{payload.dataset}}"
               columns: "{{artifacts.tool.data_reader.output.columns}}"
+
+  - id: "assemble_evidence_bundle"
+    type: "tool"
+    backend: "local"
+    tool: "assemble_evidence_bundle"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      intent: "{{payload.prompt}}"
+      selections: "{{artifacts.user_input.viz_preferences.values}}"
+      items:
+        - "{{artifacts.tool.compute_business_metrics.output.evidence_items}}"
+        - "{{artifacts.tool.compute_anomalies.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_test_data_outage.output.evidence_items}}"
+        - "{{artifacts.tool.hypothesis_test_seasonality.output.evidence_items}}"
 
   - id: "assemble_business_report"
     type: "tool"
@@ -198,10 +192,10 @@ steps:
     params:
       metrics: "{{artifacts.tool.compute_business_metrics.output}}"
       packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"
-      downgrade_reasons: []
-      chart_type: "{{artifacts.agent.plan_agent.output.chart_type}}"
-      metric_focus: "{{artifacts.agent.intent_agent.output.inferred_metrics.0}}"
-      include_hypothesis_checks: false
+      downgrade_reasons: "{{artifacts.agent.sufficiency_evaluator.output.downgrade_reasons}}"
+      chart_type: "{{artifacts.user_input.viz_preferences.values.chart_type}}"
+      metric_focus: "{{artifacts.user_input.viz_preferences.values.metric_focus}}"
+      include_hypothesis_checks: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
 
   - id: "render_business_report_html"
     type: "tool"
@@ -209,10 +203,3 @@ steps:
     tool: "render_business_report_html"
     params:
       report: "{{artifacts.tool.assemble_business_report.output.report}}"
-
-  - id: "render_decision_packet_html"
-    type: "tool"
-    backend: "local"
-    tool: "render_decision_packet_html"
-    params:
-      packet: "{{artifacts.tool.assemble_decision_packet.output.decision_packet}}"

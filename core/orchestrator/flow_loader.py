@@ -45,7 +45,7 @@ class FlowLoader:
     Flow loader for YAML/JSON flow definitions.
 
     Public methods:
-    - load(product, flow) -> FlowDef (from products/<product>/flows/<flow>.yaml)
+    - load(product, flow) -> FlowDef (via products/<product>/flows/<flow>.yaml)
     - load_from_path(path) -> FlowDef
     - load_from_obj(obj) -> FlowDef
     """
