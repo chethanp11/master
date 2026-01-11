@@ -13,7 +13,7 @@ from typing_extensions import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.contracts.evidence_schema import EvidenceItem
+from core.contracts.context_pack_schema import EvidenceItem
 from core.contracts.run_schema import ArtifactRef
 
 

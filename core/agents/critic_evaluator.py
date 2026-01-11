@@ -12,9 +12,8 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from core.agents.base import BaseAgent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from core.contracts.context_pack_schema import ContextPack
+from core.contracts.context_pack_schema import ContextPack, EvidenceItem
 from core.contracts.critic_schema import CriticFailure, CriticOutput, CriticResult
-from core.contracts.evidence_schema import EvidenceItem
 from core.contracts.reasoning_ladder_schema import ReasoningLadderOutput
 from core.orchestrator.context import StepContext
 

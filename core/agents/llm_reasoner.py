@@ -13,7 +13,7 @@ from core.agents.base import BaseAgent
 from core.config.loader import load_settings
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult, AgentKind
 from core.contracts.flow_schema import StepType
-from core.contracts.plan_schema import EstimatedCost, PlanProposal, PlanStep
+from core.contracts.action_plan_schema import EstimatedCost, PlanProposal, PlanProposalStep as PlanStep
 from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.hooks import GovernanceHooks
 from ..models.providers.openai_provider import OpenAIRequest

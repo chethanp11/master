@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from core.contracts.agent_schema import AgentResult
-from core.contracts.evidence_schema import EvidenceItem
+from core.contracts.context_pack_schema import EvidenceItem
 from core.contracts.run_schema import ArtifactRef, RunRecord, TraceEvent
 from core.contracts.tool_schema import ToolResult
 

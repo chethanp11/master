@@ -20,8 +20,8 @@ from core.contracts.context_pack_schema import (
     TableRowSample,
     DocumentExcerpt,
     DocumentMetadata,
+    EvidenceItem,
 )
-from core.contracts.evidence_schema import EvidenceItem
 from core.contracts.run_schema import ArtifactRef
 
 

@@ -9,7 +9,7 @@ Deterministic loop stop condition evaluation.
 
 from typing import Any, Dict, Optional
 
-from core.contracts.loop_schema import (
+from core.contracts.flow_schema import (
     StopConditionExpr,
     StopConditionGroup,
     ConfidenceThreshold,

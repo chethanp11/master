@@ -26,7 +26,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
-from core.contracts.evidence_schema import EvidenceItem
+from core.contracts.context_pack_schema import EvidenceItem
 from core.contracts.run_schema import ArtifactRef
 
 # ==============================

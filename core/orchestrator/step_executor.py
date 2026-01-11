@@ -13,7 +13,7 @@ from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
 from core.governance.hooks import GovernanceHooks
 from core.contracts.flow_schema import StepDef, StepType, RetryPolicy, ToolBatchItem
-from core.contracts.plan_schema import PlanProposal
+from core.contracts.action_plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
 from core.orchestrator.context import RunContext, StepContext

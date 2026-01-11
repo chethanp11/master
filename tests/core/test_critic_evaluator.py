@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from core.contracts.critic_schema import CriticOutput
-from core.governance.critic_gate import CriticGateContext, gate_critic_recommendation
+from core.governance.gates import CriticGateContext, gate_critic_recommendation
 from core.tools.executor import ToolExecutor
 
 

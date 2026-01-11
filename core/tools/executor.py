@@ -30,7 +30,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, Optional, List, Tuple
 
-from core.contracts.evidence_schema import EvidenceItem, EvidenceSource
+from core.contracts.context_pack_schema import EvidenceItem, EvidenceSource
 from core.contracts.run_schema import ArtifactRef
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.governance.hooks import GovernanceHooks, HookDecision

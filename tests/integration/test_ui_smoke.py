@@ -61,22 +61,23 @@ def test_ui_imports_without_errors(monkeypatch):
 
 
 def test_api_client_list_products(monkeypatch):
-    import gateway.ui.platform_app as platform_app
+    import gateway.ui.api_client as api_client
+    import requests as requests_mod
 
     stub_body = {"ok": True, "data": {"products": [{"name": "hello_world", "display_name": "Hello World", "flows": ["hello_world"]}]}}
-    monkeypatch.setattr(platform_app.requests, "get", lambda *args, **kwargs: _FakeResponse(stub_body))
-    client = platform_app.ApiClient("https://api.example.com")
+    monkeypatch.setattr(requests_mod, "get", lambda *args, **kwargs: _FakeResponse(stub_body))
+    client = api_client.ApiClient("https://api.example.com")
     resp = client.list_products()
     assert resp.ok
     assert resp.body["data"]["products"][0]["name"] == "hello_world"
 
 
 def test_product_summary_render(monkeypatch):
-    import gateway.ui.platform_app as platform_app
+    import gateway.ui.pages.home as home_page
 
     stub_st = _FakeStreamlit()
-    monkeypatch.setattr(platform_app, "st", stub_st)
+    monkeypatch.setattr(home_page, "st", stub_st)
     products = [{"name": "hello_world", "display_name": "Hello World", "description": "Demo", "flows": ["hello_world"]}]
-    platform_app._render_product_summary(products)
+    home_page.render_product_summary(products)
     assert any(call[0] == "subheader" for call in stub_st.calls)
     assert any("Hello World" in call[1] for call in stub_st.calls if call[0] == "expander_open")

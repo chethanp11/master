@@ -13,11 +13,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.config.schema import Settings
-from core.contracts.evidence_schema import EvidenceItem, EvidenceSource
+from core.contracts.context_pack_schema import EvidenceItem, EvidenceSource
 from core.contracts.retrieval_schema import RetrievalQuery, RetrievalResult, Citation
 from core.contracts.run_schema import ArtifactRef
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.governance.retrieval_policy import resolve_allowed_sources
+from core.governance.gates import resolve_allowed_sources
 from core.memory.router import MemoryRouter
 from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool

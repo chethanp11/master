@@ -10,7 +10,7 @@ from core.agents.base import BaseAgent
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
 from core.contracts.agent_schema import AgentMeta, AgentResult
-from core.contracts.plan_schema import EstimatedCost, PlanProposal, PlanStep
+from core.contracts.action_plan_schema import EstimatedCost, PlanProposal, PlanProposalStep as PlanStep
 from core.contracts.run_schema import RunStatus, StepStatus
 from core.contracts.tool_schema import ToolMeta, ToolResult
 from core.governance.hooks import GovernanceHooks

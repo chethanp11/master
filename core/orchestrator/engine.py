@@ -15,11 +15,10 @@ from uuid import uuid4
 from core.agents.registry import AgentRegistry
 from core.config.schema import Settings
 from core.contracts.flow_schema import FlowDef, StepDef, StepType
-from core.contracts.action_plan_schema import ActionPlan, PlanGateResult, PlanStep, PlanToolCall, PlanAgentCall
+from core.contracts.action_plan_schema import PlanGateResult
 from core.contracts.budget_schema import Budget
 from core.contracts.context_pack_schema import ContextPack
-from core.contracts.loop_schema import LoopState
-from core.contracts.hitl_schema import HitlInputSchema, HitlRequest, HitlResolution
+from core.contracts.interaction_schema import HitlInputSchema, HitlRequest, HitlResolution
 from core.contracts.run_schema import (
     RunOperationResult,
     RunRecord,
@@ -39,9 +38,8 @@ from core.contracts.user_input_schema import (
 from core.contracts.question_schema import QuestionSet, UserAnswers
 from core.governance.hooks import GovernanceHooks
 from core.orchestrator.branching import evaluate_condition, summarize_condition
-from core.orchestrator.looping import evaluate_stop_condition, summarize_stop_condition
 from core.contracts.budget_schema import BudgetPolicy
-from core.governance.budgeting import resolve_budget, init_budget_state, consume_budget
+from core.governance.budgeting import resolve_budget, init_budget_state
 from core.governance.security import SecurityRedactor
 from core.memory.tracing import Tracer
 from core.memory.router import MemoryRouter
@@ -50,11 +48,47 @@ from core.orchestrator.flow_loader import FlowLoader
 from core.orchestrator.hitl import HitlService
 from core.orchestrator.state import is_valid_run_transition, to_run_state
 from core.orchestrator.step_executor import StepExecutor
+from core.orchestrator.run_lifecycle import (
+    start_run,
+    complete_run,
+    fail_run,
+    persist_run_output,
+    transition_run_status,
+    init_run_meta,
+    summary_with_counters,
+    _precreate_steps as precreate_steps,
+)
+from core.orchestrator.user_input_handler import (
+    ValidationResult,
+    build_user_input_prompt,
+    build_question_set_request,
+    build_hitl_request,
+    validate_user_input,
+    validate_user_input_values,
+    validate_question_set_answers,
+    merge_into_context_pack,
+    looks_like_user_input_answer,
+    looks_like_question_set_answers,
+    answer_to_response,
+    store_user_input_artifacts,
+    resolve_question_set_from_request,
+    question_set_key_from_request,
+    context_pack_key_from_request,
+    summarize_schema,
+)
+from core.orchestrator.plan_executor import (
+    handle_plan_propose,
+    handle_plan_gate,
+    handle_plan_execute,
+    execute_action_plan,
+)
+from core.orchestrator.loop_executor import (
+    handle_repeat_until,
+)
 from core.orchestrator.templating import render_params
 from core.knowledge.context_pack_merge import merge_answers_into_context_pack
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
-from core.governance.plan_gate import gate_action_plan
 from core.contracts.run_schema import ArtifactRef
 from core.utils.reasoning_exporter import build_reasoning_markdown
 
@@ -289,21 +323,8 @@ class OrchestratorEngine:
         )
 
     def _precreate_steps(self, *, flow_def: FlowDef, run_ctx: RunContext) -> None:
-        for idx, step_def in enumerate(flow_def.steps):
-            step_id = step_def.id or f"step_{idx}"
-            step_record = StepRecord(
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                step_index=idx,
-                name=step_def.name or step_id,
-                type=step_def.type.value,
-                status=StepStatus.NOT_STARTED,
-                meta={
-                    "backend": step_def.backend.value if getattr(step_def.backend, "value", None) else step_def.backend,
-                    "target": step_def.agent or step_def.tool,
-                },
-            )
-            self.memory.add_step(step_record)
+        """Delegate to run_lifecycle module."""
+        precreate_steps(memory=self.memory, flow_def=flow_def, run_ctx=run_ctx)
 
     def get_pending_user_input(self, *, run_id: str) -> RunOperationResult:
         bundle = self.memory.get_run(run_id)
@@ -738,7 +759,26 @@ class OrchestratorEngine:
                 question_answers = UserAnswers(question_set_id=question_set.id, answers=response.values if response else {})
             errors = _validate_question_set_answers(question_set, question_answers)
         else:
-            errors = _validate_user_input_values(request, response.values if response else {})
+            # Flexible validation: supports text-only, schema-only, or mixed inputs
+            response_values = response.values if response else {}
+            
+            # Check for free text input (can come as "text", "response", or any non-schema key)
+            # This supports products like ADE that use text-only input for reasoning
+            has_free_text = bool(
+                response_values.get("text") or 
+                response_values.get("response") or
+                response_values.get("free_text")
+            )
+            
+            # If free_text is provided, accept it - skip schema validation entirely
+            if has_free_text:
+                errors = []
+            elif request.required:
+                # Schema mode: validate required fields
+                errors = _validate_user_input_values(request, response_values)
+            else:
+                # No required fields - accept any input
+                errors = [] if response_values else ["no_input_provided"]
         if errors:
             self.memory.update_step(
                 bundle.run.run_id,
@@ -774,8 +814,17 @@ class OrchestratorEngine:
             merged_pack = None
             context_pack_key = None
 
-        accepted_values = response.values if response is not None else question_answers.answers
+        # Merge defaults from request with provided values
+        # This ensures that schema fields not provided by user (e.g., when free text is used)
+        # still have sensible defaults for downstream steps
+        response_values = response.values if response is not None else question_answers.answers
+        request_defaults = request.defaults if hasattr(request, 'defaults') and request.defaults else {}
+        accepted_values = {**request_defaults, **response_values}  # response values override defaults
         accepted_comment = response.comment if response is not None else (comment or "")
+
+        # Build the user_input dict with merged values for proper artifact rehydration on resume
+        user_input_for_storage = response.model_dump(mode="json") if response is not None else question_answers.model_dump(mode="json")
+        user_input_for_storage["values"] = accepted_values  # Override with merged defaults
 
         self.memory.update_step(
             bundle.run.run_id,
@@ -784,7 +833,7 @@ class OrchestratorEngine:
                 "status": StepStatus.COMPLETED.value,
                 "finished_at": int(time.time()),
                 "output": {
-                    "user_input": response.model_dump(mode="json") if response is not None else question_answers.model_dump(mode="json"),
+                    "user_input": user_input_for_storage,
                     "hitl_resolution": HitlResolution(
                         request_id=request.form_id,
                         request_type="INPUT",
@@ -928,25 +977,19 @@ class OrchestratorEngine:
         summary: Optional[Dict[str, Any]] = None,
         reason: Optional[str] = None,
     ) -> RunStatus:
-        current = _coerce_run_status(current_status)
-        target = _coerce_run_status(target_status)
-        if not is_valid_run_transition(current, target):
-            raise ValueError(f"Invalid run transition: {to_run_state(current).value} -> {to_run_state(target).value}")
-        if current != target:
-            self._emit_event(
-                kind="run_state_transition",
-                run_id=run_id,
-                step_id=step_id,
-                product=product,
-                flow=flow,
-                payload={
-                    "from": to_run_state(current).value,
-                    "to": to_run_state(target).value,
-                    "reason": reason or "",
-                },
-            )
-        self.memory.update_run_status(run_id, target.value, summary=summary)
-        return target
+        """Delegate to run_lifecycle module."""
+        return transition_run_status(
+            memory=self.memory,
+            emit_event_fn=self._emit_event,
+            run_id=run_id,
+            product=product,
+            flow=flow,
+            current_status=current_status,
+            target_status=target_status,
+            step_id=step_id,
+            summary=summary,
+            reason=reason,
+        )
 
     def _execute_from_index(
         self,
@@ -1795,54 +1838,17 @@ class OrchestratorEngine:
         step_record: StepRecord,
         requested_by: Optional[str],
     ) -> Optional[str]:
-        plan_payload = (step_def.params or {}).get("plan")
-        if plan_payload is None:
-            if step_def.agent is None:
-                return self._fail_step(
-                    run_ctx=run_ctx,
-                    step_id=step_id,
-                    reason="plan_propose_missing_agent",
-                    message="plan_propose step missing agent",
-                )
-            agent = AgentRegistry.resolve(step_def.agent)
-            step_ctx = run_ctx.new_step(step_def=step_def, step_id=step_id)
-            result = agent.run(step_ctx)
-            if not result.ok:
-                return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_propose_failed", message="agent_failed")
-            decision = self.governance.validate_agent_output(
-                agent_name=step_def.agent,
-                output=result.data or {},
-                ctx=step_ctx,
-            )
-            if not decision.allowed:
-                return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason=decision.reason, message="agent_output_denied")
-            plan_payload = result.data or {}
-
-        try:
-            plan = ActionPlan.model_validate(plan_payload)
-        except Exception as exc:
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_invalid", message=str(exc))
-
-        plan_ref = self._store_artifact(run_ctx, "plan.action_plan", plan.model_dump(mode="json"))
-        self.memory.update_step(
-            run_ctx.run_id,
-            step_id,
-            {
-                "status": StepStatus.COMPLETED.value,
-                "finished_at": int(time.time()),
-                "output": {"plan_ref": plan_ref.model_dump(), "plan": plan.model_dump(mode="json")},
-            },
-        )
-        run_ctx.meta["last_result_data"] = {"summary": "plan_proposed", "details": {"plan_id": plan.id}}
-        self._emit_event(
-            kind="plan_proposed",
-            run_id=run_ctx.run_id,
+        return handle_plan_propose(
+            run_ctx=run_ctx,
+            step_def=step_def,
             step_id=step_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            payload={"plan_id": plan.id, "step_count": len(plan.steps), "confidence": plan.confidence},
+            step_record=step_record,
+            requested_by=requested_by,
+            memory=self.memory,
+            governance=self.governance,
+            fail_step_fn=self._fail_step,
+            emit_event_fn=self._emit_event,
         )
-        return "continue"
 
     def _handle_plan_gate(
         self,
@@ -1852,56 +1858,15 @@ class OrchestratorEngine:
         step_id: str,
         step_record: StepRecord,
     ) -> Optional[str]:
-        plan = self._get_artifact_payload(run_ctx, "plan.action_plan")
-        if plan is None:
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_missing", message="plan.action_plan missing")
-        try:
-            plan_obj = ActionPlan.model_validate(plan)
-        except Exception as exc:
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_invalid", message=str(exc))
-        budget = run_ctx.meta.get("budget")
-        if isinstance(budget, dict):
-            try:
-                budget = Budget.model_validate(budget)
-            except Exception:
-                budget = None
-        sensitivity = str(run_ctx.payload.get("_budget_sensitivity") or "LOW")
-        gate_result = gate_action_plan(
-            plan_obj,
-            allow_tools=step_def.allow_tools,
-            allow_agents=step_def.allow_agents,
-            budget=budget,
-            sensitivity=sensitivity,
-        )
-        gate_ref = self._store_artifact(run_ctx, "plan.gate_result", gate_result.model_dump(mode="json"))
-        self.memory.update_step(
-            run_ctx.run_id,
-            step_id,
-            {
-                "status": StepStatus.COMPLETED.value,
-                "finished_at": int(time.time()),
-                "output": {"plan_gate_ref": gate_ref.model_dump(), "plan_gate": gate_result.model_dump(mode="json")},
-            },
-        )
-        run_ctx.meta["last_result_data"] = {
-            "summary": "plan_gated",
-            "details": {"plan_id": gate_result.plan_id, "status": gate_result.status},
-        }
-        self._emit_event(
-            kind="plan_gated",
-            run_id=run_ctx.run_id,
+        return handle_plan_gate(
+            run_ctx=run_ctx,
+            step_def=step_def,
             step_id=step_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            payload={
-                "status": gate_result.status,
-                "approved_count": len(gate_result.approved_steps),
-                "rejected_count": len(gate_result.rejected_steps),
-                "requires_hitl_count": len(gate_result.requires_hitl_for_steps),
-                "reasons": gate_result.reasons,
-            },
+            step_record=step_record,
+            memory=self.memory,
+            fail_step_fn=self._fail_step,
+            emit_event_fn=self._emit_event,
         )
-        return "continue"
 
     def _handle_plan_execute(
         self,
@@ -1912,87 +1877,22 @@ class OrchestratorEngine:
         step_record: StepRecord,
         requested_by: Optional[str],
     ) -> Optional[str]:
-        gate = self._get_artifact_payload(run_ctx, "plan.gate_result")
-        if gate is None:
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_gate_missing", message="plan.gate_result missing")
-        try:
-            gate_obj = PlanGateResult.model_validate(gate)
-        except Exception as exc:
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_gate_invalid", message=str(exc))
-
-        if gate_obj.status == "REJECTED":
-            return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_rejected", message="plan rejected")
-
-        if gate_obj.status == "REQUIRES_HITL":
-            approval_payload = {"plan_id": gate_obj.plan_id, "requires_hitl_steps": gate_obj.requires_hitl_for_steps}
-            approval = self.hitl.create_approval(
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                requested_by=requested_by,
-                payload=approval_payload,
-            )
-            hitl_request = HitlRequest(
-                request_id=approval.approval_id,
-                request_type="APPROVAL",
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                created_at=int(time.time()),
-                payload={"approval_context": approval_payload},
-            )
-            self.memory.update_step(
-                run_ctx.run_id,
-                step_id,
-                {
-                    "status": StepStatus.PENDING_HUMAN.value,
-                    "output": {"approval_id": approval.approval_id, "hitl_request": hitl_request.model_dump(mode="json")},
-                },
-            )
-            self._transition_run_status(
-                run_id=run_ctx.run_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                current_status=RunStatus.RUNNING,
-                target_status=RunStatus.PENDING_HUMAN,
-                step_id=step_id,
-                summary=self._summary_with_counters(run_ctx, {"current_step_index": step_record.step_index}),
-                reason="plan_execute_requires_hitl",
-            )
-            self._emit_event(
-                kind="run_pending_human",
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                payload={"reason": "plan_execute_requires_hitl", "approval_id": approval.approval_id},
-            )
-            self._persist_run_output(run_ctx)
-            return RunStatus.PENDING_HUMAN.value
-
-        executed = self._execute_action_plan(run_ctx, gate_obj)
-        if executed is not None:
-            return executed
-        run_ctx.meta["last_result_data"] = {
-            "summary": "plan_executed",
-            "details": {"plan_id": gate_obj.plan_id, "status": gate_obj.status},
-        }
-        self.memory.update_step(
-            run_ctx.run_id,
-            step_id,
-            {"status": StepStatus.COMPLETED.value, "finished_at": int(time.time()), "output": {"plan_execute": "ok"}},
-        )
-        self._emit_event(
-            kind="step_completed",
-            run_id=run_ctx.run_id,
+        return handle_plan_execute(
+            run_ctx=run_ctx,
+            step_def=step_def,
             step_id=step_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            payload={"ok": True},
+            step_record=step_record,
+            requested_by=requested_by,
+            memory=self.memory,
+            hitl=self.hitl,
+            governance=self.governance,
+            step_executor=self.step_executor,
+            fail_step_fn=self._fail_step,
+            emit_event_fn=self._emit_event,
+            transition_run_status_fn=self._transition_run_status,
+            summary_with_counters_fn=self._summary_with_counters,
+            persist_run_output_fn=self._persist_run_output,
         )
-        return "continue"
 
     def _handle_repeat_until(
         self,
@@ -2005,235 +1905,25 @@ class OrchestratorEngine:
         requested_by: Optional[str],
         current_index: int,
     ) -> Union[str, int]:
-        if step_def.stop_condition is None or step_def.iteration_step is None:
-            return self._fail_step(
-                run_ctx=run_ctx,
-                step_id=step_id,
-                reason="repeat_until_missing_config",
-                message="repeat_until missing stop_condition or iteration_step",
-            )
-        loops = run_ctx.meta.setdefault("loops", {})
-        raw_state = loops.get(step_id) if isinstance(loops, dict) else None
-        if isinstance(raw_state, dict):
-            loop_state = LoopState.model_validate(raw_state)
-        else:
-            loop_state = LoopState()
-        if loop_state.started_at is None:
-            loop_state.started_at = int(time.time())
-
-        iteration_def = self._find_step_def(flow_def, step_def.iteration_step)
-        if iteration_def is None:
-            return self._fail_step(
-                run_ctx=run_ctx,
-                step_id=step_id,
-                reason="repeat_until_missing_iteration_step",
-                message="iteration_step not found",
-            )
-        iteration_index = self._find_step_index(flow_def, step_def.iteration_step)
-
-        if loop_state.iters_used == 0 and not loop_state.terminated:
-            self._emit_event(
-                kind="loop_started",
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                payload={"loop_step_id": step_id, "max_iters": step_def.max_iters},
-            )
-
-        while True:
-            stop_summary = summarize_stop_condition(step_def.stop_condition)
-            stop_met = evaluate_stop_condition(step_def.stop_condition, run_ctx=run_ctx, memory=self.memory)
-            loop_state.last_evaluated_condition = {"summary": stop_summary, "result": stop_met}
-            if stop_met:
-                loop_state.terminated = True
-                loop_state.termination_reason = "STOP_CONDITION_MET"
-                break
-            if loop_state.iters_used >= int(step_def.max_iters or 0):
-                loop_state.terminated = True
-                loop_state.termination_reason = "MAX_ITERS_REACHED"
-                break
-
-            budget = run_ctx.meta.get("budget")
-            budget_state = run_ctx.meta.get("budget_state")
-            if isinstance(budget, Budget) and budget_state is not None:
-                allowed, action, updated = consume_budget(
-                    budget=budget,
-                    state=budget_state,
-                    kind="pass",
-                    amount=1,
-                    cost_units=1,
-                )
-                run_ctx.meta["budget_state"] = updated
-                self._emit_event(
-                    kind="budget_consumed",
-                    run_id=run_ctx.run_id,
-                    step_id=step_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    payload={"kind": "pass", "state": updated.model_dump(mode="json")},
-                )
-                if not allowed:
-                    self._emit_event(
-                        kind="budget_exceeded",
-                        run_id=run_ctx.run_id,
-                        step_id=step_id,
-                        product=run_ctx.product,
-                        flow=run_ctx.flow,
-                        payload={
-                            "kind": "pass",
-                            "limit": budget.max_passes,
-                            "state": updated.model_dump(mode="json"),
-                            "action_taken": action,
-                        },
-                    )
-                    loop_state.terminated = True
-                    loop_state.termination_reason = "BUDGET_EXCEEDED"
-                    loop_state.ended_at = int(time.time())
-                    loops[step_id] = loop_state.model_dump(mode="json")
-                    run_ctx.meta["loops"] = loops
-                    self._emit_event(
-                        kind="loop_terminated",
-                        run_id=run_ctx.run_id,
-                        step_id=step_id,
-                        product=run_ctx.product,
-                        flow=run_ctx.flow,
-                        payload={
-                            "loop_step_id": step_id,
-                            "termination_reason": loop_state.termination_reason,
-                            "iters_used": loop_state.iters_used,
-                            "stop_condition_met": False,
-                        },
-                    )
-                    if action == "HITL":
-                        approval_payload = {"reason": "budget_exceeded", "loop_step_id": step_id}
-                        approval = self.hitl.create_approval(
-                            run_id=run_ctx.run_id,
-                            step_id=step_id,
-                            product=run_ctx.product,
-                            flow=run_ctx.flow,
-                            requested_by=requested_by,
-                            payload=approval_payload,
-                        )
-                        hitl_request = HitlRequest(
-                            request_id=approval.approval_id,
-                            request_type="APPROVAL",
-                            run_id=run_ctx.run_id,
-                            step_id=step_id,
-                            product=run_ctx.product,
-                            flow=run_ctx.flow,
-                            created_at=int(time.time()),
-                            payload={"approval_context": approval_payload},
-                        )
-                        self.memory.update_step(
-                            run_ctx.run_id,
-                            step_id,
-                            {
-                                "status": StepStatus.PENDING_HUMAN.value,
-                                "output": {"approval_id": approval.approval_id, "hitl_request": hitl_request.model_dump(mode="json")},
-                            },
-                        )
-                        self._transition_run_status(
-                            run_id=run_ctx.run_id,
-                            product=run_ctx.product,
-                            flow=run_ctx.flow,
-                            current_status=RunStatus.RUNNING,
-                            target_status=RunStatus.PENDING_HUMAN,
-                            step_id=step_id,
-                            summary=self._summary_with_counters(run_ctx, {"current_step_index": current_index}),
-                            reason="loop_budget_exceeded",
-                        )
-                        self._emit_event(
-                            kind="run_pending_human",
-                            run_id=run_ctx.run_id,
-                            step_id=step_id,
-                            product=run_ctx.product,
-                            flow=run_ctx.flow,
-                            payload={"reason": "loop_budget_exceeded", "approval_id": approval.approval_id},
-                        )
-                        self._persist_run_output(run_ctx)
-                        return RunStatus.PENDING_HUMAN.value
-                    return self._fail_step(
-                        run_ctx=run_ctx,
-                        step_id=step_id,
-                        reason="budget_exceeded",
-                        message="loop budget exceeded",
-                    )
-
-            self._emit_event(
-                kind="loop_iteration_started",
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                payload={"loop_step_id": step_id, "iter_index": loop_state.iters_used},
-            )
-            iteration_result = self._execute_iteration_step(
-                flow_def=flow_def,
-                run_ctx=run_ctx,
-                step_def=iteration_def,
-                step_index=iteration_index,
-                requested_by=requested_by,
-            )
-            if iteration_result is not None:
-                loops[step_id] = loop_state.model_dump(mode="json")
-                run_ctx.meta["loops"] = loops
-                return iteration_result
-            loop_state.iters_used += 1
-            self._emit_event(
-                kind="loop_iteration_completed",
-                run_id=run_ctx.run_id,
-                step_id=step_id,
-                product=run_ctx.product,
-                flow=run_ctx.flow,
-                payload={"loop_step_id": step_id, "iter_index": loop_state.iters_used - 1},
-            )
-
-        loop_state.ended_at = int(time.time())
-        loops[step_id] = loop_state.model_dump(mode="json")
-        run_ctx.meta["loops"] = loops
-
-        self.memory.update_step(
-            run_ctx.run_id,
-            step_id,
-            {
-                "status": StepStatus.COMPLETED.value,
-                "finished_at": int(time.time()),
-                "output": {"loop_state": loop_state.model_dump(mode="json")},
-            },
-        )
-        self._emit_event(
-            kind="loop_terminated",
-            run_id=run_ctx.run_id,
+        return handle_repeat_until(
+            flow_def=flow_def,
+            run_ctx=run_ctx,
+            step_def=step_def,
             step_id=step_id,
-            product=run_ctx.product,
-            flow=run_ctx.flow,
-            payload={
-                "loop_step_id": step_id,
-                "termination_reason": loop_state.termination_reason,
-                "iters_used": loop_state.iters_used,
-                "stop_condition_met": loop_state.termination_reason == "STOP_CONDITION_MET",
-            },
+            step_record=step_record,
+            requested_by=requested_by,
+            current_index=current_index,
+            memory=self.memory,
+            hitl=self.hitl,
+            fail_step_fn=self._fail_step,
+            emit_event_fn=self._emit_event,
+            transition_run_status_fn=self._transition_run_status,
+            summary_with_counters_fn=self._summary_with_counters,
+            persist_run_output_fn=self._persist_run_output,
+            find_step_def_fn=self._find_step_def,
+            find_step_index_fn=self._find_step_index,
+            execute_iteration_step_fn=self._execute_iteration_step,
         )
-        self.memory.update_run_status(
-            run_ctx.run_id,
-            RunStatus.RUNNING.value,
-            summary=self._summary_with_counters(run_ctx, {"current_step_index": current_index + 1}),
-        )
-
-        next_index = current_index + 1
-        if step_def.on_terminate:
-            next_index = self._find_step_index(flow_def, step_def.on_terminate)
-        if next_index == iteration_index:
-            next_index = iteration_index + 1
-        if next_index <= current_index:
-            return self._fail_step(
-                run_ctx=run_ctx,
-                step_id=step_id,
-                reason="repeat_until_invalid_target",
-                message="repeat_until target must be a later step",
-            )
-        return next_index
 
     def _execute_iteration_step(
         self,
@@ -2410,62 +2100,14 @@ class OrchestratorEngine:
         return None
 
     def _execute_action_plan(self, run_ctx: RunContext, gate_obj: PlanGateResult) -> Optional[str]:
-        for idx, step in enumerate(gate_obj.approved_steps):
-            step_id = f"plan_step_{idx}"
-            if isinstance(step, PlanToolCall):
-                step_ctx = run_ctx.new_step(step_id=step_id, step_type="tool", backend="local", target=step.tool_name)
-                self._emit_event(
-                    kind="plan_step_started",
-                    run_id=run_ctx.run_id,
-                    step_id=step_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    payload={"kind": "tool", "tool": step.tool_name},
-                )
-                result = self.step_executor.tool_executor.execute(tool_name=step.tool_name, params=step.inputs, ctx=step_ctx)
-                if not result.ok:
-                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_step_failed", message="tool_failed")
-                evidence_ids = [item.id for item in result.evidence]
-                run_ctx.artifacts.setdefault("plan.evidence", []).extend(result.evidence)
-                self._emit_event(
-                    kind="plan_step_completed",
-                    run_id=run_ctx.run_id,
-                    step_id=step_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    payload={"kind": "tool", "tool": step.tool_name, "evidence_ids": evidence_ids},
-                )
-            elif isinstance(step, PlanAgentCall):
-                step_ctx = run_ctx.new_step(step_id=step_id, step_type="agent", backend="local", target=step.agent_name)
-                self._emit_event(
-                    kind="plan_step_started",
-                    run_id=run_ctx.run_id,
-                    step_id=step_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    payload={"kind": "agent", "agent": step.agent_name},
-                )
-                agent = AgentRegistry.resolve(step.agent_name)
-                agent_result = agent.run(step_ctx)
-                if not agent_result.ok:
-                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason="plan_step_failed", message="agent_failed")
-                decision = self.governance.validate_agent_output(
-                    agent_name=step.agent_name,
-                    output=agent_result.data or {},
-                    ctx=step_ctx,
-                )
-                if not decision.allowed:
-                    return self._fail_step(run_ctx=run_ctx, step_id=step_id, reason=decision.reason, message="agent_output_denied")
-                run_ctx.artifacts.setdefault("plan.agent_outputs", []).append(agent_result.data or {})
-                self._emit_event(
-                    kind="plan_step_completed",
-                    run_id=run_ctx.run_id,
-                    step_id=step_id,
-                    product=run_ctx.product,
-                    flow=run_ctx.flow,
-                    payload={"kind": "agent", "agent": step.agent_name},
-                )
-        return None
+        return execute_action_plan(
+            run_ctx=run_ctx,
+            gate_obj=gate_obj,
+            step_executor=self.step_executor,
+            governance=self.governance,
+            fail_step_fn=self._fail_step,
+            emit_event_fn=self._emit_event,
+        )
 
     def _store_artifact(self, run_ctx: RunContext, key: str, payload: Dict[str, Any]) -> ArtifactRef:
         full_key = key
@@ -2600,65 +2242,12 @@ class OrchestratorEngine:
         return RunOperationResult.failure(code=code, message=message, details=error_details)
 
     def _persist_run_output(self, run_ctx: RunContext) -> None:
-        bundle = self.memory.get_run(run_ctx.run_id)
-        if bundle is None:
-            return
-        run = bundle.run
-        status = run.status.value if hasattr(run.status, "value") else str(run.status)
-        pending_statuses = {
-            RunStatus.PENDING_USER_INPUT.value,
-            RunStatus.PAUSED_WAITING_FOR_USER.value,
-            RunStatus.PENDING_HUMAN.value,
-        }
-        result = run.output if status == RunStatus.COMPLETED.value else None
-        if isinstance(result, dict) and "output_files" in result:
-            result = {k: v for k, v in result.items() if k != "output_files"}
-        error = None
-        if status == RunStatus.COMPLETED.value and result is None:
-            status = RunStatus.FAILED.value
-            error = {"code": "missing_output", "message": "Missing run output", "step_id": None, "details": {}}
-        if error is None and status != RunStatus.COMPLETED.value and status not in pending_statuses:
-            failed = next((s for s in bundle.steps if s.status == StepStatus.FAILED), None)
-            if failed:
-                if failed.error and isinstance(failed.error, dict):
-                    error = {
-                        "code": "step_failed",
-                        "message": failed.error.get("message") or "Step failed.",
-                        "step_id": failed.step_id,
-                        "details": failed.error,
-                    }
-                else:
-                    error = {"code": "step_failed", "message": "Step failed.", "step_id": failed.step_id, "details": {}}
-            elif run.summary:
-                error = {
-                    "code": "run_failed",
-                    "message": run.summary.get("reason") or run.summary.get("error") or "Run failed.",
-                    "step_id": None,
-                    "details": run.summary or {},
-                }
-        response = {
-            "response_version": "1.0",
-            "run_id": run.run_id,
-            "product": run.product,
-            "flow": run.flow,
-            "status": status,
-            "result": result if status != RunStatus.COMPLETED.value else (result or {"kind": "files"}),
-            "error": error,
-            "finished_at": run.finished_at,
-            "finished_at_iso": datetime.fromtimestamp(run.finished_at, tz=timezone.utc).isoformat()
-            if run.finished_at
-            else None,
-        }
-        output_info = self.memory.write_run_response(product=run.product, run_id=run.run_id, response=response)
-        if output_info:
-            self._emit_event(
-                kind="output_written",
-                run_id=run.run_id,
-                step_id=None,
-                product=run.product,
-                flow=run.flow,
-                payload=output_info,
-            )
+        """Delegate to run_lifecycle module."""
+        persist_run_output(
+            memory=self.memory,
+            emit_event_fn=self._emit_event,
+            run_id=run_ctx.run_id,
+        )
 
     def _rehydrate_artifacts(self, steps: List[StepRecord], run_ctx: RunContext) -> None:
         for step in steps:
@@ -2708,29 +2297,13 @@ class OrchestratorEngine:
         summary: Optional[Dict[str, Any]] = None,
         steps: Optional[List[StepRecord]] = None,
     ) -> None:
-        summary = summary or {}
-        def _as_int(value: Any) -> Optional[int]:
-            try:
-                return int(value)
-            except Exception:
-                return None
-
-        steps_executed = _as_int(summary.get("steps_executed"))
-        if steps_executed is None and steps is not None:
-            steps_executed = sum(1 for s in steps if not _is_step_status(s.status, StepStatus.NOT_STARTED))
-        run_ctx.meta["steps_executed"] = steps_executed or 0
-        run_ctx.meta["tool_calls"] = _as_int(summary.get("tool_calls")) or 0
-        run_ctx.meta["tokens_used"] = _as_int(summary.get("tokens_used")) or 0
-        loops = summary.get("loops")
-        run_ctx.meta["loops"] = loops if isinstance(loops, dict) else {}
+        """Delegate to run_lifecycle module."""
+        init_run_meta(run_ctx, summary=summary, steps=steps)
 
     @staticmethod
     def _summary_with_counters(run_ctx: RunContext, summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        merged = dict(summary or {})
-        for key in ("steps_executed", "tool_calls", "tokens_used", "loops"):
-            if key in run_ctx.meta:
-                merged[key] = run_ctx.meta.get(key)
-        return merged
+        """Delegate to run_lifecycle module."""
+        return summary_with_counters(run_ctx, summary)
 
     def _stage_inputs(self, run_ctx: RunContext) -> None:
         self.memory.ensure_run_dirs(product=run_ctx.product, run_id=run_ctx.run_id)
@@ -2796,92 +2369,29 @@ class OrchestratorEngine:
 Engine = OrchestratorEngine
 
 
+# ============================================================================
+# Helper function wrappers - delegate to user_input_handler module
+# ============================================================================
+
+
 def _summarize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        encoded = json.dumps(schema, sort_keys=True, ensure_ascii=True).encode("utf-8")
-        digest = hashlib.sha256(encoded).hexdigest()
-    except Exception:
-        digest = "unknown"
-    props = schema.get("properties") if isinstance(schema, dict) else {}
-    prop_keys = []
-    if isinstance(props, dict):
-        prop_keys = list(props.keys())
-    return {"properties": prop_keys[:10], "property_count": len(prop_keys), "sha256": digest}
+    """Delegate to user_input_handler module."""
+    return summarize_schema(schema)
 
 
 def _looks_like_user_input_answer(payload: Dict[str, Any]) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return any(key in payload for key in ("prompt_id", "selected_option_ids", "free_text"))
+    """Delegate to user_input_handler module."""
+    return looks_like_user_input_answer(payload)
 
 
 def _looks_like_question_set_answers(payload: Dict[str, Any]) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return "question_set_id" in payload or "answers" in payload
-
-
-def _primary_selection_key(request: UserInputRequest) -> str:
-    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
-    if isinstance(props, dict) and len(props) == 1:
-        return next(iter(props))
-    if isinstance(props, dict):
-        if "selection" in props:
-            return "selection"
-        if "value" in props:
-            return "value"
-    return "selection"
-
-
-def _options_from_request(request: UserInputRequest) -> List[UserInputOption]:
-    options: List[UserInputOption] = []
-    if isinstance(request.choices, list):
-        for item in request.choices:
-            if not isinstance(item, dict):
-                continue
-            option_id = str(item.get("id") or item.get("value") or item.get("label") or "").strip()
-            if not option_id:
-                continue
-            label = str(item.get("label") or item.get("value") or option_id)
-            options.append(
-                UserInputOption(
-                    option_id=option_id,
-                    label=label,
-                    value=item.get("value"),
-                    description=item.get("description"),
-                )
-            )
-        return options
-    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
-    if isinstance(props, dict):
-        for spec in props.values():
-            if not isinstance(spec, dict):
-                continue
-            enum = spec.get("enum")
-            if isinstance(enum, list):
-                for item in enum:
-                    option_id = str(item)
-                    options.append(UserInputOption(option_id=option_id, label=option_id, value=item))
-                break
-    return options
+    """Delegate to user_input_handler module."""
+    return looks_like_question_set_answers(payload)
 
 
 def _build_user_input_prompt(run_ctx: RunContext, step_id: str, request: UserInputRequest) -> UserInputPrompt:
-    allow_free_text = request.mode == UserInputModes.FREE_TEXT_INPUT or request.input_type == "text"
-    question = request.prompt or request.title or request.form_id
-    return UserInputPrompt(
-        schema_version=request.schema_version,
-        prompt_id=request.form_id,
-        run_id=run_ctx.run_id,
-        step_id=step_id,
-        title=request.title,
-        question=question,
-        options=_options_from_request(request),
-        defaults=request.defaults,
-        required=request.required,
-        allow_free_text=allow_free_text,
-        schema=request.schema if isinstance(request.schema, dict) else {},
-    )
+    """Delegate to user_input_handler module."""
+    return build_user_input_prompt(run_ctx, step_id, request)
 
 
 def _answer_to_response(
@@ -2890,65 +2400,18 @@ def _answer_to_response(
     *,
     comment: Optional[str],
 ) -> UserInputResponse:
-    values: Dict[str, Any] = {}
-    selected = answer.selected_option_ids or []
-    if selected:
-        values[_primary_selection_key(request)] = selected[0]
-    if answer.free_text:
-        values["text"] = answer.free_text
-    if answer.metadata:
-        values["metadata"] = answer.metadata
-    return UserInputResponse(
-        schema_version=request.schema_version,
-        form_id=request.form_id,
-        values=values,
-        comment=comment or "",
-        metadata=answer.metadata,
-    )
+    """Delegate to user_input_handler module."""
+    return answer_to_response(request, answer, comment=comment)
 
 
 def _validate_user_input_values(request: UserInputRequest, values: Dict[str, Any]) -> List[str]:
-    errors: List[str] = []
-    mode = request.mode or UserInputModes.CHOICE_INPUT
-    if mode == UserInputModes.FREE_TEXT_INPUT:
-        text_value = values.get("text")
-        if not isinstance(text_value, str) or not text_value.strip():
-            errors.append("missing_or_empty:text")
-        return errors
-    if mode != UserInputModes.CHOICE_INPUT:
-        errors.append("invalid_mode")
-        return errors
-    for key in request.required:
-        if key not in values:
-            errors.append(f"missing_required:{key}")
-    props = request.schema.get("properties") if isinstance(request.schema, dict) else {}
-    if isinstance(props, dict):
-        for key, spec in props.items():
-            if key not in values:
-                continue
-            value = values.get(key)
-            if not isinstance(spec, dict):
-                continue
-            expected_type = spec.get("type")
-            if expected_type:
-                if expected_type == "string" and not isinstance(value, str):
-                    errors.append(f"type_mismatch:{key}")
-                if expected_type == "number" and not isinstance(value, (int, float)):
-                    errors.append(f"type_mismatch:{key}")
-                if expected_type == "integer" and not isinstance(value, int):
-                    errors.append(f"type_mismatch:{key}")
-                if expected_type == "boolean" and not isinstance(value, bool):
-                    errors.append(f"type_mismatch:{key}")
-            enum = spec.get("enum")
-            if isinstance(enum, list) and value not in enum:
-                errors.append(f"enum_mismatch:{key}")
-    return errors
+    """Delegate to user_input_handler module."""
+    return validate_user_input_values(request, values)
 
 
 def _store_user_input_artifacts(run_ctx: RunContext, form_id: str, values: Dict[str, Any], comment: Optional[str]) -> None:
-    bucket = run_ctx.artifacts.setdefault("user_input", {})
-    if isinstance(bucket, dict):
-        bucket[form_id] = {"values": values, "comment": comment or "", "metadata": values.get("metadata", {})}
+    """Delegate to user_input_handler module."""
+    store_user_input_artifacts(run_ctx, form_id, values, comment)
 
 
 def _build_question_set_request(
@@ -2957,103 +2420,32 @@ def _build_question_set_request(
     question_set_key: str,
     context_pack_key: Optional[str],
 ) -> UserInputRequest:
-    schema = question_set.validation_schema or _question_set_schema(question_set)
-    constraints = {"question_set_id": question_set.id, "question_set_key": question_set_key}
-    if context_pack_key:
-        constraints["context_pack_key"] = context_pack_key
-    return UserInputRequest(
-        form_id=question_set.id,
-        prompt=question_set.title,
-        title=question_set.title,
-        mode=UserInputModes.CHOICE_INPUT,
-        input_type="text",
-        schema=schema,
-        defaults={},
-        required=list(question_set.required_fields),
-        constraints=constraints,
-        description=question_set.guidance,
+    """Delegate to user_input_handler module."""
+    return build_question_set_request(
+        question_set=question_set,
+        question_set_key=question_set_key,
+        context_pack_key=context_pack_key,
     )
 
 
-def _question_set_schema(question_set: QuestionSet) -> Dict[str, Any]:
-    properties: Dict[str, Any] = {}
-    required: List[str] = []
-    for question in question_set.questions:
-        spec: Dict[str, Any] = {}
-        if question.type == "enum":
-            spec["type"] = "string"
-            if question.enum:
-                spec["enum"] = list(question.enum)
-        elif question.type == "number":
-            spec["type"] = "number"
-        elif question.type == "boolean":
-            spec["type"] = "boolean"
-        elif question.type == "object":
-            spec["type"] = "object"
-        else:
-            spec["type"] = "string"
-        properties[question.key] = spec
-        if question.required or question.key in question_set.required_fields:
-            required.append(question.key)
-    return {"type": "object", "properties": properties, "required": required}
-
-
 def _resolve_question_set_from_request(request: UserInputRequest, run_ctx: RunContext) -> Optional[QuestionSet]:
-    constraints = request.constraints if isinstance(request.constraints, dict) else {}
-    question_set_id = constraints.get("question_set_id")
-    if not question_set_id:
-        return None
-    question_set_key = constraints.get("question_set_key") or f"question_set.{question_set_id}"
-    payload = run_ctx.artifacts.get(question_set_key)
-    if isinstance(payload, dict):
-        try:
-            return QuestionSet.model_validate(payload)
-        except Exception:
-            return None
-    return None
+    """Delegate to user_input_handler module."""
+    return resolve_question_set_from_request(request, run_ctx)
 
 
 def _question_set_key_from_request(request: UserInputRequest) -> Optional[str]:
-    constraints = request.constraints if isinstance(request.constraints, dict) else {}
-    key = constraints.get("question_set_key")
-    return key if isinstance(key, str) else None
+    """Delegate to user_input_handler module."""
+    return question_set_key_from_request(request)
 
 
 def _context_pack_key_from_request(request: UserInputRequest) -> Optional[str]:
-    constraints = request.constraints if isinstance(request.constraints, dict) else {}
-    key = constraints.get("context_pack_key")
-    return key if isinstance(key, str) else None
+    """Delegate to user_input_handler module."""
+    return context_pack_key_from_request(request)
 
 
 def _validate_question_set_answers(question_set: QuestionSet, answers: UserAnswers) -> List[str]:
-    errors: List[str] = []
-    if answers.question_set_id != question_set.id:
-        errors.append("question_set_id_mismatch")
-        return errors
-    question_map = {q.key: q for q in question_set.questions}
-    for key in answers.answers.keys():
-        if key not in question_map:
-            errors.append(f"unexpected_field:{key}")
-    for key in question_set.required_fields:
-        if key not in answers.answers:
-            errors.append(f"missing_required:{key}")
-    for question in question_set.questions:
-        if question.required and question.key not in answers.answers:
-            errors.append(f"missing_required:{question.key}")
-        if question.key not in answers.answers:
-            continue
-        value = answers.answers.get(question.key)
-        if question.type == "number" and not isinstance(value, (int, float)):
-            errors.append(f"type_mismatch:{question.key}")
-        elif question.type == "boolean" and not isinstance(value, bool):
-            errors.append(f"type_mismatch:{question.key}")
-        elif question.type == "object" and not isinstance(value, dict):
-            errors.append(f"type_mismatch:{question.key}")
-        elif question.type in {"string", "enum"} and not isinstance(value, str):
-            errors.append(f"type_mismatch:{question.key}")
-        if question.enum and value not in question.enum:
-            errors.append(f"enum_mismatch:{question.key}")
-    return errors
+    """Delegate to user_input_handler module."""
+    return validate_question_set_answers(question_set, answers)
 
 
 def _merge_context_pack_if_present(
@@ -3063,24 +2455,13 @@ def _merge_context_pack_if_present(
     answers: UserAnswers,
     context_pack_key: Optional[str],
 ) -> Optional[ContextPack]:
-    key = context_pack_key
-    if key is None:
-        for candidate in sorted(run_ctx.artifacts.keys()):
-            if candidate == "context_pack" or candidate.startswith("context_pack."):
-                key = candidate
-                break
-    if key is None:
-        return None
-    payload = run_ctx.artifacts.get(key)
-    if not isinstance(payload, dict):
-        return None
-    try:
-        context_pack = ContextPack.model_validate(payload)
-    except Exception:
-        return None
-    merged = merge_answers_into_context_pack(context_pack, question_set, answers)
-    run_ctx.artifacts[key] = merged.model_dump(mode="json")
-    return merged
+    """Delegate to user_input_handler module."""
+    return merge_into_context_pack(
+        run_ctx=run_ctx,
+        question_set=question_set,
+        answers=answers,
+        context_pack_key=context_pack_key,
+    )
 
 
 def _is_step_status(value: Any, status: StepStatus) -> bool:

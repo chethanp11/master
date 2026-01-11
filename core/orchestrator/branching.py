@@ -9,7 +9,7 @@ Deterministic branch evaluation with safe value extraction.
 
 from typing import Any, Dict, List, Optional
 
-from core.contracts.branch_schema import ConditionExpr
+from core.contracts.flow_schema import ConditionExpr
 from core.orchestrator.context import RunContext
 from core.memory.router import MemoryRouter
 

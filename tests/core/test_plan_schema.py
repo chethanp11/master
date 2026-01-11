@@ -4,7 +4,7 @@ from __future__ import annotations
 # Tests: Plan Proposal Schema
 # ==============================
 
-from core.contracts.plan_schema import EstimatedCost, PlanApproval, PlanProposal, PlanStep
+from core.contracts.action_plan_schema import EstimatedCost, PlanApproval, PlanProposal, PlanProposalStep as PlanStep
 
 
 def test_plan_proposal_schema_validates() -> None:

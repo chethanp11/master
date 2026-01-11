@@ -21,7 +21,7 @@ REGISTRY_TEMPLATE = dedent(
 
     from core.agents.base import BaseAgent
     from core.contracts.agent_schema import AgentMeta, AgentResult
-    from core.contracts.plan_schema import EstimatedCost, PlanProposal, PlanStep
+    from core.contracts.action_plan_schema import EstimatedCost, PlanProposal, PlanProposalStep as PlanStep
     from core.utils.product_loader import ProductRegistries
     from products.hello_world.agents.simple_agent import build as build_simple_agent
     from products.hello_world.tools.echo_tool import build as build_echo_tool

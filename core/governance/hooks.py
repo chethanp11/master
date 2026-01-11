@@ -26,8 +26,7 @@ from core.contracts.reasoning_schema import ReasoningPurpose
 from core.contracts.flow_schema import AutonomyLevel, FlowDef
 from core.contracts.budget_schema import Budget, BudgetState
 from core.governance.policies import PolicyDecision, PolicyEngine
-from core.governance.branch_gate import validate_branch_conditions
-from core.governance.loop_gate import validate_loop_conditions
+from core.governance.gates import validate_branch_conditions, validate_loop_conditions
 from core.governance.security import SecurityRedactor
 from core.governance.budgeting import consume_budget
 from core.orchestrator.context import RunContext, StepContext

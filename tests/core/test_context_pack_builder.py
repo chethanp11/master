@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List
 
-from core.contracts.context_pack_schema import ContextPackConfig
-from core.contracts.evidence_schema import EvidenceItem, EvidenceSource
+from core.contracts.context_pack_schema import ContextPackConfig, EvidenceItem, EvidenceSource
 from core.contracts.run_schema import ArtifactRef
 from core.knowledge.context_pack import build_context_pack, compute_context_pack_hash
 

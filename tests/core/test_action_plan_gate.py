@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.contracts.action_plan_schema import ActionPlan, PlanAgentCall, PlanToolCall
 from core.contracts.budget_schema import Budget
-from core.governance.plan_gate import gate_action_plan
+from core.governance.gates import gate_action_plan
 from core.tools.base import BaseTool
 from core.tools.registry import ToolRegistry
 from core.contracts.descriptors_schema import ToolDescriptor
