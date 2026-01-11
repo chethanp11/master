@@ -7,6 +7,11 @@ Flow contracts for master/.
 Flows are declarative graphs/sequences of steps executed by the orchestrator.
 These models define the stable structure for flow configs (YAML/JSON).
 
+This module consolidates:
+- flow_schema.py (FlowDef, StepDef, StepType, etc.)
+- branch_schema.py (ConditionExpr, ConditionOp, etc.)
+- loop_schema.py (StopConditionExpr, LoopState, etc.)
+
 Intended usage:
 - flow_loader parses YAML/JSON into FlowDef
 - orchestrator executes StepDef list/graph
@@ -20,17 +25,148 @@ from __future__ import annotations
 # ==============================
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+from typing_extensions import Annotated, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
-from core.contracts.branch_schema import ConditionExpr
-from core.contracts.loop_schema import StopConditionExpr
 from core.contracts.user_input_schema import UserInputRequest
 
+
 # ==============================
-# Enums
+# Branch Condition Types (from branch_schema)
 # ==============================
+
+ConditionOp = Literal["==", "!=", ">", ">=", "<", "<=", "in", "contains", "exists"]
+ConditionScalar = Union[str, int, float, bool, None]
+ConditionValue = Union[ConditionScalar, List[ConditionScalar]]
+
+_MAX_CONDITION_NODES = 20
+
+
+class ConditionExpr(BaseModel):
+    """
+    Deterministic condition expressions for branching.
+    Supports path/op comparisons and nested all/any groups.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    path: Optional[str] = None
+    op: Optional[ConditionOp] = None
+    value: Optional[ConditionValue] = None
+    all: Optional[List["ConditionExpr"]] = Field(default=None)
+    any: Optional[List["ConditionExpr"]] = Field(default=None)
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "ConditionExpr":
+        has_path = self.path is not None or self.op is not None
+        has_group = self.all is not None or self.any is not None
+        if has_path and has_group:
+            raise ValueError("condition cannot mix path/op with all/any")
+        if not has_path and not has_group:
+            raise ValueError("condition must include path/op or all/any")
+        if has_path:
+            if not self.path or not self.op:
+                raise ValueError("condition path and op are required")
+            if self.op == "exists":
+                return self
+            if self.value is None:
+                raise ValueError("condition value is required for op")
+        if self.all is not None and not self.all:
+            raise ValueError("all must contain at least one condition")
+        if self.any is not None and not self.any:
+            raise ValueError("any must contain at least one condition")
+        if self._count_nodes() > _MAX_CONDITION_NODES:
+            raise ValueError("condition too complex")
+        return self
+
+    def _count_nodes(self) -> int:
+        if self.all:
+            return 1 + sum(child._count_nodes() for child in self.all)
+        if self.any:
+            return 1 + sum(child._count_nodes() for child in self.any)
+        return 1
+
+
+ConditionExpr.model_rebuild()
+
+
+# ==============================
+# Loop Stop Condition Types (from loop_schema)
+# ==============================
+
+_MAX_STOP_NODES = 20
+
+
+class ConfidenceThreshold(BaseModel):
+    """Stop condition based on confidence threshold."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["confidence_threshold"]
+    path: str
+    op: Literal[">=", ">", "<", "<="] = ">="
+    value: float
+
+
+class NoMissingEvidence(BaseModel):
+    """Stop condition when no missing evidence exists."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["no_missing_evidence"]
+    path: str
+    op: Literal["empty"] = "empty"
+
+
+class StopConditionGroup(BaseModel):
+    """Group of stop conditions with all/any logic."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["all", "any"]
+    conditions: List["StopConditionExpr"]
+
+    @model_validator(mode="after")
+    def _validate_group(self) -> "StopConditionGroup":
+        if not self.conditions:
+            raise ValueError("stop condition group must include at least one condition")
+        if self._count_nodes() > _MAX_STOP_NODES:
+            raise ValueError("stop condition too complex")
+        return self
+
+    def _count_nodes(self) -> int:
+        return 1 + sum(_count_stop_nodes(cond) for cond in self.conditions)
+
+
+StopConditionExpr = Annotated[
+    Union[ConfidenceThreshold, NoMissingEvidence, StopConditionGroup],
+    Field(discriminator="kind"),
+]
+
+
+class LoopState(BaseModel):
+    """Runtime state for bounded loops."""
+    model_config = ConfigDict(extra="forbid")
+
+    iters_used: int = 0
+    terminated: bool = False
+    termination_reason: str = ""
+    last_evaluated_condition: Optional[Dict[str, Any]] = None
+    started_at: Optional[int] = None
+    ended_at: Optional[int] = None
+
+
+def _count_stop_nodes(condition: StopConditionExpr) -> int:
+    if isinstance(condition, StopConditionGroup):
+        return condition._count_nodes()
+    return 1
+
+
+StopConditionGroup.model_rebuild()
+
+
+# ==============================
+# Flow Enums
+# ==============================
+
 class StepType(str, Enum):
     """Supported step types in a flow."""
     AGENT = "agent"
@@ -213,3 +349,31 @@ class FlowDef(BaseModel):
     @property
     def name(self) -> str:
         return self.id
+
+
+# ==============================
+# Exports
+# ==============================
+
+__all__ = [
+    # Branch conditions (from branch_schema)
+    "ConditionOp",
+    "ConditionScalar",
+    "ConditionValue",
+    "ConditionExpr",
+    # Loop conditions (from loop_schema)
+    "ConfidenceThreshold",
+    "NoMissingEvidence",
+    "StopConditionGroup",
+    "StopConditionExpr",
+    "LoopState",
+    # Flow types
+    "StepType",
+    "AutonomyLevel",
+    "BackendType",
+    # Flow models
+    "RetryPolicy",
+    "StepDef",
+    "ToolBatchItem",
+    "FlowDef",
+]

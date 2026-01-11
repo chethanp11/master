@@ -5,6 +5,10 @@ from __future__ import annotations
 # ==============================
 """
 Contracts for executable action plans.
+
+This module consolidates:
+- action_plan_schema.py (ActionPlan, PlanToolCall, PlanAgentCall, PlanStep union, PlanGateResult)
+- plan_schema.py (PlanProposal, PlanProposalStep, PlanApproval, EstimatedCost)
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -15,6 +19,56 @@ from pydantic import BaseModel, ConfigDict, Field
 
 EvidenceType = Literal["table", "doc", "text"]
 
+
+# ==============================
+# Plan Proposal Models (from plan_schema)
+# ==============================
+
+class PlanProposalStep(BaseModel):
+    """
+    A step in a plan proposal (pre-execution phase).
+    Note: Renamed from PlanStep to avoid conflict with PlanStep discriminated union.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    description: str
+    step_type: str
+    tool: Optional[str] = None
+    agent: Optional[str] = None
+    requires_approval: bool = False
+
+
+class PlanApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    reason: str
+
+
+class EstimatedCost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    currency: str = "USD"
+    amount: float = 0.0
+    tokens: Optional[int] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlanProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "1.0"
+    summary: str
+    steps: List[PlanProposalStep]
+    required_tools: List[str] = Field(default_factory=list)
+    approvals: List[PlanApproval] = Field(default_factory=list)
+    estimated_cost: EstimatedCost
+
+
+# ==============================
+# Action Plan Models (original action_plan_schema)
+# ==============================
 
 class RequiredInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -82,3 +136,26 @@ class PlanGateResult(BaseModel):
     reasons: List[str] = Field(default_factory=list)
     effective_budget: Optional[Dict[str, Any]] = None
     sensitivity: str = "LOW"
+
+
+# ==============================
+# Exports
+# ==============================
+
+__all__ = [
+    # Plan Proposal (from plan_schema)
+    "PlanProposalStep",
+    "PlanApproval",
+    "EstimatedCost",
+    "PlanProposal",
+    # Action Plan
+    "EvidenceType",
+    "RequiredInput",
+    "ExpectedEvidence",
+    "PlanToolCall",
+    "PlanAgentCall",
+    "PlanStep",
+    "ActionPlan",
+    "PlanRejection",
+    "PlanGateResult",
+]

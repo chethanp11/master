@@ -1,47 +1,46 @@
+# ==============================
+# Plan Proposal Contracts (DEPRECATED)
+# ==============================
+"""
+DEPRECATED: This module is deprecated. Import from action_plan_schema instead.
+
+Migration:
+    # Old (deprecated):
+    from core.contracts.plan_schema import PlanStep, PlanProposal, EstimatedCost
+    
+    # New:
+    from core.contracts.action_plan_schema import PlanProposalStep, PlanProposal, EstimatedCost
+    
+Note: PlanStep has been renamed to PlanProposalStep to avoid conflict with
+      the PlanStep discriminated union in action_plan_schema.
+"""
+
 from __future__ import annotations
 
-# ==============================
-# Plan Proposal Contracts
-# ==============================
+import warnings
 
-from typing import Any, Dict, List, Optional
+# Re-exports for backwards compatibility
+from core.contracts.action_plan_schema import (
+    PlanProposalStep,
+    PlanApproval,
+    EstimatedCost,
+    PlanProposal,
+)
 
-from pydantic import BaseModel, ConfigDict, Field
+# Alias for backwards compatibility - PlanStep -> PlanProposalStep
+PlanStep = PlanProposalStep
 
+warnings.warn(
+    "plan_schema is deprecated. Import from action_plan_schema instead. "
+    "Note: PlanStep has been renamed to PlanProposalStep.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-class PlanStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    step_id: str
-    description: str
-    step_type: str
-    tool: Optional[str] = None
-    agent: Optional[str] = None
-    requires_approval: bool = False
-
-
-class PlanApproval(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    step_id: str
-    reason: str
-
-
-class EstimatedCost(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    currency: str = "USD"
-    amount: float = 0.0
-    tokens: Optional[int] = None
-    details: Dict[str, Any] = Field(default_factory=dict)
-
-
-class PlanProposal(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: str = "1.0"
-    summary: str
-    steps: List[PlanStep]
-    required_tools: List[str] = Field(default_factory=list)
-    approvals: List[PlanApproval] = Field(default_factory=list)
-    estimated_cost: EstimatedCost
+__all__ = [
+    "PlanStep",  # Aliased to PlanProposalStep for backwards compat
+    "PlanProposalStep",
+    "PlanApproval",
+    "EstimatedCost",
+    "PlanProposal",
+]

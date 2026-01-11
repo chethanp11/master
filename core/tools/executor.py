@@ -37,8 +37,6 @@ from core.governance.hooks import GovernanceHooks, HookDecision
 from core.governance.security import SecurityRedactor
 from core.orchestrator.context import StepContext
 from core.tools.backends.local_backend import LocalToolBackend
-from core.tools.backends.mcp_backend import MCPBackend
-from core.tools.backends.remote_backend import RemoteToolBackend
 from core.tools.registry import ToolRegistry
 
 
@@ -59,8 +57,6 @@ class ToolExecutor:
         self.backend_config = backend_config or {}
 
         self._local = LocalToolBackend()
-        self._remote = RemoteToolBackend(endpoint=self.backend_config.get("remote_endpoint"))
-        self._mcp = MCPBackend(server_name=self.backend_config.get("mcp_server"))
 
     def execute(self, *, tool_name: str, params: Dict[str, Any], ctx: StepContext) -> ToolResult:
         started = time.time()
@@ -86,24 +82,11 @@ class ToolExecutor:
         try:
             if self.backend_mode == "local":
                 result = self._local.run(tool=tool, params=params, ctx=ctx)
-            elif self.backend_mode == "remote_agent":
-                result = self._remote.run(tool=tool, params=params, ctx=ctx)
-            elif self.backend_mode == "mcp":
-                enabled = bool(self.backend_config.get("enable_mcp", False))
-                if not enabled:
-                    err = ToolError(
-                        code=ToolErrorCode.PERMISSION_DENIED,
-                        message="MCP backend is disabled. Set configs to enable_mcp=true to use it.",
-                        details={"tool": tool_name},
-                    )
-                    meta = self._meta(tool_name).model_copy(update={"backend": "mcp"})
-                    result = ToolResult(ok=False, data=None, error=err, meta=meta)
-                else:
-                    result = self._mcp.run(tool=tool, params=params, ctx=ctx)
             else:
+                # Remote and MCP backends removed in v1 simplification
                 err = ToolError(
                     code=ToolErrorCode.UNKNOWN,
-                    message=f"Unknown tool backend_mode: {self.backend_mode}",
+                    message=f"Unknown or unsupported backend_mode: {self.backend_mode}. Only 'local' is supported.",
                     details={"backend_mode": self.backend_mode},
                 )
                 result = ToolResult(ok=False, data=None, error=err, meta=self._meta(tool_name))
