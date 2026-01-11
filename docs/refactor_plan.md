@@ -918,3 +918,449 @@ Phase 0 (baseline)
 ```
 
 **Total: ~22 weeks for simplification + intelligence upgrade while preserving governance and auditability.**
+---
+
+## H) Product Refactoring Plan
+
+### Current Product Structure Analysis
+
+| Product | Agents | Tools | Flows | Tests | Boilerplate Lines |
+|---------|--------|-------|-------|-------|-------------------|
+| `hello_world` | 1 | 1 | 1 | 1 file | ~25 (registry.py) |
+| `ade` | 6 | 17 | 2 | 15 files | ~85 (registry.py) |
+
+### Issues Identified
+
+| Issue | Evidence | Impact |
+|-------|----------|--------|
+| **Verbose registry boilerplate** | `ade/registry.py` has 17 import lines + 17 register calls | High cognitive load; error-prone |
+| **No auto-discovery** | Every agent/tool requires manual import + registration | Friction adding new components |
+| **Duplicate build pattern** | Every agent/tool has `build()` function that's called twice (for name, then for registration) | Wasteful; could extract name from class |
+| **No product-level schema organization** | `ade/schemas/` has 9 files separate from `core/contracts/` | Unclear boundary; potential duplication |
+| **Inconsistent test organization** | Product tests under `products/ade/tests/` AND `tests/integration/` | Scattered coverage; hard to maintain |
+
+### Phase 14: Product Contract Simplification (2 weeks)
+
+**Goals:**
+- Reduce registry boilerplate by 80%
+- Enable auto-discovery of agents/tools
+- Standardize product schema location
+- Clarify test organization
+
+**Deliverables:**
+
+**14.1 Auto-discovery for agents and tools:**
+
+```python
+# New: core/utils/product_loader.py enhancement
+def auto_discover_agents(product_path: Path) -> list[AgentFactory]:
+    """Discover all agents in products/{name}/agents/ with @agent decorator."""
+    ...
+
+def auto_discover_tools(product_path: Path) -> list[ToolFactory]:
+    """Discover all tools in products/{name}/tools/ with @tool decorator."""
+    ...
+```
+
+**14.2 Decorator-based registration:**
+
+```python
+# products/ade/agents/intent_agent.py
+from core.agents.base import agent
+
+@agent(
+    name="ade.intent_agent",
+    purpose="Extract user intent from query",
+    capabilities=["intent_extraction", "entity_recognition"],
+)
+class IntentAgent(BaseAgent):
+    def run(self, ctx: StepContext) -> AgentResult:
+        ...
+```
+
+**14.3 Simplified registry.py:**
+
+```python
+# Before (85 lines)
+from products.ade.agents.intent_agent import build as build_intent_agent
+# ... 22 more imports ...
+def register(registries: ProductRegistries) -> None:
+    registries.agent_registry.register(build_intent_agent().name, build_intent_agent)
+    # ... 22 more registrations ...
+
+# After (10 lines)
+from core.utils.product_loader import auto_register
+
+def register(registries: ProductRegistries) -> None:
+    auto_register(registries, product_path=Path(__file__).parent)
+```
+
+**14.4 Product schema guidelines:**
+
+| Schema Type | Location | Rationale |
+|-------------|----------|-----------|
+| Core contracts (AgentResult, ToolResult, etc.) | `core/contracts/` | Shared across all products |
+| Product-specific domain schemas | `products/{name}/schemas/` | Product-owned; not shared |
+| Cross-product domain schemas | `core/contracts/domain/` | New: for reusable domain models |
+
+**Exit Criteria:**
+- `ade/registry.py` ≤ 15 lines
+- New products require only decorated classes + minimal registry
+- All existing tests pass
+
+---
+
+### Phase 15: Product Test Consolidation (1 week)
+
+**Goals:**
+- Clear test ownership (product vs platform)
+- Eliminate duplicate test patterns
+- Standardize product test structure
+
+**Deliverables:**
+
+**15.1 Test location rules:**
+
+| Test Type | Location | Runner |
+|-----------|----------|--------|
+| Product unit tests | `products/{name}/tests/unit/` | `pytest products/{name}/tests/unit/` |
+| Product integration tests | `products/{name}/tests/integration/` | `pytest products/{name}/tests/integration/` |
+| Product smoke tests | `products/{name}/tests/test_smoke.py` | `pytest products/{name}/tests/ -k smoke` |
+| Platform core tests | `tests/core/` | `pytest tests/core/` |
+| Platform integration tests | `tests/integration/` | `pytest tests/integration/` |
+| Architecture invariants | `tests/architecture/` | `pytest tests/architecture/` |
+| Intelligence acceptance | `tests/acceptance_intelligence/` | `pytest tests/acceptance_intelligence/` |
+
+**15.2 Move misplaced tests:**
+
+| Current Location | New Location | Reason |
+|------------------|--------------|--------|
+| `tests/integration/test_ade_evidence_bundle.py` | `products/ade/tests/integration/` | Product-specific |
+| `tests/integration/test_business_report_html.py` | `products/ade/tests/integration/` | Product-specific |
+
+**15.3 Standard product test template:**
+
+```
+products/{name}/tests/
+├── __init__.py
+├── conftest.py           # Product-specific fixtures
+├── test_smoke.py         # Quick sanity check
+├── unit/
+│   ├── __init__.py
+│   └── test_{tool}.py    # One file per tool
+└── integration/
+    ├── __init__.py
+    └── test_{flow}.py    # One file per flow
+```
+
+**Exit Criteria:**
+- All product tests under `products/{name}/tests/`
+- Platform tests under `tests/` test platform, not product logic
+- CI runs product tests in parallel by product
+
+---
+
+## I) Comprehensive Test Plan
+
+### Current Test Inventory
+
+| Category | Location | Count | Coverage |
+|----------|----------|-------|----------|
+| Core unit tests | `tests/core/` | 38 files | Orchestrator, governance, contracts, tools, agents |
+| Integration tests | `tests/integration/` | 21 files | API, CLI, UI, end-to-end flows |
+| Architecture tests | `tests/architecture/` | 3 files | Import boundaries, invariants |
+| Acceptance tests | `tests/acceptance_intelligence/` | 2 files | Intelligence upgrade baselines |
+| Unit tests | `tests/unit/` | 13 files | Guardrails, boundaries |
+| ADE product tests | `products/ade/tests/` | 15 files | Product-specific unit + integration |
+| Hello World tests | `products/hello_world/tests/` | 1 file | Basic flow validation |
+
+### Test Gaps Identified
+
+| Gap | Risk | Priority |
+|-----|------|----------|
+| No explicit determinism tests | Replay may drift | High |
+| Limited HITL edge case coverage | Approval bugs in production | High |
+| No budget enforcement stress tests | Runaway loops | Medium |
+| No multi-product isolation tests | Cross-product leakage | Medium |
+| Missing trace contract validation | Observability regressions | Medium |
+| No performance regression tests | Latency creep | Low |
+
+### Phase 16: Test Infrastructure Hardening (2 weeks)
+
+**Goals:**
+- Fill critical test gaps
+- Standardize test patterns
+- Enable confident refactoring
+
+**Deliverables:**
+
+**16.1 Determinism Test Suite:**
+
+```python
+# tests/acceptance_intelligence/test_determinism.py
+
+def test_same_input_same_output():
+    """Run same flow twice with identical input; assert identical output."""
+    result1 = run_flow("hello_world", payload={"message": "test"})
+    result2 = run_flow("hello_world", payload={"message": "test"})
+    assert result1.artifacts == result2.artifacts
+    assert result1.trace_hash == result2.trace_hash
+
+def test_resume_produces_same_result():
+    """Pause at HITL, resume with same approval; assert same final state."""
+    ...
+```
+
+**16.2 HITL Edge Case Suite:**
+
+```python
+# tests/core/test_hitl_edge_cases.py
+
+def test_double_resume_idempotent():
+    """Resuming an already-resumed run is safe and idempotent."""
+
+def test_resume_with_wrong_approval_rejected():
+    """Approval for wrong step is rejected with clear error."""
+
+def test_resume_expired_approval():
+    """Approval after timeout is handled gracefully."""
+
+def test_concurrent_approvals_serialized():
+    """Multiple approvers on same run are serialized safely."""
+```
+
+**16.3 Budget Enforcement Suite:**
+
+```python
+# tests/core/test_budget_enforcement.py
+
+def test_max_passes_enforced():
+    """Loop terminates at max_passes even if condition not met."""
+
+def test_max_tool_calls_enforced():
+    """Run fails gracefully when tool call budget exceeded."""
+
+def test_budget_exceeded_triggers_hitl():
+    """Budget exceeded with HITL escalation policy pauses for approval."""
+
+def test_cost_units_tracked_accurately():
+    """Cost units accumulate correctly across tools and model calls."""
+```
+
+**16.4 Multi-Product Isolation Suite:**
+
+```python
+# tests/architecture/test_product_isolation.py
+
+def test_no_cross_product_imports():
+    """No product imports another product's modules."""
+
+def test_product_cannot_access_other_product_runs():
+    """API enforces product isolation for run queries."""
+
+def test_product_tools_only_registered_for_product():
+    """Tool registry is scoped per product at runtime."""
+```
+
+**16.5 Trace Contract Validation:**
+
+```python
+# tests/core/test_trace_contract.py (expand existing)
+
+def test_every_step_emits_trace():
+    """Every step type emits at least one trace event."""
+
+def test_trace_contains_required_fields():
+    """All trace events have run_id, step_id, timestamp, event_type."""
+
+def test_evidence_items_linked_in_trace():
+    """EvidenceItem IDs appear in trace with source mapping."""
+```
+
+**Exit Criteria:**
+- All test gaps covered with explicit tests
+- CI runs full suite on every PR
+- Test coverage report generated and tracked
+
+---
+
+### Phase 17: Regression Prevention Framework (1 week)
+
+**Goals:**
+- Prevent regressions during refactoring
+- Lock in architectural invariants
+- Enable safe parallel development
+
+**Deliverables:**
+
+**17.1 Golden Path Tests:**
+
+```python
+# tests/acceptance_intelligence/test_golden_paths.py
+
+GOLDEN_PATHS = [
+    ("hello_world", "hello_world", {"message": "test"}, "expected_output.json"),
+    ("ade", "ade_v1", {"query": "revenue by region"}, "expected_ade_output.json"),
+]
+
+@pytest.mark.parametrize("product,flow,payload,expected", GOLDEN_PATHS)
+def test_golden_path(product, flow, payload, expected):
+    """Run golden path and compare to stored expected output."""
+    result = run_flow(product, flow, payload)
+    expected_data = load_expected(expected)
+    assert_golden_match(result, expected_data)
+```
+
+**17.2 Invariant Tests (expand existing):**
+
+```python
+# tests/architecture/test_master_v1_invariants.py (expand)
+
+def test_agents_never_call_tools_directly():
+    """Scan all agent files; assert no ToolExecutor imports."""
+
+def test_tools_never_call_llm_directly():
+    """Scan all tool files; assert no OpenAI/Anthropic imports."""
+
+def test_products_never_import_core_internals():
+    """Products only import from allowed core modules."""
+
+def test_no_env_reads_outside_config_loader():
+    """Only config/loader.py reads os.environ."""
+
+def test_no_persistence_outside_memory():
+    """Only memory/*.py writes to disk/DB."""
+```
+
+**17.3 Refactoring Safety Checklist:**
+
+Before each refactoring phase:
+- [ ] All golden path tests pass
+- [ ] All architecture invariant tests pass
+- [ ] All acceptance intelligence tests pass
+- [ ] No new warnings in deprecated module imports
+
+After each refactoring phase:
+- [ ] Same tests pass (regression check)
+- [ ] No new test failures
+- [ ] Coverage did not decrease
+- [ ] Performance benchmarks stable (±10%)
+
+**Exit Criteria:**
+- Golden paths defined for all products
+- Invariant tests cover all architectural rules
+- CI blocks merge on any invariant violation
+
+---
+
+### Test Execution Strategy
+
+**CI Pipeline Stages:**
+
+```
+Stage 1: Fast Feedback (< 2 min)
+├── Lint (ruff, mypy)
+├── Architecture invariants
+└── Unit tests (parallel)
+
+Stage 2: Core Validation (< 5 min)
+├── Core tests
+├── Governance tests
+└── Contract tests
+
+Stage 3: Integration (< 10 min)
+├── API integration tests
+├── CLI integration tests
+├── Product integration tests (parallel by product)
+
+Stage 4: Acceptance (< 5 min)
+├── Intelligence acceptance tests
+├── Golden path tests
+└── Determinism tests
+
+Stage 5: Extended (nightly)
+├── Performance benchmarks
+├── Stress tests
+├── Full observability validation
+```
+
+**Test Markers:**
+
+```python
+@pytest.mark.fast        # < 100ms, no I/O
+@pytest.mark.unit        # Single module, mocked dependencies
+@pytest.mark.integration # Multiple modules, real dependencies
+@pytest.mark.acceptance  # End-to-end, black-box
+@pytest.mark.slow        # > 10s, run nightly
+@pytest.mark.flaky       # Known intermittent, tracked for fix
+```
+
+---
+
+## G) Summary: Simplification ROI (Updated)
+
+### Simplification Phases (Weeks 1-10)
+
+| Phase | Effort | Complexity Reduction | Risk |
+|-------|--------|---------------------|------|
+| 0. Baseline & Safety Net | 1 week | Acceptance test foundation | Very Low |
+| 1. Contract Consolidation | 2 weeks | 21 → 14 files (33%) | Low |
+| 2. Unused Module Removal | 1 week | -3 modules | Very Low |
+| 3. Engine Decomposition | 3 weeks | 3083 → ~500 lines in main file | Medium |
+| 4. Governance Consolidation | 1 week | 9 → 5 files | Low |
+| 5. Registry Unification | 1 week | -~100 lines duplication | Low |
+| 6. UI Modularization | 1 week | 1046 → ~150 lines in main file | Low |
+
+### Intelligence Enhancement Phases (Weeks 11-22)
+
+| Phase | Effort | Capability Added | Risk |
+|-------|--------|-----------------|------|
+| 7. Descriptors & Evidence | 2 weeks | Semantic catalog + provenance | Medium |
+| 8. Context Pack Builder | 2 weeks | Deterministic LLM input curation | Low |
+| 9. Bounded Reasoning & Critic | 3 weeks | Multi-pass reasoning + quality checks | Medium |
+| 10. Parallel Tool Execution | 1 week | Efficient read-only batching | Low |
+| 11. Missing-Info Loop | 1 week | Structured user input gathering | Low |
+| 12. Retrieval Augmentation | 1 week | Approved cross-run learning | Medium |
+| 13. Advisory Agent Set | 2 weeks | Structured intelligence layer | Medium |
+
+### Product & Test Phases (Weeks 23-26)
+
+| Phase | Effort | Improvement | Risk |
+|-------|--------|-------------|------|
+| 14. Product Contract Simplification | 2 weeks | 80% less registry boilerplate | Low |
+| 15. Product Test Consolidation | 1 week | Clear test ownership | Very Low |
+| 16. Test Infrastructure Hardening | 2 weeks | Fill critical test gaps | Low |
+| 17. Regression Prevention Framework | 1 week | Golden paths + invariants | Very Low |
+
+### Updated Dependency Map
+
+```
+Phase 0 (baseline)
+    │
+    ├── Phase 1 (contracts) ─────────────────────┐
+    │       │                                    │
+    │       └── Phase 7 (descriptors/evidence) ──┼── Phase 8 (context pack)
+    │                   │                        │           │
+    ├── Phase 2 (removal)                        │           └── Phase 9 (reasoning/critic)
+    │                                            │                   │
+    ├── Phase 3 (engine) ────────────────────────┼── Phase 10 (parallel tools)
+    │       │                                    │           │
+    │       └── Phase 11 (question loop) ────────┘           │
+    │                                                        │
+    ├── Phase 4 (governance) ── Phase 12 (retrieval) ────────┘
+    │
+    ├── Phase 5 (registry) ── Phase 14 (product simplification)
+    │                               │
+    │                               └── Phase 15 (test consolidation)
+    ├── Phase 6 (UI)
+    │
+    ├── Phase 13 (advisory agents) ← depends on 7, 8, 9
+    │
+    └── Phase 16 (test hardening) ── Phase 17 (regression prevention)
+```
+
+**Total: ~26 weeks for complete platform modernization including:**
+- 40-50% core complexity reduction
+- Intelligence upgrade with governance
+- 80% product boilerplate reduction
+- Comprehensive test coverage
