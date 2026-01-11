@@ -328,6 +328,12 @@ def validate_question_set_answers(
 ) -> List[str]:
     """
     Validate answers against a question set.
+    
+    Supports:
+    - Type checking (string, number, boolean, enum, object)
+    - Required field validation
+    - Enum value validation
+    - Custom validation rules (min, max, pattern, minLength, maxLength)
 
     Args:
         question_set: The question set
@@ -358,6 +364,8 @@ def validate_question_set_answers(
         if question.key not in answers.answers:
             continue
         value = answers.answers.get(question.key)
+        
+        # Type validation
         if question.type == "number" and not isinstance(value, (int, float)):
             errors.append(f"type_mismatch:{question.key}")
         elif question.type == "boolean" and not isinstance(value, bool):
@@ -366,9 +374,69 @@ def validate_question_set_answers(
             errors.append(f"type_mismatch:{question.key}")
         elif question.type in {"string", "enum"} and not isinstance(value, str):
             errors.append(f"type_mismatch:{question.key}")
+        
+        # Enum validation
         if question.enum and value not in question.enum:
             errors.append(f"enum_mismatch:{question.key}")
+        
+        # Custom validation rules
+        validation = getattr(question, "validation", {}) or {}
+        if validation:
+            field_errors = _validate_field_rules(question.key, value, validation, question.type)
+            errors.extend(field_errors)
 
+    return errors
+
+
+def _validate_field_rules(
+    key: str,
+    value: Any,
+    rules: Dict[str, Any],
+    field_type: str,
+) -> List[str]:
+    """
+    Validate a field value against custom validation rules.
+    
+    Supported rules:
+    - min/max: For numbers
+    - minLength/maxLength: For strings
+    - pattern: Regex pattern for strings
+    
+    Args:
+        key: Field key
+        value: Field value
+        rules: Validation rules dict
+        field_type: Field type
+        
+    Returns:
+        List of validation error strings
+    """
+    import re
+    
+    errors: List[str] = []
+    
+    # Numeric range validation
+    if field_type == "number" and isinstance(value, (int, float)):
+        if "min" in rules and value < rules["min"]:
+            errors.append(f"validation_min:{key}")
+        if "max" in rules and value > rules["max"]:
+            errors.append(f"validation_max:{key}")
+    
+    # String length validation
+    if field_type == "string" and isinstance(value, str):
+        if "minLength" in rules and len(value) < rules["minLength"]:
+            errors.append(f"validation_minLength:{key}")
+        if "maxLength" in rules and len(value) > rules["maxLength"]:
+            errors.append(f"validation_maxLength:{key}")
+        
+        # Pattern validation
+        if "pattern" in rules:
+            try:
+                if not re.match(rules["pattern"], value):
+                    errors.append(f"validation_pattern:{key}")
+            except re.error:
+                pass  # Invalid regex, skip validation
+    
     return errors
 
 

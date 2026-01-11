@@ -58,27 +58,123 @@ from products.ade.tools.render_decision_packet_html import build as build_render
 from products.ade.tools.render_business_report_html import build as build_render_business_report_html
 from products.ade.tools.recommend_chart import build as build_recommend_chart
 
+from products.ade.descriptors import (
+    TOOL_DESCRIPTORS,
+    AGENT_DESCRIPTORS,
+)
+
 
 def register(registries: ProductRegistries) -> None:
-    registries.agent_registry.register(build_agent().name, build_agent)
-    registries.agent_registry.register(build_intent_agent().name, build_intent_agent)
-    registries.agent_registry.register(build_plan_agent().name, build_plan_agent)
-    registries.agent_registry.register(build_plan_proposal_agent().name, build_plan_proposal_agent)
-    registries.agent_registry.register(build_planning_agent().name, build_planning_agent)
-    registries.agent_registry.register(build_sufficiency_evaluator().name, build_sufficiency_evaluator)
-    registries.tool_registry.register(build_data_reader().name, build_data_reader)
-    registries.tool_registry.register(build_chart_spec().name, build_chart_spec)
-    registries.tool_registry.register(build_recommend_chart().name, build_recommend_chart)
-    registries.tool_registry.register(build_detect_anomalies().name, build_detect_anomalies)
-    registries.tool_registry.register(build_driver_analysis().name, build_driver_analysis)
-    registries.tool_registry.register(build_assemble_insight_card().name, build_assemble_insight_card)
-    registries.tool_registry.register(build_assemble_decision_packet().name, build_assemble_decision_packet)
-    registries.tool_registry.register(build_assemble_evidence_bundle().name, build_assemble_evidence_bundle)
-    registries.tool_registry.register(build_build_reasoning_narrative().name, build_build_reasoning_narrative)
-    registries.tool_registry.register(build_compute_business_metrics().name, build_compute_business_metrics)
-    registries.tool_registry.register(build_assemble_business_report().name, build_assemble_business_report)
-    registries.tool_registry.register(build_export_pdf().name, build_export_pdf)
-    registries.tool_registry.register(build_render_business_report_html().name, build_render_business_report_html)
-    registries.tool_registry.register(build_render_decision_packet_html().name, build_render_decision_packet_html)
-    registries.tool_registry.register(build_hypothesis_test_data_outage().name, build_hypothesis_test_data_outage)
-    registries.tool_registry.register(build_hypothesis_test_seasonality().name, build_hypothesis_test_seasonality)
+    # Register agents with descriptors
+    registries.agent_registry.register(
+        build_agent().name,
+        build_agent,
+        descriptor=AGENT_DESCRIPTORS.get("dashboard_agent"),
+    )
+    registries.agent_registry.register(
+        build_intent_agent().name,
+        build_intent_agent,
+        descriptor=AGENT_DESCRIPTORS.get("intent_agent"),
+    )
+    registries.agent_registry.register(
+        build_plan_agent().name,
+        build_plan_agent,
+        descriptor=AGENT_DESCRIPTORS.get("plan_agent"),
+    )
+    registries.agent_registry.register(
+        build_plan_proposal_agent().name,
+        build_plan_proposal_agent,
+        descriptor=AGENT_DESCRIPTORS.get("plan_proposal_agent"),
+    )
+    registries.agent_registry.register(
+        build_planning_agent().name,
+        build_planning_agent,
+        descriptor=AGENT_DESCRIPTORS.get("planning_agent"),
+    )
+    registries.agent_registry.register(
+        build_sufficiency_evaluator().name,
+        build_sufficiency_evaluator,
+        descriptor=AGENT_DESCRIPTORS.get("sufficiency_evaluator"),
+    )
+
+    # Register tools with descriptors
+    registries.tool_registry.register(
+        build_data_reader().name,
+        build_data_reader,
+        descriptor=TOOL_DESCRIPTORS.get("data_reader"),
+    )
+    registries.tool_registry.register(
+        build_chart_spec().name,
+        build_chart_spec,
+        descriptor=TOOL_DESCRIPTORS.get("build_chart_spec"),
+    )
+    registries.tool_registry.register(
+        build_recommend_chart().name,
+        build_recommend_chart,
+        descriptor=TOOL_DESCRIPTORS.get("recommend_chart"),
+    )
+    registries.tool_registry.register(
+        build_detect_anomalies().name,
+        build_detect_anomalies,
+        descriptor=TOOL_DESCRIPTORS.get("detect_anomalies"),
+    )
+    registries.tool_registry.register(
+        build_driver_analysis().name,
+        build_driver_analysis,
+        descriptor=TOOL_DESCRIPTORS.get("driver_analysis"),
+    )
+    registries.tool_registry.register(
+        build_assemble_insight_card().name,
+        build_assemble_insight_card,
+        descriptor=TOOL_DESCRIPTORS.get("assemble_insight_card"),
+    )
+    registries.tool_registry.register(
+        build_assemble_decision_packet().name,
+        build_assemble_decision_packet,
+        descriptor=TOOL_DESCRIPTORS.get("assemble_decision_packet"),
+    )
+    registries.tool_registry.register(
+        build_assemble_evidence_bundle().name,
+        build_assemble_evidence_bundle,
+        descriptor=TOOL_DESCRIPTORS.get("assemble_evidence_bundle"),
+    )
+    registries.tool_registry.register(
+        build_build_reasoning_narrative().name,
+        build_build_reasoning_narrative,
+        descriptor=TOOL_DESCRIPTORS.get("build_reasoning_narrative"),
+    )
+    registries.tool_registry.register(
+        build_compute_business_metrics().name,
+        build_compute_business_metrics,
+        descriptor=TOOL_DESCRIPTORS.get("compute_business_metrics"),
+    )
+    registries.tool_registry.register(
+        build_assemble_business_report().name,
+        build_assemble_business_report,
+        descriptor=TOOL_DESCRIPTORS.get("assemble_business_report"),
+    )
+    registries.tool_registry.register(
+        build_export_pdf().name,
+        build_export_pdf,
+        descriptor=TOOL_DESCRIPTORS.get("export_pdf"),
+    )
+    registries.tool_registry.register(
+        build_render_business_report_html().name,
+        build_render_business_report_html,
+        descriptor=TOOL_DESCRIPTORS.get("render_business_report_html"),
+    )
+    registries.tool_registry.register(
+        build_render_decision_packet_html().name,
+        build_render_decision_packet_html,
+        descriptor=TOOL_DESCRIPTORS.get("render_decision_packet_html"),
+    )
+    registries.tool_registry.register(
+        build_hypothesis_test_data_outage().name,
+        build_hypothesis_test_data_outage,
+        descriptor=TOOL_DESCRIPTORS.get("hypothesis_test_data_outage"),
+    )
+    registries.tool_registry.register(
+        build_hypothesis_test_seasonality().name,
+        build_hypothesis_test_seasonality,
+        descriptor=TOOL_DESCRIPTORS.get("hypothesis_test_seasonality"),
+    )

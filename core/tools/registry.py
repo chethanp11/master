@@ -205,6 +205,7 @@ class ToolRegistry(ComponentRegistry[BaseTool]):
         description = ""
         risk = None
         tags = list(meta.get("tags") or [])
+        capabilities = list(meta.get("capabilities") or tags)  # Fall back to tags
         
         read_only = bool(meta.get("read_only")) if "read_only" in meta else False
         side_effect = bool(meta.get("side_effect")) if "side_effect" in meta else True
@@ -218,6 +219,7 @@ class ToolRegistry(ComponentRegistry[BaseTool]):
         return ToolDescriptor(
             name=name,
             description=description,
+            capabilities=capabilities,
             tags=tags,
             input_schema_ref=meta.get("input_schema_ref"),
             output_schema_ref=meta.get("output_schema_ref"),

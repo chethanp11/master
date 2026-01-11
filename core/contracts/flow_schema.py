@@ -309,11 +309,39 @@ class StepDef(BaseModel):
 
 
 class ToolBatchItem(BaseModel):
+    """Item in a tool batch with tool name, inputs, and optional alias."""
     model_config = ConfigDict(extra="forbid")
 
     tool_name: str
     inputs: Dict[str, Any] = Field(default_factory=dict)
     alias: Optional[str] = None
+
+
+class ToolBatchStepDef(BaseModel):
+    """Declarative tool batch step definition for parallel read-only tool execution.
+    
+    Tool batch steps execute multiple read-only tools in parallel (or sequential)
+    and merge results with deterministic ordering by tool name.
+    
+    Rules:
+    - All tools must have read_only=true and side_effect=false
+    - Merge strategy: deterministic ordering by tool name
+    - EvidenceItems appended with stable IDs
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=80, description="Unique step id.")
+    type: Literal["tool_batch"] = Field(default="tool_batch")
+    tools: List[str] = Field(..., min_length=1, max_length=20, description="List of tool names to execute.")
+    parallel: bool = Field(default=True, description="Execute tools in parallel if True.")
+    inputs: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Per-tool inputs keyed by tool name.",
+    )
+    merge_strategy: Literal["by_tool_name", "by_completion_order"] = Field(
+        default="by_tool_name",
+        description="Strategy for merging results.",
+    )
 
 
 StepDef.model_rebuild()
@@ -375,5 +403,6 @@ __all__ = [
     "RetryPolicy",
     "StepDef",
     "ToolBatchItem",
+    "ToolBatchStepDef",
     "FlowDef",
 ]

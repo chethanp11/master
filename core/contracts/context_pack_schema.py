@@ -24,7 +24,7 @@ from core.contracts.run_schema import ArtifactRef
 # Evidence Models (from evidence_schema)
 # ==============================
 
-EvidenceType = Literal["table", "doc", "text"]
+EvidenceType = Literal["table", "doc", "text", "metric", "chart", "document"]
 
 
 class EvidenceSource(BaseModel):

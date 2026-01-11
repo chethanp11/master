@@ -101,15 +101,27 @@ class HitlResolution(BaseModel):
 class Question(BaseModel):
     """
     A single question to be answered by the user.
+    
+    Supports multiple input types:
+    - string: Free text input
+    - number: Numeric input
+    - boolean: Yes/no input  
+    - enum: Selection from predefined choices
+    - object: Structured JSON input
     """
     model_config = ConfigDict(extra="forbid")
 
-    key: str
-    prompt: str
-    type: QuestionType
-    enum: Optional[List[str]] = None
-    required: bool = False
-    help: Optional[str] = None
+    key: str = Field(..., description="Unique key for this question.")
+    prompt: str = Field(..., description="Question text to display.")
+    type: QuestionType = Field(default="string", description="Input type.")
+    enum: Optional[List[str]] = Field(default=None, description="Choices for enum type.")
+    required: bool = Field(default=False, description="Whether answer is required.")
+    help: Optional[str] = Field(default=None, description="Help text for the user.")
+    validation: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validation rules: min, max, pattern, etc.",
+    )
+    default: Optional[Any] = Field(default=None, description="Default value.")
 
 
 class QuestionSetProvenance(BaseModel):
@@ -123,16 +135,23 @@ class QuestionSetProvenance(BaseModel):
 class QuestionSet(BaseModel):
     """
     A collection of questions to be presented to the user.
+    
+    Used for structured information gathering with validation.
+    Supports schema-driven input with required fields and type checking.
     """
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    title: str
-    questions: List[Question]
-    required_fields: List[str] = Field(default_factory=list)
-    validation_schema: Dict[str, Any] = Field(default_factory=dict)
-    guidance: Optional[str] = None
-    provenance: QuestionSetProvenance
+    id: str = Field(..., description="Unique identifier for this question set.")
+    title: str = Field(..., description="Title displayed to user.")
+    questions: List[Question] = Field(..., description="List of questions.")
+    required_fields: List[str] = Field(default_factory=list, description="Keys that must be answered.")
+    validation_schema: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON Schema for validating all answers.",
+    )
+    context: str = Field(default="", description="Context/background for the questions.")
+    guidance: Optional[str] = Field(default=None, description="User guidance text.")
+    provenance: QuestionSetProvenance = Field(..., description="Source/origin of this question set.")
 
     @model_validator(mode="after")
     def _validate_questions(self) -> "QuestionSet":

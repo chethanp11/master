@@ -5,6 +5,11 @@ from __future__ import annotations
 # ==============================
 """
 Read-only retrieval tool restricted to approved sources.
+
+Supports:
+- query_prior_runs: Search previous run records for evidence
+- query_approved_sources: Search approved knowledge sources
+- Full provenance tracking for all retrieved evidence
 """
 
 import hashlib
@@ -23,6 +28,192 @@ from core.orchestrator.context import StepContext
 from core.tools.base import BaseTool
 from core.tools.registry import ToolRegistry
 from core.contracts.descriptors_schema import ToolDescriptor
+
+
+# ============================================================================
+# Retrieval Policy Types
+# ============================================================================
+
+
+class RetrievalPolicy:
+    """Policy for controlling retrieval source access."""
+    
+    def __init__(
+        self,
+        *,
+        allowed_sources: Optional[List[str]] = None,
+        blocked_sources: Optional[List[str]] = None,
+    ) -> None:
+        self.allowed_sources = allowed_sources or []
+        self.blocked_sources = blocked_sources or []
+    
+    def is_allowed(self, source: str) -> bool:
+        """Check if a source is allowed by this policy."""
+        if source in self.blocked_sources:
+            return False
+        if not self.allowed_sources:
+            return True  # Empty allowed = allow all not blocked
+        return source in self.allowed_sources
+    
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "RetrievalPolicy":
+        """Create policy from config dict."""
+        return cls(
+            allowed_sources=config.get("allowed_sources"),
+            blocked_sources=config.get("blocked_sources"),
+        )
+
+
+# ============================================================================
+# Query Functions
+# ============================================================================
+
+
+def query_prior_runs(
+    *,
+    memory: MemoryRouter,
+    product: str,
+    flow: str,
+    query: str,
+    top_k: int = 5,
+    time_range: Optional[Any] = None,
+    policy: Optional[RetrievalPolicy] = None,
+) -> List[EvidenceItem]:
+    """
+    Query prior run records for evidence.
+    
+    Searches run input/output/summary for matching content.
+    Returns EvidenceItems with full provenance.
+    
+    Args:
+        memory: Memory router for run access
+        product: Product name
+        flow: Flow name  
+        query: Search query
+        top_k: Maximum results to return
+        time_range: Optional time range filter
+        policy: Optional retrieval policy
+        
+    Returns:
+        List of EvidenceItems with provenance
+    """
+    source_type = "runs:current_product"
+    if policy and not policy.is_allowed(source_type):
+        return []
+    
+    retrieval_query = RetrievalQuery(
+        query=query,
+        top_k=top_k,
+        sources_requested=["run_records"],
+        product=product,
+        flow=flow,
+        time_range=time_range,
+    )
+    
+    hits = _search_runs(memory, product, flow, retrieval_query)
+    hits.sort(key=lambda hit: (-hit.score, hit.timestamp or 0, hit.id_key))
+    hits = hits[:top_k]
+    
+    return _hits_to_evidence(hits, "query_prior_runs")
+
+
+def query_approved_sources(
+    *,
+    memory: MemoryRouter,
+    product: str,
+    flow: str,
+    query: str,
+    top_k: int = 5,
+    sources: Optional[List[str]] = None,
+    policy: Optional[RetrievalPolicy] = None,
+) -> List[EvidenceItem]:
+    """
+    Query approved knowledge sources for evidence.
+    
+    Searches trace events and approved knowledge bases.
+    Returns EvidenceItems with full provenance.
+    
+    Args:
+        memory: Memory router
+        product: Product name
+        flow: Flow name
+        query: Search query
+        top_k: Maximum results
+        sources: Specific sources to query
+        policy: Optional retrieval policy
+        
+    Returns:
+        List of EvidenceItems with provenance
+    """
+    requested = sources or ["trace_events"]
+    
+    # Filter by policy
+    if policy:
+        requested = [s for s in requested if policy.is_allowed(s)]
+    
+    if not requested:
+        return []
+    
+    retrieval_query = RetrievalQuery(
+        query=query,
+        top_k=top_k,
+        sources_requested=requested,
+        product=product,
+        flow=flow,
+    )
+    
+    hits: List[_Hit] = []
+    if "trace_events" in requested:
+        hits.extend(_search_traces(memory, product, flow, retrieval_query))
+    
+    hits.sort(key=lambda hit: (-hit.score, hit.timestamp or 0, hit.id_key))
+    hits = hits[:top_k]
+    
+    return _hits_to_evidence(hits, "query_approved_sources")
+
+
+def _hits_to_evidence(hits: List["_Hit"], tool_name: str) -> List[EvidenceItem]:
+    """Convert hits to EvidenceItems with full provenance."""
+    if not hits:
+        return []
+    
+    max_score = max((hit.score for hit in hits), default=1)
+    evidence: List[EvidenceItem] = []
+    
+    for idx, hit in enumerate(hits):
+        evidence_id = _stable_evidence_id(hit, idx)
+        snippet = _bounded_snippet(hit.text)
+        artifact_ref = ArtifactRef(
+            key=f"retrieval.{evidence_id}",
+            kind="text",
+            uri=f"memory://retrieval/{evidence_id}",
+        )
+        
+        confidence = min(1.0, hit.score / max_score) if max_score else 0.5
+        evidence_item = EvidenceItem(
+            id=evidence_id,
+            type="text",
+            source=EvidenceSource(tool=tool_name, uri=artifact_ref.uri, ref=artifact_ref.key),
+            timestamp=_timestamp_from_hit(hit),
+            confidence=confidence,
+            content_ref=artifact_ref,
+            summary=snippet,
+            provenance={
+                "source_type": hit.source_type,
+                "run_id": hit.run_id,
+                "step_id": hit.step_id,
+                "locator": hit.locator,
+                "query_tool": tool_name,
+            },
+        )
+        evidence.append(evidence_item)
+    
+    return evidence
+
+
+# ============================================================================
+# ApprovedRetrievalTool
+# ============================================================================
 
 
 class ApprovedRetrievalTool(BaseTool):

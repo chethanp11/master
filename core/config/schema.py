@@ -101,6 +101,20 @@ class ModelsConfig(BaseModel):
 # ==============================
 
 
+class RetrievalPolicyConfig(BaseModel):
+    """Configuration for retrieval source access control."""
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_sources: List[str] = Field(
+        default_factory=list,
+        description="List of source patterns that can be queried.",
+    )
+    blocked_sources: List[str] = Field(
+        default_factory=list,
+        description="List of source patterns that are blocked.",
+    )
+
+
 class PoliciesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -133,6 +147,12 @@ class PoliciesConfig(BaseModel):
     max_payload_bytes: Optional[int] = Field(
         default=None,
         description="Optional hard ceiling for run payload size in bytes.",
+    )
+
+    # Retrieval source access control
+    retrieval_policy: Optional[RetrievalPolicyConfig] = Field(
+        default=None,
+        description="Policy controlling access to retrieval sources.",
     )
 
     # Per-product policy overrides

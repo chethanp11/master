@@ -275,3 +275,102 @@ Key Achievements:
 
 
 
+Phase 7 implementation is complete. Here's a summary of what was done:
+
+Phase 7: Enhanced Descriptors & Evidence Model - Complete
+1. Expanded descriptors_schema.py
+Added capabilities field to ToolDescriptor with semantic tags support
+Added purpose (string) and capabilities fields to AgentDescriptor
+Maintained backward compatibility with existing tags field
+2. Updated context_pack_schema.py
+Expanded EvidenceType to include "metric", "chart", "document" types
+EvidenceItem already existed with all required fields (id, type, source, timestamp, confidence, content_ref, summary, provenance)
+3. Verified tool_schema.py
+ToolEnvelope/ToolResult already has evidence: List[EvidenceItem] field
+Backward compatible - defaults to empty list
+4. Updated Registries
+registry.py: _coerce_descriptor() now supports capabilities from meta
+registry.py: _coerce_descriptor() now supports capabilities and purpose from meta
+5. Updated Product Registrations
+hello_world: Added explicit descriptors with capabilities for echo_tool and simple_agent
+ADE: Created descriptors.py with comprehensive descriptors for all 16 tools and 6 agents
+6. Added Tests
+7 new tests in test_registry_descriptors.py
+5 new tests in test_tool_evidence.py
+Test Results
+204 tests passed (9 new tests added)
+
+
+Phase 9: Bounded Reasoning & Critic Pattern - Complete ✅
+Summary of Changes
+1. budget_schema.py - Enhanced with ReasoningBudget
+
+Added ReasoningBudget class with:
+max_passes, max_tool_calls, max_parallel_calls, max_total_cost_units
+max_latency_bucket defaulting to "MED"
+escalate_on_exceed: bool = True - triggers HITL when budget exceeded
+to_budget() method to convert to standard Budget with appropriate on_exceed action
+2. budgeting.py - Added HITL escalation support
+
+Added init_reasoning_budget() - creates Budget/BudgetState from ReasoningBudget
+Added should_escalate_to_hitl() - checks if action requires HITL
+Added emit_budget_exceeded_event() - structured trace event with full context
+Added emit_hitl_escalation_event() - governance tracking for HITL triggers
+3. reasoning_ladder.py - Enhanced with bounded reasoning
+
+Added run_bounded_reasoning() convenience function accepting ReasoningBudget
+Enhanced _consume_pass_budget() with:
+Detailed trace events including pass_name
+HITL escalation when budget exceeded and configured
+Improved docstrings
+4. critic_evaluator.py - Enhanced with budget awareness
+
+Added budget tracking to run_critic_evaluator():
+Consumes budget for critic pass
+Emits HITL escalation when configured
+Returns error when budget exceeded
+Added evaluate_with_governance():
+Built-in governance gating for critic recommendations
+Blocks FETCH_MORE_EVIDENCE when not allowed or budget exhausted
+Enhanced CriticEvaluatorAgent with optional budget/budget_state
+Improved trace events with detailed metrics
+5. test_bounded_reasoning.py - 24 new tests
+
+ReasoningBudget configuration and conversion tests
+HITL escalation tests
+Budget consumption tracking tests
+Bounded reasoning with budget enforcement tests
+Critic evaluator budget awareness tests
+Governance integration tests
+Test Results
+24 new tests added
+228 total tests passing
+All existing tests continue to pass
+
+
+
+
+Summary: Phases 10-12 Complete ✅
+All three phases have been implemented and tested:
+
+Phase 10: Parallel Tools (TOOL_BATCH)
+Added ToolBatchStepDef to flow_schema.py:195-214 with tools, parallel, inputs, merge_strategy fields
+Enhanced _execute_tool_batch in step_executor.py:190-204 for deterministic merge ordering by tool name
+Phase 11: Question Loop
+Added validation field to Question in interaction_schema.py
+Added context field to QuestionSet
+Implemented _validate_field_rules in user_input_handler.py supporting:
+min/max for numbers
+minLength/maxLength/pattern for strings
+Phase 12: Retrieval Augmentation
+Added RetrievalPolicy class with is_allowed() and from_config() methods to retrieval.py
+Added query_prior_runs() and query_approved_sources() functions
+Added RetrievalPolicyConfig to schema.py
+Enhanced RetrievalGate with is_source_blocked() in gates.py
+Added retrieval_policy to policies.yaml
+Test Results
+27 new tests added in test_phases_10_12.py
+255 total tests passing (up from 228)
+
+
+

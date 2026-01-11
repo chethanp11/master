@@ -4,11 +4,14 @@ from __future__ import annotations
 # Budget Resolver + Consumption
 # ==============================
 
-from typing import Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
-from core.contracts.budget_schema import Budget, BudgetPolicy, BudgetState, LatencyBucket
+from core.contracts.budget_schema import Budget, BudgetPolicy, BudgetState, LatencyBucket, ReasoningBudget
 
 _LATENCY_ORDER = {"LOW": 0, "MED": 1, "HIGH": 2}
+
+# Type alias for trace emitter callbacks
+TraceEmitter = Callable[[str, Dict[str, Any]], None]
 
 
 def resolve_budget(
@@ -26,6 +29,22 @@ def resolve_budget(
 
 def init_budget_state() -> BudgetState:
     return BudgetState()
+
+
+def init_reasoning_budget(
+    reasoning_budget: Optional[ReasoningBudget] = None,
+) -> Tuple[Budget, BudgetState]:
+    """Initialize budget and state for bounded reasoning operations.
+    
+    Args:
+        reasoning_budget: Optional ReasoningBudget config. If None, uses defaults.
+        
+    Returns:
+        Tuple of (Budget, BudgetState) ready for reasoning passes.
+    """
+    if reasoning_budget is None:
+        reasoning_budget = ReasoningBudget()
+    return reasoning_budget.to_budget(), init_budget_state()
 
 
 def consume_budget(
@@ -103,4 +122,80 @@ def _recheck(
         amount=amount,
         cost_units=cost_units,
         latency_bucket=latency_bucket,
+    )
+
+
+def should_escalate_to_hitl(action: str) -> bool:
+    """Check if the budget exceed action requires HITL escalation.
+    
+    Args:
+        action: The action string returned from consume_budget.
+        
+    Returns:
+        True if HITL escalation is needed.
+    """
+    return action == "HITL"
+
+
+def emit_budget_exceeded_event(
+    trace: Optional[TraceEmitter],
+    *,
+    kind: str,
+    budget: Budget,
+    state: BudgetState,
+    action: str,
+) -> None:
+    """Emit a budget_exceeded trace event with full context.
+    
+    Args:
+        trace: Optional trace emitter callback.
+        kind: The kind of budget consumption (pass, tool, parallel).
+        budget: The budget limits.
+        state: Current budget state with violations.
+        action: The action taken (FAIL, HITL, DEGRADE).
+    """
+    if trace is None:
+        return
+    
+    limit_map = {
+        "pass": budget.max_passes,
+        "tool": budget.max_tool_calls,
+        "parallel": budget.max_parallel_calls,
+    }
+    
+    trace(
+        "budget_exceeded",
+        {
+            "kind": kind,
+            "limit": limit_map.get(kind, 0),
+            "state": state.model_dump(mode="json"),
+            "action_taken": action,
+            "violations": state.violations,
+            "requires_hitl": should_escalate_to_hitl(action),
+        },
+    )
+
+
+def emit_hitl_escalation_event(
+    trace: Optional[TraceEmitter],
+    *,
+    reason: str,
+    context: Dict[str, Any],
+) -> None:
+    """Emit HITL escalation event for governance tracking.
+    
+    Args:
+        trace: Optional trace emitter callback.
+        reason: The reason for HITL escalation.
+        context: Additional context for the escalation.
+    """
+    if trace is None:
+        return
+    
+    trace(
+        "hitl_escalation_triggered",
+        {
+            "reason": reason,
+            "context": context,
+        },
     )

@@ -585,7 +585,7 @@ class CriticGate(BaseGate):
 
 
 class RetrievalGate(BaseGate):
-    """Gate for retrieval source resolution."""
+    """Gate for retrieval source resolution and policy enforcement."""
 
     name = "retrieval"
 
@@ -597,13 +597,22 @@ class RetrievalGate(BaseGate):
     def resolve_allowed_sources(
         self, settings: Settings, *, product: str, flow: str
     ) -> List[str]:
-        """Resolve allowed retrieval sources for a product/flow."""
-        default_allowed: List[str] = []
+        """Resolve allowed retrieval sources for a product/flow.
+        
+        Priority:
+        1. Flow-specific overrides in product config
+        2. Product-specific allowed_sources
+        3. Global retrieval_policy.allowed_sources
+        4. Empty list (no sources allowed by default)
+        """
+        # Check per-product overrides first
         overrides: Dict[str, Any] = (
             settings.policies.by_product.get(product, {})
             if settings.policies.by_product
             else {}
         )
+        
+        # Flow-specific overrides
         flow_overrides = (
             overrides.get("retrieval_allowed_sources_by_flow", {})
             if isinstance(overrides, dict)
@@ -613,12 +622,49 @@ class RetrievalGate(BaseGate):
             flow_allowed = flow_overrides.get(flow)
             if isinstance(flow_allowed, list):
                 return list(flow_allowed)
+        
+        # Product-level overrides
         product_allowed = (
             overrides.get("retrieval_allowed_sources") if isinstance(overrides, dict) else None
         )
         if isinstance(product_allowed, list):
             return list(product_allowed)
-        return default_allowed
+        
+        # Global retrieval policy
+        if settings.policies.retrieval_policy is not None:
+            return list(settings.policies.retrieval_policy.allowed_sources)
+        
+        return []
+
+    def is_source_blocked(
+        self, settings: Settings, *, source: str, product: str
+    ) -> bool:
+        """Check if a source is blocked by policy.
+        
+        Args:
+            settings: Settings with policies
+            source: Source to check
+            product: Product name
+            
+        Returns:
+            True if source is blocked
+        """
+        # Check product-level blocked sources
+        overrides: Dict[str, Any] = (
+            settings.policies.by_product.get(product, {})
+            if settings.policies.by_product
+            else {}
+        )
+        product_blocked = overrides.get("retrieval_blocked_sources") if isinstance(overrides, dict) else None
+        if isinstance(product_blocked, list) and source in product_blocked:
+            return True
+        
+        # Check global blocked sources
+        if settings.policies.retrieval_policy is not None:
+            if source in settings.policies.retrieval_policy.blocked_sources:
+                return True
+        
+        return False
 
 
 # ============================================================================

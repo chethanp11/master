@@ -177,13 +177,17 @@ class AgentRegistry(ComponentRegistry[BaseAgent]):
             pass
         
         purposes = list(meta.get("purposes") or [])
+        purpose = meta.get("purpose") or (purposes[0] if purposes else "")
         tags = list(meta.get("tags") or [])
+        capabilities = list(meta.get("capabilities") or tags)  # Fall back to tags
         allowed_step_types = list(meta.get("allowed_step_types") or ["agent", "plan_proposal"])
         cost_hint = meta.get("cost_hint") or CostHint.UNKNOWN
         
         return AgentDescriptor(
             name=name,
+            purpose=purpose,
             purposes=purposes,
+            capabilities=capabilities,
             tags=tags,
             input_schema_ref=meta.get("input_schema_ref"),
             output_schema_ref=meta.get("output_schema_ref"),

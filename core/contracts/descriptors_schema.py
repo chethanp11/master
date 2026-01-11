@@ -31,11 +31,21 @@ class CostHint(str, Enum):
 
 
 class ToolDescriptor(BaseModel):
+    """
+    Descriptor for tools in the registry.
+    
+    Provides metadata for tool selection, governance, and cost estimation
+    without requiring tool execution.
+    """
     model_config = ConfigDict(extra="forbid")
 
     name: str
     description: str = ""
-    tags: List[str] = Field(default_factory=list)
+    capabilities: List[str] = Field(
+        default_factory=list,
+        description="Semantic tags like ['data_reading', 'computation', 'visualization']"
+    )
+    tags: List[str] = Field(default_factory=list)  # Legacy alias for capabilities
     input_schema_ref: Optional[str] = None
     output_schema_ref: Optional[str] = None
     read_only: bool = False
@@ -45,11 +55,22 @@ class ToolDescriptor(BaseModel):
 
 
 class AgentDescriptor(BaseModel):
+    """
+    Descriptor for agents in the registry.
+    
+    Provides metadata for agent selection, governance, and cost estimation
+    without requiring agent execution.
+    """
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    purposes: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
+    purpose: str = Field(default="", description="Primary purpose of the agent")
+    purposes: List[str] = Field(default_factory=list, description="List of purposes (legacy)")
+    capabilities: List[str] = Field(
+        default_factory=list,
+        description="Semantic tags like ['reasoning', 'planning', 'evaluation']"
+    )
+    tags: List[str] = Field(default_factory=list)  # Legacy alias for capabilities
     input_schema_ref: Optional[str] = None
     output_schema_ref: Optional[str] = None
     cost_hint: CostHint = CostHint.UNKNOWN

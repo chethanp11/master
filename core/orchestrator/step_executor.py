@@ -12,7 +12,7 @@ from typing import Callable, Dict, Optional, List, Tuple, Any
 from core.agents.registry import AgentRegistry
 from core.contracts.agent_schema import AgentResult
 from core.governance.hooks import GovernanceHooks
-from core.contracts.flow_schema import StepDef, StepType, RetryPolicy, ToolBatchItem
+from core.contracts.flow_schema import StepDef, StepType, RetryPolicy, ToolBatchItem, ToolBatchStepDef
 from core.contracts.action_plan_schema import PlanProposal
 from core.contracts.run_schema import StepStatus
 from core.contracts.tool_schema import ToolResult
@@ -194,11 +194,31 @@ class StepExecutor:
         step_def: StepDef,
         step_ctx: StepContext,
     ) -> Dict[str, Any]:
+        """Execute a batch of tools with validation and deterministic merging.
+        
+        Rules:
+        - All tools must be read_only and have no side_effect
+        - Results are merged with deterministic ordering by tool name
+        - EvidenceItems get stable IDs based on step/tool/index
+        """
         items = step_def.tools or []
         if not items:
             raise ValueError("tool_batch requires tools")
 
+        # Convert tool names to ToolBatchItems if needed (supports ToolBatchStepDef)
+        batch_items: List[ToolBatchItem] = []
         for item in items:
+            if isinstance(item, ToolBatchItem):
+                batch_items.append(item)
+            elif isinstance(item, str):
+                # Support simple tool name strings from ToolBatchStepDef
+                inputs = (step_def.params or {}).get(item, {})
+                batch_items.append(ToolBatchItem(tool_name=item, inputs=inputs, alias=None))
+            else:
+                batch_items.append(ToolBatchItem.model_validate(item))
+
+        # Validate all tools are read_only and no side_effect
+        for item in batch_items:
             if not ToolRegistry.has(item.tool_name):
                 step_ctx.emit("tool_batch_rejected", {"tool": item.tool_name, "reason": "tool_not_registered"})
                 raise RuntimeError(f"tool_batch_rejected:{item.tool_name}")
@@ -215,33 +235,34 @@ class StepExecutor:
         budget = run_ctx.meta.get("budget")
         if parallel_effective and budget is not None:
             max_parallel = getattr(budget, "max_parallel_calls", None)
-            if isinstance(max_parallel, int) and max_parallel < len(items):
+            if isinstance(max_parallel, int) and max_parallel < len(batch_items):
                 parallel_effective = False
                 step_ctx.emit(
                     "tool_batch_degraded",
-                    {"reason": "max_parallel_calls_exceeded", "requested": len(items), "limit": max_parallel},
+                    {"reason": "max_parallel_calls_exceeded", "requested": len(batch_items), "limit": max_parallel},
                 )
 
         step_ctx.emit(
             "tool_batch_started",
-            {"count": len(items), "parallel": parallel_requested, "parallel_effective": parallel_effective},
+            {"count": len(batch_items), "parallel": parallel_requested, "parallel_effective": parallel_effective},
         )
 
         results: List[Tuple[int, ToolBatchItem, ToolResult]] = []
         if parallel_effective:
-            with ThreadPoolExecutor(max_workers=len(items)) as executor:
+            with ThreadPoolExecutor(max_workers=len(batch_items)) as executor:
                 futures = {
                     executor.submit(self._run_batch_tool, run_ctx, step_ctx.step_id, idx, item): (idx, item)
-                    for idx, item in enumerate(items)
+                    for idx, item in enumerate(batch_items)
                 }
                 for future in as_completed(futures):
                     idx, item = futures[future]
                     results.append((idx, item, future.result()))
         else:
-            for idx, item in enumerate(items):
+            for idx, item in enumerate(batch_items):
                 results.append((idx, item, self._run_batch_tool(run_ctx, step_ctx.step_id, idx, item)))
 
-        results.sort(key=lambda entry: entry[0])
+        # Deterministic ordering by tool name (stable merge)
+        results.sort(key=lambda entry: (entry[1].tool_name, entry[0]))
         merged_evidence = []
         merged_artifacts: Dict[str, Any] = {}
         merged_results: List[ToolBatchResultItem] = []

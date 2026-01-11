@@ -26,6 +26,17 @@ max_payload_bytes: 65536
 # Example: enforce a tighter max token budget
 # model_max_tokens: 256
 
+# Retrieval policy controls access to evidence sources
+# allowed_sources: list of source patterns that can be queried
+# blocked_sources: list of source patterns that are blocked
+retrieval_policy:
+  allowed_sources:
+    - "runs:current_product"
+    - "trace_events"
+    - "knowledge:approved_docs"
+  blocked_sources:
+    - "runs:other_products"
+
 # Per-product overrides let you tailor behaviour for a single product.
 # Example below keeps `hello_world` limited to echo_tool and a single model.
 by_product:

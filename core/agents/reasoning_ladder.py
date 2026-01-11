@@ -5,6 +5,14 @@ from __future__ import annotations
 # ==============================
 """
 Deterministic multi-pass reasoning helper: interpret -> propose -> select.
+
+Provides bounded multi-pass reasoning with governance:
+- interpret: Extract intent, entities, constraints from question
+- propose: Generate candidate solutions, tools, agents
+- select: Choose best candidate with evidence refs
+
+Budget enforcement ensures deterministic termination and HITL escalation
+when limits are exceeded.
 """
 
 import json
@@ -21,8 +29,14 @@ from core.contracts.reasoning_ladder_schema import (
     ReasoningLadderResult,
     ReasoningLadderSelectPayload,
 )
-from core.contracts.budget_schema import Budget, BudgetState
-from core.governance.budgeting import consume_budget
+from core.contracts.budget_schema import Budget, BudgetState, ReasoningBudget
+from core.governance.budgeting import (
+    consume_budget,
+    emit_budget_exceeded_event,
+    emit_hitl_escalation_event,
+    init_reasoning_budget,
+    should_escalate_to_hitl,
+)
 
 TraceEmitter = Callable[[str, Dict[str, Any]], None]
 LadderReasoner = Callable[[str, Dict[str, Any]], Union[Dict[str, Any], str]]
@@ -100,6 +114,66 @@ def run_reasoning_ladder(
         unknowns=select_payload.unknowns,
     )
     return ReasoningLadderResult(ok=True, output=output)
+
+
+def run_bounded_reasoning(
+    *,
+    context_pack: ContextPack,
+    question: str,
+    config: ReasoningLadderConfig,
+    llm_reasoner: LadderReasoner,
+    reasoning_budget: Optional[ReasoningBudget] = None,
+    trace: Optional[TraceEmitter] = None,
+    available_tools: Optional[List[ToolDescriptor]] = None,
+    available_agents: Optional[List[AgentDescriptor]] = None,
+) -> ReasoningLadderResult:
+    """Run bounded multi-pass reasoning with ReasoningBudget support.
+    
+    Convenience wrapper around run_reasoning_ladder that:
+    - Accepts ReasoningBudget instead of Budget/BudgetState
+    - Auto-initializes budget state
+    - Emits HITL escalation events when budget exceeded and escalate_on_exceed=True
+    
+    Args:
+        context_pack: Evidence and context for reasoning.
+        question: The question to answer.
+        config: Reasoning ladder configuration.
+        llm_reasoner: Callable to invoke the LLM.
+        reasoning_budget: Optional ReasoningBudget config. Uses defaults if None.
+        trace: Optional trace emitter for events.
+        available_tools: Tools the reasoner can recommend.
+        available_agents: Agents the reasoner can recommend.
+        
+    Returns:
+        ReasoningLadderResult with output or error.
+    """
+    budget, budget_state = init_reasoning_budget(reasoning_budget)
+    
+    _emit(trace, "bounded_reasoning_started", {
+        "max_passes": budget.max_passes,
+        "max_tool_calls": budget.max_tool_calls,
+        "escalate_on_exceed": reasoning_budget.escalate_on_exceed if reasoning_budget else True,
+    })
+    
+    result = run_reasoning_ladder(
+        context_pack=context_pack,
+        question=question,
+        config=config,
+        llm_reasoner=llm_reasoner,
+        trace=trace,
+        available_tools=available_tools,
+        available_agents=available_agents,
+        budget=budget,
+        budget_state=budget_state,
+    )
+    
+    _emit(trace, "bounded_reasoning_completed", {
+        "ok": result.ok,
+        "passes_used": budget_state.passes_used,
+        "violations": budget_state.violations,
+    })
+    
+    return result
 
 
 def _run_interpret_pass(
@@ -313,20 +387,52 @@ def _consume_pass_budget(
     budget: Optional[Budget],
     budget_state: Optional[BudgetState],
 ) -> bool:
+    """Consume budget for a reasoning pass with HITL escalation support.
+    
+    Args:
+        trace: Optional trace emitter for events.
+        pass_name: Name of the current pass (interpret, propose, select).
+        budget: Budget limits.
+        budget_state: Current budget state (mutated in place).
+        
+    Returns:
+        True if pass is allowed, False if budget exceeded.
+    """
     if budget is None or budget_state is None:
         return True
     allowed, action, updated = consume_budget(budget=budget, state=budget_state, kind="pass", amount=1, cost_units=1)
+    # Update state in place
     budget_state.passes_used = updated.passes_used
     budget_state.tool_calls_used = updated.tool_calls_used
     budget_state.parallel_calls_used = updated.parallel_calls_used
     budget_state.cost_units_used = updated.cost_units_used
     budget_state.latency_bucket_observed = updated.latency_bucket_observed
     budget_state.violations = updated.violations
-    _emit(trace, "budget_consumed", {"kind": "pass", "state": updated.model_dump(mode="json")})
+    
+    _emit(trace, "budget_consumed", {
+        "kind": "pass",
+        "pass_name": pass_name,
+        "state": updated.model_dump(mode="json"),
+    })
+    
     if not allowed:
-        _emit(
+        emit_budget_exceeded_event(
             trace,
-            "budget_exceeded",
-            {"kind": "pass", "limit": budget.max_passes, "state": updated.model_dump(mode="json"), "action_taken": action},
+            kind="pass",
+            budget=budget,
+            state=updated,
+            action=action,
         )
+        # Trigger HITL escalation if configured
+        if should_escalate_to_hitl(action):
+            emit_hitl_escalation_event(
+                trace,
+                reason="budget_exceeded",
+                context={
+                    "pass_name": pass_name,
+                    "passes_used": updated.passes_used,
+                    "max_passes": budget.max_passes,
+                    "violations": updated.violations,
+                },
+            )
     return allowed
