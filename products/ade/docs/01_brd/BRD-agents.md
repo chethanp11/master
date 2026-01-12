@@ -116,6 +116,81 @@ Agents provide reasoning roles in ADE workflows:
 
 ---
 
+## 8. Semantic Interpretation Requirements
+
+### 8.1 ADESemanticAdapter
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-SEM-001 | System MUST interpret free-text questions into structured SemanticEnvelope | P0 |
+| BRD-SEM-002 | SemanticEnvelope MUST include intent_type, requested_outputs, metrics, time_scope, constraints | P0 |
+| BRD-SEM-003 | System MUST support all ADE intent types | P0 |
+| BRD-SEM-004 | System MUST classify intent with confidence score | P0 |
+| BRD-SEM-005 | System MUST use core-defined SemanticEnvelope contract | P0 |
+
+### 8.2 ADE Intent Taxonomy
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-INTENT-TAX-001 | System MUST support DESCRIBE_DATA intent type | P0 |
+| BRD-INTENT-TAX-002 | System MUST support COMPARE_PERIODS intent type | P0 |
+| BRD-INTENT-TAX-003 | System MUST support TREND_ANALYSIS intent type | P0 |
+| BRD-INTENT-TAX-004 | System MUST support ANOMALY_REVIEW intent type | P0 |
+| BRD-INTENT-TAX-005 | System MUST support OPEN_ENDED_ANALYSIS intent type | P0 |
+| BRD-INTENT-TAX-006 | Each intent type MUST define required and optional fields | P0 |
+
+**Intent Types Summary**:
+
+| Intent Type | Description | Required Fields |
+|-------------|-------------|-----------------|
+| DESCRIBE_DATA | Summarize dataset characteristics | dataset |
+| COMPARE_PERIODS | Compare metrics across time periods | dataset, time_scope |
+| TREND_ANALYSIS | Identify trends over time | dataset, metrics, time_scope |
+| ANOMALY_REVIEW | Detect and explain anomalies | dataset, metrics |
+| OPEN_ENDED_ANALYSIS | Exploratory analysis without specific focus | dataset |
+
+### 8.3 Semantic Validation
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-SEM-VAL-001 | System MUST validate SemanticEnvelope against intent type rules | P0 |
+| BRD-SEM-VAL-002 | Validation MUST identify missing required fields | P0 |
+| BRD-SEM-VAL-003 | Validation MUST return ASK_USER when clarification is possible | P0 |
+| BRD-SEM-VAL-004 | Validation MUST return ABORT when analysis cannot proceed | P0 |
+| BRD-SEM-VAL-005 | Validation MUST compute confidence adjustment based on completeness | P1 |
+
+### 8.4 Clarifying Questions
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-CLARIFY-001 | System MUST generate deterministic clarifying questions | P0 |
+| BRD-CLARIFY-002 | Questions MUST be templated (no LLM generation) | P0 |
+| BRD-CLARIFY-003 | Questions MUST target specific missing fields | P0 |
+| BRD-CLARIFY-004 | System MUST provide templates for metric focus questions | P1 |
+| BRD-CLARIFY-005 | System MUST provide templates for time range questions | P1 |
+| BRD-CLARIFY-006 | System MUST provide templates for anomaly preference questions | P1 |
+
+### 8.5 Intent Router
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-ROUTER-001 | System MUST route validated SemanticEnvelope to appropriate flow | P0 |
+| BRD-ROUTER-002 | Router MUST output flow_name and initial_parameters | P0 |
+| BRD-ROUTER-003 | Router MUST use deterministic mapping rules | P0 |
+| BRD-ROUTER-004 | Router MUST support routing to ade_v1 and visualization flows | P0 |
+
+### 8.6 Semantic Observability
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-SEM-OBS-001 | System MUST emit trace metadata for semantic interpretation | P0 |
+| BRD-SEM-OBS-002 | Traces MUST include ade_intent field | P0 |
+| BRD-SEM-OBS-003 | Traces MUST include ade_confidence field | P0 |
+| BRD-SEM-OBS-004 | Traces MUST include ade_missing_fields when applicable | P1 |
+| BRD-SEM-OBS-005 | Traces MUST include ade_clarifying_question when generated | P1 |
+
+---
+
 ## Cross-References
 
 - **Techspec**: [AGENT-agents.md](../02_techspec/AGENT-agents.md)

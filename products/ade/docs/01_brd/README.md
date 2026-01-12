@@ -12,7 +12,7 @@
 |----------|-------------|
 | [BRD-overview.md](BRD-overview.md) | Product overview, objectives, scope |
 | [BRD-flows.md](BRD-flows.md) | Flow business requirements |
-| [BRD-agents.md](BRD-agents.md) | Agent business requirements |
+| [BRD-agents.md](BRD-agents.md) | Agent and semantic interpretation requirements |
 | [BRD-tools.md](BRD-tools.md) | Tool business requirements |
 | [BRD-data.md](BRD-data.md) | Data and schema requirements |
 | [BRD-outputs.md](BRD-outputs.md) | Output and audit requirements |
@@ -32,6 +32,7 @@ ADE accepts analyst questions and CSV datasets to produce **audit-ready analytic
 - CSV dataset processing
 - Business reports and decision packets
 - Plan approval workflow
+- Semantic interpretation of analyst questions
 
 ### Out of Scope
 
@@ -48,7 +49,7 @@ ADE accepts analyst questions and CSV datasets to produce **audit-ready analytic
 |-----|----------|---------------|
 | BRD-overview.md | — | architecture.md |
 | BRD-flows.md | FLOW-flows.md | flows.md |
-| BRD-agents.md | AGENT-agents.md | agents-and-tools.md |
+| BRD-agents.md | AGENT-agents.md, SEM-semantic.md | agents-and-tools.md |
 | BRD-tools.md | TOOL-tools.md | agents-and-tools.md |
 | BRD-data.md | SCHEMA-schemas.md, IO-inputs-outputs.md | schemas.md, inputs-and-outputs.md |
 | BRD-outputs.md | IO-inputs-outputs.md | inputs-and-outputs.md |
