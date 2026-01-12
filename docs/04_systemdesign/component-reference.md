@@ -1,8 +1,10 @@
-# Component Details
+# Component Reference
 
 This document summarizes the major components in the `master` codebase, including their code
 paths, intent, and key technical characteristics. It mirrors the codebase structure and
 highlights how components collaborate at runtime.
+
+**Last Updated:** 12 January 2026
 
 ---
 
@@ -42,6 +44,10 @@ flowchart LR
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
 | `core/orchestrator/engine.py` | Flow engine | Drives flow execution, pause/resume, and trace emission. | Loads FlowDef from `products/<product>/flows/`, enforces autonomy and governance checks, persists runs/steps, emits trace events, handles branch/loop/plan steps. |
+| `core/orchestrator/run_lifecycle.py` | Run lifecycle | Handles start_run, resume_run, complete_run. | Extracted from engine.py for focused responsibility. |
+| `core/orchestrator/plan_executor.py` | Plan executor | Handles plan_propose/gate/execute steps. | Manages action plan lifecycle. |
+| `core/orchestrator/loop_executor.py` | Loop executor | Handles repeat_until step execution. | Budget-aware loop handling. |
+| `core/orchestrator/user_input_handler.py` | User input handler | Handles user_input pause/resume/validation. | Validates against QuestionSet schemas. |
 | `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML. | Validates and normalizes step ids; no execution or persistence (JSON supported by loader when called directly). |
 | `core/orchestrator/step_executor.py` | Step executor | Executes tool/agent/tool_batch/plan_proposal steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, enforces agent output governance; tool retries only. |
 | `core/orchestrator/branching.py` | Branch evaluator | Deterministic branch evaluation. | Evaluates safe condition expressions over artifacts and step outputs. |
@@ -50,9 +56,8 @@ flowchart LR
 | `core/orchestrator/hitl.py` | HITL service | Approval creation and resolution. | Persists approval records via MemoryRouter. |
 | `core/orchestrator/state.py` | Status helpers | Canonical run/step status groups. | Re-exports RunStatus/StepStatus for runtime use. |
 | `core/contracts/user_input_schema.py` | User input contracts | Typed request/response for `user_input` steps. | Supports choice and free-text modes. |
-| `core/contracts/question_schema.py` | Question set contracts | Structured missing-info collection. | Used by question_set-based user input. |
-| `core/contracts/context_pack_schema.py` | Context pack contracts | Evidence-backed context summaries. | Used to merge user answers into context. |
-| `core/contracts/plan_schema.py` | Plan proposal contracts | Structured plan proposal schema. | Used by `plan_proposal` steps. |
+| `core/contracts/interaction_schema.py` | Interaction contracts | Consolidated HITL and question schemas. | QuestionSet, Question, Answer models. |
+| `core/contracts/context_pack_schema.py` | Context pack contracts | Evidence-backed context summaries. | Includes EvidenceItem (merged from evidence_schema). |
 | `core/contracts/action_plan_schema.py` | Action plan contracts | Executable plan schema. | Used by `plan_propose`/`plan_gate`/`plan_execute`. |
 | `core/contracts/reasoning_schema.py` | Reasoning purpose contract | Enum for required LLM reasoning purposes. | Used by LLM routing, governance, and tracing. |
 
@@ -84,51 +89,56 @@ sequenceDiagram
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/agents/base.py` | `BaseAgent` | Abstract contract for agents. | `run(step_context)` returns `AgentResult`. |
-| `core/agents/registry.py` | Agent registry | Global DI container for agent factories. | Case-normalized name resolution; new instance per resolution; exposes descriptor catalog. |
+| `core/agents/base.py` | `BaseAgent` | Abstract contract for agents. | `run(step_context)` returns `AgentResult`. Includes `@agent` decorator for auto-discovery. |
+| `core/agents/registry.py` | Agent registry | Global DI container for agent factories. | Inherits from `ComponentRegistry[BaseAgent]`; case-normalized name resolution; new instance per resolution; exposes descriptor catalog. |
 | `core/agents/llm_reasoner.py` | LLM reasoner | Built-in LLM agent and role-specific helpers. | Invokes models via `core/models/router.py` and emits governance/tracing hooks. |
-| `core/agents/advisory.py` | Advisory agents | Tool/agent selectors, gap finder, summarizer, risk explainer. | Structured outputs used for advisory steps; registered as core agents. |
-| `core/agents/reasoning_ladder.py` | Reasoning ladder | Multi-pass reasoning helper. | Deterministic interpret → propose → select flow with budget awareness. |
+| `core/agents/advisory.py` | Advisory agents | Tool/agent selectors, gap finder, summarizer, risk explainer. | Structured outputs used for advisory steps; registered as core agents. Cannot invoke tools directly. |
+| `core/agents/reasoning_ladder.py` | Reasoning ladder | Multi-pass reasoning helper. | Bounded interpret → propose → select flow with budget awareness. HITL escalation on budget exceed. |
+| `core/agents/critic_evaluator.py` | Critic evaluator | Quality/completeness checks. | Returns structured recommendations (NONE, USER_INPUT, HITL, FETCH_MORE_EVIDENCE). Cannot call tools. |
 
 ### Tools
 
 | Code Path | Code Name | Functional Details | Technical Details |
 | --- | --- | --- | --- |
-| `core/tools/base.py` | `BaseTool` | Tool contract used by products. | `run(params, ctx)` returns `ToolResult`. |
-| `core/tools/registry.py` | Tool registry | Global DI container for tool factories. | Case-normalized name resolution; exposes descriptor catalog. |
+| `core/tools/base.py` | `BaseTool` | Tool contract used by products. | `run(params, ctx)` returns `ToolResult`. Includes `@tool` decorator for auto-discovery. |
+| `core/tools/registry.py` | Tool registry | Global DI container for tool factories. | Inherits from `ComponentRegistry[BaseTool]`; case-normalized name resolution; exposes descriptor catalog. |
 | `core/tools/executor.py` | Tool executor | Central dispatcher for tool execution. | Applies governance hooks and redaction; emits trace events; wraps outputs as evidence. |
 | `core/tools/retrieval.py` | Approved retrieval tool | Read-only retrieval across run records and trace events. | Enforces retrieval policies; returns evidence + citations. |
 | `core/tools/backends/local_backend.py` | Local backend | In-process tool execution. | Calls Python tool implementation directly. |
-| `core/tools/backends/remote_backend.py` | Remote backend (stub) | Placeholder for HTTP/gRPC tools. | Returns error in v1. |
-| `core/tools/backends/mcp_backend.py` | MCP backend (stub) | Placeholder for MCP tools. | Disabled by default; returns error in v1. |
+
+**Note:** Remote and MCP backends were removed in v1 simplification. Only local backend is supported.
 
 ### Descriptors
 - `core/contracts/descriptors_schema.py` defines the `ToolDescriptor` and `AgentDescriptor` catalog contracts used by registries.
-- Tool descriptors declare `read_only` and `side_effect`, which gate `tool_batch` eligibility.
+- Tool descriptors declare `read_only`, `side_effect`, `capabilities`, `cost_hint`, and `sensitivity_class`.
+- Agent descriptors declare `purpose`, `capabilities`, and `allowed_step_types`.
+- These descriptors gate `tool_batch` eligibility and enable intelligent tool/agent selection.
 
 ### Evidence
-- `core/contracts/evidence_schema.py` defines `EvidenceItem` and `EvidenceSource` for tool output provenance.
+- Evidence models are consolidated in `core/contracts/context_pack_schema.py`.
+- `EvidenceItem` includes provenance tracking (source, timestamp, confidence).
 
 ```mermaid
 sequenceDiagram
   participant StepExec
   participant ToolExec
   participant Governance
-  participant Backend
+  participant Backend as LocalToolBackend
   participant Tool
 
   StepExec->>ToolExec: execute(tool, params)
   ToolExec->>Governance: before_tool_call
-  alt local backend
-    ToolExec->>Backend: LocalToolBackend.run
-    Backend->>Tool: run
-    Tool-->>Backend: ToolResult
-  else stub backend
-    ToolExec->>Backend: run
-    Backend-->>ToolExec: ToolResult (error)
-  end
+  ToolExec->>Backend: run(tool, params)
+  Backend->>Tool: run(params)
+  Tool-->>Backend: ToolResult
+  Backend-->>ToolExec: ToolResult + evidence
   ToolExec-->>StepExec: ToolResult
 ```
+
+### Unified Registry
+- `core/utils/registry.py` provides `ComponentRegistry[T]` base class.
+- Both `AgentRegistry` and `ToolRegistry` inherit from this unified implementation.
+- Provides: `register`, `resolve`, `has`, `list_registered`, `get_meta`.
 
 ### Memory
 
@@ -325,3 +335,11 @@ flowchart LR
 ---
 
 This document should be updated whenever new top-level components or subsystems are added.
+
+---
+
+## Cross-References
+
+- **Architecture**: [architecture-overview.md](architecture-overview.md)
+- **BRD**: [BRD-automation.md](../brd/BRD-automation.md), [BRD-operations.md](../brd/BRD-operations.md)
+- **Techspec**: [ORC-orchestration.md](../techspec/ORC-orchestration.md), [AGT-agents-tools.md](../techspec/AGT-agents-tools.md), [MEM-memory.md](../techspec/MEM-memory.md)

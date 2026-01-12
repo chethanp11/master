@@ -9,6 +9,8 @@ Violations are considered **architectural defects**, not style issues.
 
 This document overrides all other conventions.
 
+**Last Updated:** 12 January 2026
+
 ---
 
 ## 1. Absolute Boundary Rules (Non-Negotiable)
@@ -472,5 +474,82 @@ Product config is loaded by the product loader and surfaced via the catalog/API.
   - envelope compliance
   - missing tracing
 - Any exception must be documented and approved
+
+---
+
+## 12. Test Standards
+
+### 12.1 Test Organization
+
+| Test Type | Location | Purpose |
+|-----------|----------|---------|
+| Unit tests | `tests/unit/` | Fast, isolated tests |
+| Core tests | `tests/core/` | Core module tests |
+| Integration tests | `tests/integration/` | End-to-end tests |
+| Architecture tests | `tests/architecture/` | Invariant enforcement |
+| Acceptance tests | `tests/acceptance_intelligence/` | Intelligence guarantees |
+| Product tests | `products/<name>/tests/` | Product-specific tests |
+
+### 12.2 Architecture Invariant Tests
+
+The following invariants are enforced by tests in `tests/architecture/`:
+
+- **Agents never call tools directly** - No ToolExecutor imports in agent files
+- **Tools never call LLM directly** - No OpenAI/Anthropic imports in tool files
+- **Products never import core internals** - Only allowed core modules
+- **No env reads outside config loader** - Only `core/config/loader.py` reads `os.environ`
+- **No persistence outside memory** - Only `core/memory/*.py` writes to disk/DB
+- **No cross-product imports** - Products are isolated
+
+### 12.3 Acceptance Tests
+
+Acceptance tests in `tests/acceptance_intelligence/` ensure:
+
+- **Determinism** - Same input produces same output
+- **Pause/Resume** - HITL and user_input work correctly
+- **Governance** - Blocked tools/models are denied
+- **Trace emission** - All boundaries emit trace events
+- **Golden paths** - Known-good scenarios match expected output
+
+---
+
+## 13. Module Structure Summary
+
+### Core Governance (5 files)
+```
+core/governance/
+├── budgeting.py    # Budget enforcement
+├── gates.py        # Unified gates (Branch, Loop, Plan, Critic, Retrieval)
+├── hooks.py        # Governance hook orchestration
+├── policies.py     # Policy loading
+└── security.py     # Redaction
+```
+
+### Core Orchestrator (14 files)
+```
+core/orchestrator/
+├── engine.py              # Main coordinator
+├── run_lifecycle.py       # Run lifecycle
+├── step_executor.py       # Step dispatch
+├── plan_executor.py       # Plan steps
+├── loop_executor.py       # Loop handling
+├── user_input_handler.py  # User input
+├── flow_loader.py         # Flow loading
+├── branching.py           # Branch evaluation
+├── looping.py             # Loop evaluation
+├── templating.py          # Template rendering
+├── context.py             # Context objects
+├── state.py               # Status helpers
+├── hitl.py                # HITL service
+└── error_policy.py        # Retry/backoff
+```
+
+### Tool Backends (1 file)
+```
+core/tools/backends/
+└── local_backend.py       # In-process execution only
+```
+
+**Note:** Remote and MCP backends were removed in v1.
 
 **This document is binding.**

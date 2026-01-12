@@ -2,6 +2,8 @@
 
 This document defines the **governance model** for the `master/` agentic platform.
 
+**Last Updated:** 12 January 2026
+
 Governance exists to ensure:
 - Safety
 - Auditability
@@ -133,10 +135,24 @@ Budgets enforce:
 - Max total cost units
 - Optional HITL escalation when exceeded
 
+Budget enforcement is implemented in `core/governance/budgeting.py`.
+
 ### 3.6 Retrieval Policies
 
 Approved retrieval is constrained via `retrieval_allowed_sources` and optional per-flow overrides under `by_product`.
 The `approved_retrieval` tool enforces these policies at runtime.
+Retrieval policy enforcement is handled by `RetrievalGate` in `core/governance/gates.py`.
+
+### 3.7 Unified Gates
+
+All governance gates are consolidated in `core/governance/gates.py`:
+- `BranchGate` - Branch condition validation
+- `LoopGate` - Loop condition validation
+- `PlanGate` - Plan step validation
+- `CriticGate` - Critic output validation
+- `RetrievalGate` - Retrieval source validation
+
+Gates follow a registry pattern with `resolve_gate()` for dynamic resolution.
 
 ## 4. Human-in-the-Loop (HITL)
 
@@ -316,6 +332,24 @@ Product teams:
 	•	Hooks are mandatory
 	•	Violations are final
 	•	Safety overrides convenience
+
+---
+
+## 12. Governance Module Structure
+
+Current implementation in `core/governance/`:
+
+```
+core/governance/
+├── __init__.py
+├── budgeting.py    # Budget enforcement
+├── gates.py        # Unified gates (Branch, Loop, Plan, Critic, Retrieval)
+├── hooks.py        # Governance hook orchestration
+├── policies.py     # Policy loading and evaluation
+└── security.py     # Redaction and injection checks
+```
+
+**Note:** Individual gate files (branch_gate.py, loop_gate.py, etc.) were consolidated into `gates.py` per the refactoring plan.
 
 ---
 

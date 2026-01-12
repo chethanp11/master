@@ -3,6 +3,8 @@
 This document describes the **core architecture** of the `master/` agentic framework.
 It explains **what exists, why it exists, and how the pieces interact**, with enough detail for engineers to reason about changes without reading all the code.
 
+**Last Updated:** 12 January 2026
+
 ---
 
 ## 1. Architectural Principles
@@ -111,6 +113,7 @@ flowchart LR
 - Enablement is controlled by `configs/products.yaml` (`enabled` + `auto_enable`).
 - Manifest fields drive catalog metadata, default flow, API exposure, and UI panels.
 - Product config is stored in the product catalog and exposed via API; it is not merged into global Settings automatically.
+- **Auto-discovery** via `@agent` and `@tool` decorators reduces registration boilerplate.
 
 ```mermaid
 flowchart TB
@@ -118,6 +121,8 @@ flowchart TB
   Config[config/product.yaml] --> Loader
   Registry[registry.py] --> Loader
   Flows[flows/*.yaml] --> Loader
+  Decorators[@agent/@tool] --> AutoDiscover[Auto-Discovery]
+  AutoDiscover --> Loader
   Loader --> Catalog[ProductCatalog]
   Catalog --> Orchestrator
   Catalog --> Gateway
@@ -134,12 +139,20 @@ Purpose: control flow execution, tool retries, HITL pauses, and resume.
 ### Key Modules
 ```
 core/orchestrator/
-├── engine.py
-├── flow_loader.py
-├── context.py
-├── state.py
-├── error_policy.py
-└── hitl.py
+├── engine.py              # Main coordinator
+├── run_lifecycle.py       # start/resume/complete run lifecycle
+├── step_executor.py       # Tool/agent step dispatch
+├── plan_executor.py       # plan_propose/gate/execute steps
+├── loop_executor.py       # repeat_until handling
+├── user_input_handler.py  # user_input pause/resume/validation
+├── flow_loader.py         # YAML → FlowDef parsing
+├── branching.py           # Branch condition evaluation
+├── looping.py             # Loop condition evaluation
+├── templating.py          # Param/message rendering
+├── context.py             # RunContext/StepContext
+├── state.py               # Status helpers
+├── hitl.py                # Approval creation/resolution
+└── error_policy.py        # Retry/backoff definitions
 ```
 
 ### Responsibilities
@@ -273,31 +286,25 @@ flowchart LR
 
 - Tools execute only through `ToolExecutor`.
 - ToolExecutor attaches evidence artifacts for every tool call.
-- Backends:
-  - `LocalToolBackend` (in-process)
-  - `RemoteToolBackend` (stub, not implemented)
-  - `MCPBackend` (stub, disabled unless explicitly enabled)
-ToolExecutor routes by `backend_mode` (`local`, `remote_agent`, `mcp`).
-`tool_batch` steps are limited to read-only, no-side-effect tools.
+- Backend:
+  - `LocalToolBackend` (in-process Python execution)
+- **Note:** Remote and MCP backends were removed in v1 simplification.
+- `tool_batch` steps are limited to read-only, no-side-effect tools.
 
 ```mermaid
 sequenceDiagram
   participant StepExec as StepExecutor
   participant ToolExec as ToolExecutor
   participant Governance
-  participant Backend
+  participant Backend as LocalToolBackend
   participant Tool
 
   StepExec->>ToolExec: execute(tool, params)
   ToolExec->>Governance: before_tool_call
-  alt local backend
-    ToolExec->>Backend: LocalToolBackend.run
-    Backend->>Tool: run(params)
-    Tool-->>Backend: ToolResult
-  else remote/mcp backend
-    ToolExec->>Backend: run
-    Backend-->>ToolExec: ToolResult (error stub)
-  end
+  ToolExec->>Backend: run(tool, params)
+  Backend->>Tool: run(params)
+  Tool-->>Backend: ToolResult
+  Backend-->>ToolExec: ToolResult + evidence
   ToolExec-->>StepExec: ToolResult
 ```
 
@@ -404,7 +411,42 @@ flowchart TB
 
 ---
 
-## 11. Models
+## 11. Intelligence Layer
+
+**Source of truth:** `core/agents/advisory.py`, `core/agents/reasoning_ladder.py`, `core/agents/critic_evaluator.py`.
+
+The platform includes bounded intelligence capabilities that operate within governance constraints.
+
+### Advisory Agents
+Located in `core/agents/advisory.py`:
+- `ToolSelector` - Recommends tools based on descriptors and context
+- `AgentSelector` - Recommends agents for subtasks
+- `GapFinder` - Identifies missing evidence
+- `Summarizer` - Condenses evidence into narrative
+- `RiskExplainer` - Explains confidence/risk factors
+
+All advisory agents return structured outputs and cannot invoke tools directly.
+
+### Reasoning Patterns
+- **Reasoning Ladder** (`core/agents/reasoning_ladder.py`):
+  - Bounded interpret→propose→select pattern
+  - Budget enforcement (max_passes, max_tool_calls)
+  - HITL escalation when budgets exceeded
+  
+- **Critic Evaluator** (`core/agents/critic_evaluator.py`):
+  - Quality/completeness checks
+  - Structured recommendations (NONE, USER_INPUT, HITL, FETCH_MORE_EVIDENCE)
+  - Cannot call tools; only analyzes artifacts
+
+### Context Pack Builder
+Located in `core/knowledge/context_pack.py`:
+- Curates LLM inputs deterministically
+- Includes evidence provenance
+- Hash-verified reproducibility
+
+---
+
+## 12. Models
 
 **Source of truth:** `core/models/*`.
 
@@ -416,29 +458,30 @@ flowchart TB
 
 ---
 
-## 12. Contracts & Envelopes
+## 13. Contracts & Envelopes
 
 **Source of truth:** `core/contracts/*`.
 
 - `AgentResult` and `ToolResult` are mandatory envelopes.
 - Run records (`RunRecord`, `StepRecord`, `TraceEvent`) enforce stable persistence and serialization.
 - External boundaries use Pydantic contracts (flows, run operations, user input, plans, budgets).
+- Unified registry base class: `core/utils/registry.py` provides `ComponentRegistry[T]`.
 
 ---
 
-## 13. Gateway
+## 14. Gateway
 
 **Source of truth:** `gateway/*`.
 
 - API: `gateway/api` (FastAPI)
-- UI: `gateway/ui` (Streamlit control center)
+- UI: `gateway/ui` (Streamlit - modularized into pages/)
 - CLI: `gateway/cli` (argparse)
 
 The CLI calls the orchestrator directly; the UI talks only to the API.
 
 ---
 
-## 14. Run Lifecycle (Status Model)
+## 15. Run Lifecycle (Status Model)
 
 **Source of truth:** `core/contracts/run_schema.py`, `core/orchestrator/state.py`.
 
@@ -461,13 +504,14 @@ stateDiagram-v2
 
 ---
 
-## 15. Adding a New Product (No Core Changes)
+## 16. Adding a New Product (No Core Changes)
 
 Steps:
 1. Create `products/<new_product>/`.
 2. Add `manifest.yaml` and `config/product.yaml`.
-3. Implement agents/tools and register them in `registry.py`.
-4. Add flows under `flows/`.
-5. UI/API auto-discover the product when enabled.
+3. Implement agents/tools using `@agent` and `@tool` decorators.
+4. Register them in `registry.py` (auto-discovery reduces boilerplate).
+5. Add flows under `flows/`.
+6. UI/API auto-discover the product when enabled.
 
 ---

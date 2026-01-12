@@ -1,13 +1,14 @@
-
-# Flows and Agents — master/
+# Flows and Agents Reference
 
 This document explains **how flows and agents are defined, wired, and executed**
 in the `master/` platform.
 
 It is intended for engineers **building products**, not modifying the core runtime.
 
+**Last Updated:** 12 January 2026
+
 This document is governed by:
-- docs/engineering_standards.md
+- [engineering-standards.md](engineering-standards.md)
 
 ---
 
@@ -67,13 +68,17 @@ Agents:
 
 Flows live under:
 
+```
 products/<product>/flows/
+```
 
 Flow discovery uses `.yaml`/`.yml` files under this directory.
 
 Example:
 
+```
 products/hello_world/flows/hello_world.yaml
+```
 
 ---
 
@@ -94,16 +99,20 @@ Branching and looping are supported only via declarative step types (`branch`, `
 
 Product structure:
 
+```
 products/ade/flows/
   ade_v1.yaml
   data_quality.yaml
+```
 
 Entrypoint selection (pseudo-code):
 
+```
 if request.kind == "data_quality":
     run flow "data_quality"
 else:
     run flow "ade_v1"
+```
 
 ### Why
 
@@ -149,11 +158,13 @@ Notes:
 
 ### Agent Step
 
+```yaml
 - id: step_name
   type: agent
   agent: product.agent_name
   params:
     instruction: "Describe desired outcome"
+```
 
 Behavior:
 - Resolves agent from registry
@@ -170,9 +181,11 @@ Agents:
 
 ### Tool Step
 
+```yaml
 - id: call_tool
   type: tool
   tool: product.tool_name
+```
 
 Behavior:
 - Executed only by the tool executor
@@ -188,9 +201,11 @@ Notes:
 
 ### Human Approval Step (HITL)
 
+```yaml
 - id: approve
   type: human_approval
   message: "Approve this output?"
+```
 
 Behavior:
 - Pauses execution
@@ -203,6 +218,7 @@ Behavior:
 
 ### User Input Step
 
+```yaml
 - id: collect_input
   type: user_input
   params:
@@ -219,6 +235,7 @@ Behavior:
     defaults:
       chart_type: bar
     required: [chart_type]
+```
 
 Behavior:
 - Pauses execution
@@ -234,9 +251,11 @@ Question sets:
 
 ### Plan Proposal Step
 
+```yaml
 - id: propose_plan
   type: plan_proposal
   agent: product.plan_agent
+```
 
 Behavior:
 - Invokes a planner agent that returns a structured PlanProposal (JSON)
@@ -266,6 +285,7 @@ Plan execute (`plan_execute`):
 
 ### Branch Step
 
+```yaml
 - id: branch_if_ok
   type: branch
   when:
@@ -274,11 +294,13 @@ Plan execute (`plan_execute`):
     value: true
   then: next_step
   else: fallback_step
+```
 
 Behavior:
 - Evaluates deterministic condition expressions over artifacts/step outputs
 - Jumps to `then` or `else` (must be later steps)
 - Invalid conditions are rejected before run start
+
 Constraints:
 - Condition paths must reference `steps.<step_id>.output.*` or `artifacts.*`
 - Disallowed segments include raw text/prompt-like fields
@@ -287,6 +309,7 @@ Constraints:
 
 ### Repeat-Until Step
 
+```yaml
 - id: loop
   type: repeat_until
   iteration_step: refine
@@ -296,11 +319,13 @@ Constraints:
     path: artifacts.summary.confidence
     op: ">="
     value: 0.8
+```
 
 Behavior:
 - Executes the `iteration_step` until the stop condition is met or `max_iters` reached
 - Iteration steps must be executable (agent/tool/plan steps only)
 - Loop state is tracked and persisted in run metadata
+
 Stop conditions:
 - `confidence_threshold`, `no_missing_evidence`, and `all`/`any` groups
 
@@ -308,6 +333,7 @@ Stop conditions:
 
 ### Tool Batch Step
 
+```yaml
 - id: bulk_fetch
   type: tool_batch
   parallel: true
@@ -316,6 +342,7 @@ Stop conditions:
       inputs: { query: "..." }
     - tool_name: product.read_tool
       inputs: { query: "..." }
+```
 
 Behavior:
 - Executes a list of read-only, no-side-effect tools
@@ -326,10 +353,11 @@ Behavior:
 
 ## 6. Autonomy Levels
 
-Level	Description
-suggest_only	Agents reason and suggest; no execution
-semi_auto	Tools may execute but require approval
-full_auto	Fully autonomous execution
+| Level | Description |
+|-------|-------------|
+| `suggest_only` | Agents reason and suggest; no execution |
+| `semi_auto` | Tools may execute but require approval |
+| `full_auto` | Fully autonomous execution |
 
 Rules:
 - Autonomy level is enforced by governance hooks
@@ -341,9 +369,11 @@ Rules:
 
 Retries are flow-driven, never agent-driven.
 
+```yaml
 retry:
   max_attempts: 3
   backoff_seconds: 2
+```
 
 Rules:
 - Retries occur only on recoverable errors
@@ -356,12 +386,15 @@ Rules:
 
 Agents live under:
 
+```
 products/<product>/agents/
+```
 
 Example:
 
+```
 products/hello_world/agents/simple_agent.py
-
+```
 
 ---
 
@@ -375,6 +408,7 @@ All agents must:
 
 Conceptual example:
 
+```python
 class SimpleAgent(BaseAgent):
     name = "hello_world.simple"
 
@@ -385,7 +419,7 @@ class SimpleAgent(BaseAgent):
             error=None,
             meta={"agent_name": "hello_world.simple"},
         )
-
+```
 
 ---
 
@@ -410,8 +444,23 @@ Agents MUST NOT:
 ## 11. Agent Registry
 
 Agents are registered at startup:
-- Product agents self-register via controlled import
+- Product agents self-register via controlled import or `@agent` decorator
 - Registry maps agent_name -> factory (new instance per resolution)
+- Registry inherits from `ComponentRegistry[BaseAgent]`
+
+Auto-discovery with `@agent` decorator:
+```python
+from core.agents.base import agent, BaseAgent
+
+@agent(
+    name="product.my_agent",
+    purpose="Perform specific task",
+    capabilities=["capability_a", "capability_b"],
+)
+class MyAgent(BaseAgent):
+    def run(self, ctx: StepContext) -> AgentResult:
+        ...
+```
 
 Resolution:
 - Orchestrator resolves agents by name at runtime
@@ -420,19 +469,21 @@ Resolution:
 ---
 
 ## 12. Flow Execution Lifecycle
-	1.	Flow loaded and validated
-	2.	RunContext initialized
-	3.	Step loop begins
-	4.	Governance checks applied
-	5.	Step executed (agent/tool/plan/branch/loop/HITL/user_input)
-	6.	Trace events emitted
-	7.	State persisted via memory backend
-	8.	HITL/user_input pause or continuation
-	9.	Output persisted or run failed
+
+1. Flow loaded and validated
+2. RunContext initialized
+3. Step loop begins
+4. Governance checks applied
+5. Step executed (agent/tool/plan/branch/loop/HITL/user_input)
+6. Trace events emitted
+7. State persisted via memory backend
+8. HITL/user_input pause or continuation
+9. Output persisted or run failed
 
 Step parameter rendering supports:
 - `{{payload.<key>}}`
 - `{{artifacts.<key>}}`
+
 Missing values render as `null` for full-token values and as empty strings for inline tokens.
 
 ---
@@ -457,6 +508,7 @@ Required:
 ---
 
 ## 15. Best Practices
+
 - Keep flows declarative and readable
 - Express intent via params, not code
 - Keep agents small and single-purpose
@@ -464,7 +516,52 @@ Required:
 - Use approval gates early for high-risk actions
 - Log decisions and intent, not raw data
 - When using `llm_reasoner`, always supply a reasoning purpose
+- Use `@agent` decorator for auto-discovery
+
+---
+
+## 16. Built-in Advisory Agents
+
+The platform includes bounded advisory agents in `core/agents/advisory.py`:
+
+| Agent | Purpose | Output |
+|-------|---------|--------|
+| `ToolSelector` | Recommend tools based on descriptors + context | `ToolSelectionResult` |
+| `AgentSelector` | Recommend agents for subtasks | `AgentSelectionResult` |
+| `GapFinder` | Identify missing evidence | `GapAnalysisResult` |
+| `Summarizer` | Condense evidence into narrative | `SummaryResult` |
+| `RiskExplainer` | Explain confidence/risk factors | `RiskExplanationResult` |
+
+Rules:
+- Advisory agents cannot invoke tools directly
+- All outputs are structured; no free-form control
+- Orchestrator gates all recommendations
+
+---
+
+## 17. Reasoning Patterns
+
+### Reasoning Ladder
+Located in `core/agents/reasoning_ladder.py`:
+- Three-pass pattern: interpret → propose → select
+- Budget enforcement (max_passes, max_tool_calls)
+- HITL escalation when budgets exceeded
+
+### Critic Evaluator
+Located in `core/agents/critic_evaluator.py`:
+- Quality/completeness checks
+- Recommendations: NONE, USER_INPUT, HITL, FETCH_MORE_EVIDENCE
+- Cannot call tools; only analyzes artifacts
 
 ---
 
 This design keeps flows auditable and deterministic while preserving product isolation.
+
+---
+
+## Cross-References
+
+- **Building Products**: [product-guide.md](product-guide.md)
+- **Architecture**: [architecture-overview.md](architecture-overview.md)
+- **BRD**: [BRD-automation.md](../brd/BRD-automation.md)
+- **Techspec**: [AGT-agents-tools.md](../techspec/AGT-agents-tools.md), [ORC-orchestration.md](../techspec/ORC-orchestration.md)

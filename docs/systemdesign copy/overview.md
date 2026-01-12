@@ -3,6 +3,8 @@
 This document explains the **high-level architecture** of the `master/` agentic framework.
 It is intended for engineers building products on top of the platform.
 
+**Last Updated:** 12 January 2026
+
 ---
 
 ## 1. Core Design Principles
@@ -176,7 +178,10 @@ Products **must not**:
 Run and resume endpoints execute orchestration work in a threadpool to keep the API responsive during long-running flows.
 
 ### UI
-- Streamlit control center (`gateway/ui/platform_app.py`)
+- Streamlit control center with modular page architecture
+- Entry point: `gateway/ui/platform_app.py` (slim coordinator)
+- Pages: `gateway/ui/pages/` (home, execution, history)
+- API client: `gateway/ui/api_client.py`
 - Talks only to the API; product inputs/intent/output links are driven by product config
 
 ### CLI
@@ -204,7 +209,7 @@ flowchart LR
 
 ---
 
-## 8. Product Discovery
+## 8. Product Discovery & Auto-Registration
 
 - Products are discovered under `products/`.
 - Required files:
@@ -212,6 +217,8 @@ flowchart LR
   - `config/product.yaml`
   - `registry.py`
   - `flows/*.yaml`
+- Auto-discovery via `@agent` and `@tool` decorators
+- Simplified registration pattern reduces boilerplate
 
 ```mermaid
 flowchart TB
@@ -219,12 +226,37 @@ flowchart TB
   Config[config/product.yaml] --> Loader
   Registry[registry.py] --> Loader
   Flows[flows/*.yaml] --> Loader
+  Decorators[@agent/@tool] --> AutoDiscover[Auto-Discovery]
+  AutoDiscover --> Loader
   Loader --> Catalog[ProductCatalog]
 ```
 
 ---
 
-## 9. V1 Acceptance Checklist
+## 9. Intelligence Layer
+
+The platform includes bounded intelligence capabilities:
+
+### Advisory Agents
+- `ToolSelector` - Recommend tools based on descriptors
+- `AgentSelector` - Recommend agents for subtasks
+- `GapFinder` - Identify missing evidence
+- `Summarizer` - Condense evidence into narrative
+- `RiskExplainer` - Explain confidence/risk factors
+
+### Reasoning Patterns
+- **Context Pack Builder** - Deterministic LLM input curation with evidence provenance
+- **Reasoning Ladder** - Bounded interpret→propose→select pattern
+- **Critic Evaluator** - Quality/completeness checks with structured recommendations
+
+### Guardrails
+- All advisory outputs are structured; no free-form control flow
+- Budget enforcement (max_passes, max_tool_calls, cost units)
+- HITL escalation when budgets exceeded
+
+---
+
+## 10. V1 Acceptance Checklist
 
 ### Runtime invariants
 - Orchestrator emits trace events for run state transitions.
@@ -232,8 +264,19 @@ flowchart TB
 - No product-specific imports in core orchestrator.
 - Models are accessed only via `core/models/router.py`.
 - Tools are executed only via `core/tools/executor.py`.
+- Agents never call tools directly.
+- Tools never call LLM directly.
+- No env reads outside config loader.
+- No persistence outside memory layer.
 
 ### Intelligence acceptance guardrails
 - Deterministic flows must replay the same steps and outputs (see `tests/acceptance_intelligence`).
 - HITL/user_input transitions remain paused until explicitly resumed, and resume actions stay idempotent.
 - Governance continues to deny blocked tools/models before execution, traces capture tool/model boundaries, and `plan_proposal` steps emit artifacts without invoking tools.
+- Advisory agents cannot invoke tools; only return structured recommendations.
+- Reasoning budgets enforce deterministic stops or HITL escalation.
+
+### Test Coverage
+- 348+ tests covering core, integration, architecture, and acceptance scenarios
+- Golden path regression tests with expected output fixtures
+- Architecture invariant tests enforcing import boundaries

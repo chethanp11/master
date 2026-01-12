@@ -3,6 +3,8 @@
 This document explains **how to build and ship a product** on top of the `master/` platform.  
 Products are thin bundles that plug into the shared runtime; **no core changes are needed**.
 
+**Last Updated:** 12 January 2026
+
 ---
 
 ## 1. Product Principles
@@ -34,11 +36,13 @@ flowchart TB
   Config[config/product.yaml] --> Loader
   Registry[registry.py] --> Loader
   Flows[flows/*.yaml] --> Loader
+  Decorators[@agent/@tool] --> AutoDiscover[Auto-Discovery]
+  AutoDiscover --> Loader
   Loader --> Orchestrator
   Loader --> Gateway
 ```
 
-There is no scaffolding script; create the product layout manually following this document. The generated `registry.py` imports `ProductRegistries` and registers agents/tools without side effects.
+There is no scaffolding script; create the product layout manually following this document. The `registry.py` can use auto-discovery or explicit registration.
 
 ## 3. Manifest & Config
 
@@ -87,22 +91,86 @@ The flow loader normalizes step IDs and loads step definitions for the orchestra
 
 ## 5. Agents & Tools
 
-Agents (`BaseAgent`) operate on `StepContext`, inspect payload/artifacts, and return an `AgentResult`. They must not execute tools directly, call vendors, or write to disk.
+### Using Decorators (Recommended)
+
+Agents and tools can use decorators for auto-discovery:
+
+```python
+# products/<name>/agents/my_agent.py
+from core.agents.base import agent, BaseAgent
+from core.contracts.agent_schema import AgentResult, StepContext
+
+@agent(
+    name="product.my_agent",
+    purpose="Describe what this agent does",
+    capabilities=["capability_a", "capability_b"],
+)
+class MyAgent(BaseAgent):
+    def run(self, ctx: StepContext) -> AgentResult:
+        # Agent implementation
+        return AgentResult(ok=True, data={"result": "value"})
+```
+
+```python
+# products/<name>/tools/my_tool.py
+from core.tools.base import tool, BaseTool
+from core.contracts.tool_schema import ToolResult
+
+@tool(
+    name="product.my_tool",
+    description="Describe what this tool does",
+    read_only=True,
+    side_effect=False,
+)
+class MyTool(BaseTool):
+    def run(self, params: dict, ctx=None) -> ToolResult:
+        # Tool implementation
+        return ToolResult(ok=True, data={"result": "value"})
+```
+
+### Agent Rules
+
+Agents (`BaseAgent`) operate on `StepContext`, inspect payload/artifacts, and return an `AgentResult`. They must not:
+- Execute tools directly
+- Call vendors/models directly (use `llm_reasoner`)
+- Write to disk
+- Read environment variables
+
 If a flow needs LLM output, reference the built-in `llm_reasoner` agent in the flow definition.
 LLM calls require an explicit reasoning purpose (`INSIGHT`, `PRIORITIZATION`, `EXPLANATION`, `UNCERTAINTY`).
 
+### Tool Rules
+
 Tools (`BaseTool`) perform deterministic actions and return a `ToolResult`. Tool execution always flows through `core/tools/executor.py`, which applies governance hooks and redaction. Retry policy is enforced by the orchestrator on tool steps only.
+
+Tools marked `read_only=True` and `side_effect=False` are eligible for `tool_batch` steps.
 
 ## 6. Registration
 
-Every product must provide `products/<name>/registry.py` with:
+Every product must provide `products/<name>/registry.py`. Two approaches:
+
+### Option A: Auto-Discovery (Recommended)
+
+```python
+from pathlib import Path
+from core.utils.product_loader import ProductRegistries, auto_register
+
+def register(registries: ProductRegistries) -> None:
+    auto_register(registries, product_path=Path(__file__).parent)
+```
+
+This automatically discovers all agents and tools with `@agent` and `@tool` decorators.
+
+### Option B: Explicit Registration
 
 ```python
 from core.utils.product_loader import ProductRegistries
+from products.myproduct.agents.my_agent import MyAgent
+from products.myproduct.tools.my_tool import MyTool
 
 def register(registries: ProductRegistries) -> None:
-    registries.agent_registry.register("simple_agent", build_agent)
-    registries.tool_registry.register("echo_tool", build_tool)
+    registries.agent_registry.register("product.my_agent", MyAgent)
+    registries.tool_registry.register("product.my_tool", lambda: MyTool())
 ```
 
 `ProductRegistries` bundles the global `AgentRegistry` and `ToolRegistry` plus settings. The loader imports each registry module, calls `register(...)`, and only then exposes the product's flows to the API/UI. Keep registry imports side-effect-free and idempotent.
@@ -134,5 +202,16 @@ Once registered, the gateway exposes:
 ## Recap
 
 - Products ship manifests, configs, flows, agents, tools, registries, and optional tests.
+- Use `@agent` and `@tool` decorators for auto-discovery (reduces boilerplate by ~80%).
 - The product loader discovers manifests deterministically, registers components safely, and feeds the gateway/orchestrator.
 - Tests run via sqlite to prove the golden path (`tool → HITL → agent summary`) behaves under audit-ready persistence.
+- All agents/tools are governed by platform policies; no custom governance in products.
+
+---
+
+## Cross-References
+
+- **Flows & Agents**: [flows-and-agents-reference.md](flows-and-agents-reference.md)
+- **Architecture**: [architecture-overview.md](architecture-overview.md)
+- **BRD**: [BRD-experience.md](../brd/BRD-experience.md)
+- **Techspec**: [PROD-products.md](../techspec/PROD-products.md)
