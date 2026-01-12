@@ -1,1092 +1,1167 @@
-# Refactor Execution Guide
+# Semantic Interpretation Implementation Steps
 
-**Purpose:** Step-by-step instructions for executing [refactor_plan.md](refactor_plan.md) using Claude Opus 4.5 in VS Code Agent Mode.
-
-**Prerequisites:**
-- VS Code with GitHub Copilot (Agent Mode enabled)
-- All tests passing before starting
-- Git branch created for refactoring: `git checkout -b refactor/master-v2`
-- Commit after each batch completes successfully
+> **Feature**: Semantic Interpretation Phase  
+> **Format**: Copy-paste prompts for AI-assisted implementation  
+> **Last Updated**: 2026-01-12
 
 ---
 
-## Execution Strategy
+## How to Use This Document
 
-### Why Not All At Once?
+Each step below contains a **prompt** you can copy and paste to implement that part of the feature. Execute steps in order. Each step builds on the previous.
 
-Implementing all 17 phases in a single prompt would fail because:
-1. **Context limits** - Too much code to generate/modify in one session
-2. **Risk compounding** - One error cascades into later phases
-3. **Verification gaps** - Can't validate intermediate states
-4. **Rollback difficulty** - Hard to identify where things broke
-
-### Recommended Approach: 6 Execution Batches
-
-| Batch | Phases | Risk | Duration | Commit Point |
-|-------|--------|------|----------|--------------|
-| **A** | 0 (Baseline Tests) | Very Low | 1 session | ✓ |
-| **B** | 1-2 (Contracts + Removal) | Low | 1-2 sessions | ✓ |
-| **C** | 3 (Engine Decomposition) | High | 2-3 sessions | ✓ |
-| **D** | 4-6 (Governance, Registry, UI) | Low | 1-2 sessions | ✓ |
-| **E** | 7-13 (Intelligence Enhancement) | Medium | 3-4 sessions | ✓ |
-| **F** | 14-17 (Product + Tests) | Low | 1-2 sessions | ✓ |
+**Prerequisites**:
+- Read `implementation_plan.md` for context
+- Have the codebase open in VS Code
+- Ensure tests pass before starting: `pytest tests/ -v`
 
 ---
 
-## Batch A: Baseline & Safety Net (Phase 0)
+## Step 1: Create Semantic Schema Contracts
 
-### Purpose
-Lock in current behavior before any changes. This creates the safety net for all subsequent batches.
-
-### Pre-Prompt Checklist
-- [ ] All existing tests pass: `pytest tests/ -v`
-- [ ] On clean branch: `git status`
-
-### Prompt 1: Create Acceptance Tests
+### Prompt 1.1: Create SemanticEnvelope and related models
 
 ```
-I'm implementing Phase 0 of refactor_plan.md - Baseline & Safety Net.
+Create the file `core/contracts/semantic_schema.py` with the following Pydantic models:
 
-Create acceptance tests that lock in current platform behavior. These tests must pass BEFORE and AFTER all refactoring.
+1. `Entity` model with fields:
+   - `type`: str (entity type, e.g., "metric", "date", "filter")
+   - `value`: str (extracted value)
+   - `confidence`: float (0.0-1.0)
+   - `start_pos`: int | None (position in input, optional)
+   - `end_pos`: int | None (position in input, optional)
 
-Create these test files:
+2. `NextAction` enum (str, Enum) with values:
+   - CONTINUE = "CONTINUE"
+   - ASK_USER = "ASK_USER"
+   - ABORT = "ABORT"
+   - NEEDS_APPROVAL = "NEEDS_APPROVAL"
 
-1. `tests/acceptance_intelligence/test_determinism.py`:
-   - test_same_input_produces_same_output: Run hello_world flow twice with identical input, assert identical artifacts
-   - test_step_transitions_are_deterministic: Assert step order matches flow definition
-   - test_resume_produces_consistent_result: Pause at HITL, resume, verify final state matches expected
+3. `SemanticEnvelope` model with fields:
+   - `raw_input`: str (original user input)
+   - `normalized_input`: str (cleaned/standardized input)
+   - `product_id`: str (resolved product identifier)
+   - `intent_type`: str (classified intent category)
+   - `entities`: list[Entity] (max_items=20)
+   - `constraints`: dict[str, Any] (extracted constraints/filters)
+   - `confidence`: float (ge=0.0, le=1.0)
+   - `ambiguities`: list[str] (max_items=20, unresolved ambiguities)
+   - `proposed_next_action`: NextAction (default CONTINUE)
 
-2. `tests/acceptance_intelligence/test_governance_baseline.py`:
-   - test_governance_denies_blocked_tools: Configure blocked tool, assert rejection
-   - test_governance_denies_blocked_models: Configure blocked model, assert rejection
-   - test_proposal_steps_do_not_execute_tools: Run plan_proposal step, verify no tool execution in trace
+4. `ValidationResult` model with fields:
+   - `is_valid`: bool
+   - `missing_fields`: list[str] (max_items=20)
+   - `violations`: list[str] (max_items=20)
+   - `revised_confidence`: float (ge=0.0, le=1.0)
+   - `clarifying_question`: str | None (when user input needed)
 
-3. `tests/acceptance_intelligence/test_pause_resume_baseline.py`:
-   - test_hitl_pauses_correctly: Assert run status is PENDING_HUMAN after HITL step
-   - test_user_input_pauses_correctly: Assert run status is PENDING_USER_INPUT
-   - test_resume_is_idempotent: Resume twice, assert same final state
+5. `SemanticContext` model with fields:
+   - `raw_input`: str
+   - `payload`: dict[str, Any]
+   - `product_config`: dict[str, Any]
 
-4. `tests/acceptance_intelligence/test_trace_baseline.py`:
-   - test_every_tool_call_traced: Run flow with tools, assert trace events for each
-   - test_every_model_call_traced: Run flow with LLM, assert trace events
-   - test_trace_contains_required_fields: Assert run_id, step_id, timestamp, event_type present
+All models should use `model_config = ConfigDict(extra="forbid")` for strict validation.
+Add docstrings explaining each model's purpose.
+Export all models in __all__.
 
-Use existing test fixtures from tests/conftest.py. Use InMemoryBackend and fake providers for determinism.
+Reference requirements: ORC-SEM-010...019, ORC-SEM-020...022, INT-SEM-VAL-001...006
 ```
 
-### Verification
-```bash
-# Run new tests
-pytest tests/acceptance_intelligence/ -v
+### Prompt 1.2: Create unit tests for semantic schema
 
-# Run all tests to ensure no regressions
-pytest tests/ -v
+```
+Create `tests/unit/core/contracts/test_semantic_schema.py` with tests for:
 
-# Commit if passing
-git add tests/acceptance_intelligence/
-git commit -m "Phase 0: Add baseline acceptance tests for refactoring safety net"
+1. SemanticEnvelope validation:
+   - test_semantic_envelope_valid_minimal
+   - test_semantic_envelope_valid_full
+   - test_semantic_envelope_confidence_bounds (reject <0 or >1)
+   - test_semantic_envelope_entities_max_items (reject >20)
+   - test_semantic_envelope_extra_fields_rejected
+
+2. NextAction enum:
+   - test_next_action_values
+   - test_next_action_serialization
+
+3. ValidationResult:
+   - test_validation_result_valid
+   - test_validation_result_with_question
+   - test_validation_result_confidence_bounds
+
+4. Entity model:
+   - test_entity_valid
+   - test_entity_confidence_bounds
+
+Use pytest fixtures for common test data.
+Reference requirements: ORC-SEM-010...019
 ```
 
 ---
 
-## Batch B: Contract Consolidation + Module Removal (Phases 1-2)
+## Step 2: Create Core Normalization Rules
 
-### Purpose
-Reduce contract file count and remove dead code. Low risk, high clarity improvement.
-
-### Pre-Prompt Checklist
-- [ ] Batch A complete and committed
-- [ ] All tests passing
-
-### Prompt 2: Contract Consolidation
+### Prompt 2.1: Implement normalization functions
 
 ```
-I'm implementing Phase 1 of refactor_plan.md - Contract Consolidation.
+Create `core/orchestrator/normalization.py` with domain-agnostic normalization functions:
 
-Consolidate contract files as specified:
+1. `normalize_whitespace(text: str) -> str`:
+   - Strip leading/trailing whitespace
+   - Collapse multiple spaces to single space
+   - Normalize newlines
 
-1. Merge `hitl_schema.py` + `question_schema.py` → `interaction_schema.py`:
-   - Create core/contracts/interaction_schema.py with all models from both files
-   - Add re-exports in original files with deprecation warnings
-   - Update all imports across codebase to use new location
+2. `deduplicate_entities(entities: list[Entity]) -> list[Entity]`:
+   - Remove duplicates where type AND value match
+   - Keep entity with highest confidence when deduping
+   - Return sorted list by (type, value)
 
-2. Merge `plan_schema.py` into `action_plan_schema.py`:
-   - Move PlanProposal and related models into action_plan_schema.py
-   - Add re-exports in plan_schema.py with deprecation warning
-   - Update imports
+3. `merge_constraints(constraints: dict) -> dict`:
+   - Merge overlapping constraint values deterministically
+   - For lists: dedupe and sort
+   - For conflicting scalars: keep first encountered
+   - Return dict with keys sorted alphabetically
 
-3. Merge `evidence_schema.py` into `context_pack_schema.py`:
-   - Move Evidence, Citation models into context_pack_schema.py
-   - Add re-exports with deprecation warning
-   - Update imports
+4. `apply_stable_ordering(envelope: SemanticEnvelope) -> SemanticEnvelope`:
+   - Sort entities by (type, value)
+   - Sort ambiguities alphabetically
+   - Sort constraint keys alphabetically
+   - Return new envelope with stable ordering
 
-4. Merge `branch_schema.py` + `loop_schema.py` into `flow_schema.py`:
-   - Move BranchSpec, BranchResult, LoopSpec, LoopResult into flow_schema.py
-   - Add re-exports with deprecation warnings
-   - Update imports
+5. `coerce_types(value: Any, target_type: str) -> Any`:
+   - Support: "int", "float", "date", "bool"
+   - Return original value if coercion fails
+   - Used when schema declares expected types
 
-For deprecation warnings, use this pattern:
-   python
-import warnings
-warnings.warn(
-    "Importing from {old_module} is deprecated. Use {new_module} instead.",
-    DeprecationWarning,
-    stacklevel=2
+6. `apply_core_normalization(envelope: SemanticEnvelope) -> SemanticEnvelope`:
+   - Orchestrates all above functions
+   - Returns a fully normalized envelope
+
+IMPORTANT: These functions must NOT contain domain-specific rules.
+No rules like "trend requires time axis" - that belongs in product adapters.
+
+Reference requirements: ORC-SEM-030...035
+```
+
+### Prompt 2.2: Create unit tests for normalization
+
+```
+Create `tests/unit/core/orchestrator/test_normalization.py` with tests:
+
+1. Whitespace normalization:
+   - test_normalize_whitespace_trim
+   - test_normalize_whitespace_collapse
+   - test_normalize_whitespace_newlines
+
+2. Entity deduplication:
+   - test_deduplicate_entities_removes_dupes
+   - test_deduplicate_entities_keeps_highest_confidence
+   - test_deduplicate_entities_stable_sort
+
+3. Constraint merging:
+   - test_merge_constraints_dedupes_lists
+   - test_merge_constraints_sorts_keys
+   - test_merge_constraints_conflict_resolution
+
+4. Stable ordering:
+   - test_apply_stable_ordering_entities
+   - test_apply_stable_ordering_ambiguities
+   - test_apply_stable_ordering_idempotent
+
+5. Type coercion:
+   - test_coerce_types_string_to_int
+   - test_coerce_types_string_to_date
+   - test_coerce_types_invalid_returns_original
+
+Reference requirements: ORC-SEM-030...035
+```
+
+---
+
+## Step 3: Create Product Semantic Adapter Interface
+
+### Prompt 3.1: Define the adapter abstract base class
+
+```
+Add to `core/contracts/semantic_schema.py` (or create `core/contracts/semantic_adapter.py`):
+
+1. `ProductSemanticAdapter` abstract base class:
+   ```python
+   from abc import ABC, abstractmethod
+   
+   class ProductSemanticAdapter(ABC):
+       """
+       Product-provided semantic interpretation adapter.
+       
+       Products implement this to customize how user input is interpreted
+       and validated for their domain.
+       
+       IMPORTANT: Implementations must NOT:
+       - Import from core/orchestrator/*
+       - Call tools or agents directly
+       - Access external services
+       """
+       
+       @abstractmethod
+       def interpret(self, context: SemanticContext) -> SemanticEnvelope:
+           """
+           Interpret raw user input into a structured semantic envelope.
+           
+           Args:
+               context: Contains raw_input, payload, product_config
+               
+           Returns:
+               SemanticEnvelope with intent, entities, constraints, confidence
+           """
+           pass
+       
+       @abstractmethod  
+       def validate(self, envelope: SemanticEnvelope, context: SemanticContext) -> ValidationResult:
+           """
+           Validate the semantic envelope against domain-specific rules.
+           
+           Args:
+               envelope: Output from interpret()
+               context: Original context for reference
+               
+           Returns:
+               ValidationResult with is_valid, violations, revised_confidence
+           """
+           pass
+   ```
+
+2. `DefaultSemanticAdapter` class (non-abstract):
+   - `interpret()`: Returns passthrough envelope with confidence=1.0
+   - `validate()`: Returns is_valid=True, empty violations
+
+Reference requirements: PROD-SEM-001...005
+```
+
+### Prompt 3.2: Create hello_world reference adapter
+
+```
+Create `products/hello_world/semantic.py` as a reference implementation:
+
+```python
+"""
+Semantic adapter for hello_world product.
+
+This is a minimal reference implementation showing how products
+can customize semantic interpretation.
+"""
+
+from core.contracts.semantic_schema import (
+    ProductSemanticAdapter,
+    SemanticContext,
+    SemanticEnvelope,
+    ValidationResult,
+    NextAction,
+    Entity,
 )
 
 
-Run tests after each merge to catch import errors early.
+class HelloWorldSemanticAdapter(ProductSemanticAdapter):
+    """
+    Simple semantic adapter for the hello_world demo product.
+    
+    Recognizes:
+    - Greetings (hello, hi, hey)
+    - Names (after greeting)
+    """
+    
+    GREETING_PATTERNS = ["hello", "hi", "hey", "greetings"]
+    
+    def interpret(self, context: SemanticContext) -> SemanticEnvelope:
+        raw = context.raw_input.strip().lower()
+        entities = []
+        intent_type = "unknown"
+        confidence = 0.5
+        ambiguities = []
+        
+        # Check for greeting
+        for pattern in self.GREETING_PATTERNS:
+            if raw.startswith(pattern):
+                intent_type = "greeting"
+                confidence = 0.9
+                
+                # Extract name if present (e.g., "hello world")
+                remainder = raw[len(pattern):].strip()
+                if remainder:
+                    entities.append(Entity(
+                        type="name",
+                        value=remainder,
+                        confidence=0.8,
+                    ))
+                break
+        
+        if intent_type == "unknown":
+            ambiguities.append("Could not determine intent from input")
+            confidence = 0.3
+        
+        return SemanticEnvelope(
+            raw_input=context.raw_input,
+            normalized_input=raw,
+            product_id="hello_world",
+            intent_type=intent_type,
+            entities=entities,
+            constraints={},
+            confidence=confidence,
+            ambiguities=ambiguities,
+            proposed_next_action=NextAction.CONTINUE if confidence > 0.5 else NextAction.ASK_USER,
+        )
+    
+    def validate(self, envelope: SemanticEnvelope, context: SemanticContext) -> ValidationResult:
+        violations = []
+        revised_confidence = envelope.confidence
+        
+        # Simple validation: greeting intent should have high confidence
+        if envelope.intent_type == "greeting" and envelope.confidence < 0.7:
+            violations.append("Greeting confidence too low")
+            revised_confidence = 0.6
+        
+        return ValidationResult(
+            is_valid=len(violations) == 0,
+            missing_fields=[],
+            violations=violations,
+            revised_confidence=revised_confidence,
+            clarifying_question="What would you like me to help you with?" if violations else None,
+        )
+
+
+# Export for discovery
+SemanticAdapter = HelloWorldSemanticAdapter
 ```
 
-### Prompt 3: Unused Module Removal
-
-```
-I'm implementing Phase 2 of refactor_plan.md - Unused Module Removal.
-
-Remove these unused modules:
-
-1. Delete `core/tools/backends/mcp_backend.py`:
-   - First verify no imports: grep for "mcp_backend" across codebase
-   - Remove from core/tools/backends/__init__.py if exported
-   - Delete the file
-
-2. Delete `core/tools/backends/remote_backend.py`:
-   - Verify no imports
-   - Remove from __init__.py
-   - Delete the file
-
-3. Update `core/tools/backends/__init__.py`:
-   - Remove any references to deleted backends
-   - Keep only local_backend exports
-
-Do NOT delete advisory.py, critic_evaluator.py, reasoning_ladder.py, or vector_store.py - these are retained for intelligence phases.
-
-Run tests after deletions to verify nothing breaks.
-```
-
-### Verification
-```bash
-# Check for import errors
-python -c "from core.contracts import *"
-python -c "from core.tools.backends import *"
-
-# Run all tests
-pytest tests/ -v
-
-# Commit
-git add -A
-git commit -m "Phases 1-2: Contract consolidation and unused module removal"
-```
-
----
-
-## Batch C: Engine Decomposition (Phase 3)
-
-### Purpose
-Break the 3,083-line engine.py into focused modules. HIGH RISK - do incrementally.
-
-### Pre-Prompt Checklist
-- [ ] Batches A-B complete and committed
-- [ ] All tests passing
-- [ ] Read engine.py to understand current structure
-
-### Prompt 4: Extract Run Lifecycle
-
-```
-I'm implementing Phase 3 of refactor_plan.md - Engine Decomposition (Part 1 of 4).
-
-Extract run lifecycle management from engine.py into run_lifecycle.py.
-
-Create `core/orchestrator/run_lifecycle.py`:
-
-1. Move these responsibilities from engine.py:
-   - Run initialization logic
-   - Run completion logic  
-   - Run status transitions
-   - Run persistence calls
-
-2. The new module should contain:
-   - `start_run(engine, flow_def, payload) -> RunRecord`
-   - `complete_run(engine, run_record, status, output) -> RunRecord`
-   - `fail_run(engine, run_record, error) -> RunRecord`
-   - Helper functions for status transitions
-
-3. Update engine.py to import and use these functions.
-
-4. Keep engine.py as the public interface - run_lifecycle.py is internal.
-
-Constraints:
-- No circular imports
-- All trace events must still emit correctly
-- All governance hooks must still be called
-- Run tests after extraction
-
-Target: engine.py should lose ~300 lines from this extraction.
-```
-
-### Prompt 5: Extract User Input Handler
-
-```
-I'm implementing Phase 3 of refactor_plan.md - Engine Decomposition (Part 2 of 4).
-
-Extract user input handling from engine.py into user_input_handler.py.
-
-Create `core/orchestrator/user_input_handler.py`:
-
-1. Move these responsibilities from engine.py:
-   - User input step detection and pause
-   - User input validation
-   - User input response handling
-   - Context pack merging with user answers
-
-2. The new module should contain:
-   - `pause_for_user_input(engine, run, step, request) -> RunRecord`
-   - `validate_user_input(request, response) -> ValidationResult`
-   - `apply_user_input(engine, run, response) -> RunRecord`
-   - `merge_into_context_pack(context_pack, answers) -> ContextPack`
-
-3. Update engine.py to import and delegate to these functions.
-
-4. Ensure PENDING_USER_INPUT status transitions work correctly.
-
-Target: engine.py should lose ~250 lines from this extraction.
-```
-
-### Prompt 6: Extract Plan Executor
-
-```
-I'm implementing Phase 3 of refactor_plan.md - Engine Decomposition (Part 3 of 4).
-
-Extract plan execution from engine.py into plan_executor.py.
-
-Create `core/orchestrator/plan_executor.py`:
-
-1. Move these responsibilities from engine.py:
-   - plan_propose step handling
-   - plan_gate step handling
-   - plan_execute step handling
-   - Action plan artifact management
-
-2. The new module should contain:
-   - `handle_plan_propose(engine, run, step) -> StepResult`
-   - `handle_plan_gate(engine, run, step, plan) -> GateResult`
-   - `handle_plan_execute(engine, run, step, approved_plan) -> StepResult`
-   - Helper functions for plan validation
-
-3. Update engine.py to delegate plan step types to these functions.
-
-4. Ensure HITL triggers for plan approval still work.
-
-Target: engine.py should lose ~350 lines from this extraction.
-```
-
-### Prompt 7: Extract HITL Handler + Final Cleanup
-
-```
-I'm implementing Phase 3 of refactor_plan.md - Engine Decomposition (Part 4 of 4).
-
-Extract HITL handling and clean up engine.py.
-
-1. Create `core/orchestrator/hitl_handler.py`:
-   - Move approval creation, resolution, and state management
-   - `create_approval(engine, run, step, context) -> ApprovalRecord`
-   - `resolve_approval(engine, run, approval_id, decision) -> RunRecord`
-   - `check_pending_approvals(engine, run) -> list[ApprovalRecord]`
-
-2. Create `core/orchestrator/loop_executor.py`:
-   - Move repeat_until handling
-   - `handle_repeat_until(engine, run, step) -> StepResult`
-   - `evaluate_stop_condition(context, condition) -> bool`
-
-3. Clean up engine.py:
-   - Should now be ~400-500 lines
-   - Should only contain:
-     - OrchestratorEngine class definition
-     - High-level orchestration methods (run_flow, resume_run)
-     - Delegation to extracted modules
-   - Remove any dead code or unused private methods
-
-4. Update `core/orchestrator/__init__.py` to export only OrchestratorEngine.
-
-Run full test suite after each extraction step.
-```
-
-### Verification
-```bash
-# Verify engine.py size
-wc -l core/orchestrator/engine.py  # Should be ~400-500 lines
-
-# Verify no circular imports
-python -c "from core.orchestrator.engine import OrchestratorEngine"
-
-# Run all tests
-pytest tests/ -v
-
-# Run acceptance tests specifically
-pytest tests/acceptance_intelligence/ -v
-
-# Commit
-git add core/orchestrator/
-git commit -m "Phase 3: Engine decomposition into focused modules"
+Reference requirements: PROD-SEM-INT-001...006, PROD-SEM-VAL-001...007
 ```
 
 ---
 
-## Batch D: Governance, Registry, UI (Phases 4-6)
+## Step 4: Create Semantic Phase Executor
 
-### Purpose
-Consolidate governance gates, unify registries, modularize UI. Low risk, parallel-safe.
-
-### Pre-Prompt Checklist
-- [ ] Batches A-C complete and committed
-- [ ] All tests passing
-
-### Prompt 8: Governance Consolidation
+### Prompt 4.1: Implement SemanticPhase class
 
 ```
-I'm implementing Phase 4 of refactor_plan.md - Governance Consolidation.
+Create `core/orchestrator/semantic_phase.py`:
 
-Consolidate gate files into a unified gates.py module.
+```python
+"""
+Semantic interpretation phase executor.
 
-1. Create `core/governance/gates.py`:
-   - Implement a GateRegistry pattern for pluggable gates
-   - Move and refactor these into the registry:
-     - branch_gate.py → BranchGate class
-     - loop_gate.py → LoopGate class
-     - plan_gate.py → PlanGate class
-     - critic_gate.py → CriticGate class
-     - retrieval_policy.py → RetrievalGate class
+This module runs before step execution to interpret user intent,
+validate the interpretation, and decide whether to proceed.
+"""
 
-2. Gate interface:
-      python
-   class Gate(Protocol):
-       name: str
-       def evaluate(self, context: GateContext) -> GateResult: ...
-   
-   class GateRegistry:
-       def register(self, gate: Gate) -> None: ...
-       def get(self, name: str) -> Gate: ...
-       def evaluate_all(self, context: GateContext) -> list[GateResult]: ...
-   
+from typing import Optional
+from core.contracts.semantic_schema import (
+    SemanticEnvelope,
+    SemanticContext,
+    ValidationResult,
+    NextAction,
+    ProductSemanticAdapter,
+    DefaultSemanticAdapter,
+)
+from core.orchestrator.normalization import apply_core_normalization
+from core.memory.tracing import Tracer
 
-3. Update hooks.py to use GateRegistry instead of direct imports.
 
-4. Keep original files with deprecation warnings and re-exports for backward compatibility.
+class SemanticPhaseResult:
+    """Result of semantic phase execution."""
+    
+    def __init__(
+        self,
+        envelope: SemanticEnvelope,
+        validation: ValidationResult,
+        next_action: NextAction,
+    ):
+        self.envelope = envelope
+        self.validation = validation
+        self.next_action = next_action
 
-5. Update tests to use new gate structure.
 
-Target: 5 gate files → 1 gates.py + 5 deprecated stubs
+class SemanticPhase:
+    """
+    Executes semantic interpretation before step execution.
+    
+    This phase:
+    1. Calls product adapter to interpret input
+    2. Applies core normalization rules
+    3. Calls product adapter to validate
+    4. Checks confidence thresholds
+    5. Determines next action (CONTINUE/ASK_USER/ABORT)
+    """
+    
+    def __init__(
+        self,
+        tracer: Tracer,
+        get_adapter_fn,  # Callable[[str], ProductSemanticAdapter]
+        get_threshold_fn,  # Callable[[str], float]
+    ):
+        self.tracer = tracer
+        self.get_adapter = get_adapter_fn
+        self.get_threshold = get_threshold_fn
+        self.default_adapter = DefaultSemanticAdapter()
+    
+    async def execute(
+        self,
+        raw_input: str,
+        payload: dict,
+        product_id: str,
+        skip_semantic: bool = False,
+    ) -> SemanticPhaseResult:
+        """
+        Execute semantic interpretation phase.
+        
+        Args:
+            raw_input: Original user input text
+            payload: Full request payload
+            product_id: Product identifier
+            skip_semantic: If True, return passthrough result
+            
+        Returns:
+            SemanticPhaseResult with envelope, validation, next_action
+        """
+        # Skip check
+        if skip_semantic:
+            return self._create_passthrough_result(raw_input, payload, product_id)
+        
+        # Emit start event
+        self.tracer.emit("semantic_interpretation_started", {
+            "product_id": product_id,
+            "raw_input_length": len(raw_input),
+        })
+        
+        try:
+            # Build context
+            context = SemanticContext(
+                raw_input=raw_input,
+                payload=payload,
+                product_config={},  # TODO: Get from product catalog
+            )
+            
+            # Get adapter (or default)
+            adapter = self._get_adapter_safe(product_id)
+            
+            # Interpret
+            envelope = adapter.interpret(context)
+            
+            # Apply core normalization
+            envelope = apply_core_normalization(envelope)
+            
+            # Validate
+            validation = adapter.validate(envelope, context)
+            
+            # Confidence check
+            threshold = self.get_threshold(product_id)
+            next_action = self._determine_next_action(
+                envelope, validation, threshold
+            )
+            
+            # Update envelope with final next_action
+            envelope.proposed_next_action = next_action
+            
+            # Emit completion event
+            self.tracer.emit("semantic_interpretation_completed", {
+                "confidence": envelope.confidence,
+                "ambiguity_count": len(envelope.ambiguities),
+                "entity_count": len(envelope.entities),
+                "next_action": next_action.value,
+            })
+            
+            # Emit validation event
+            self.tracer.emit("semantic_validation_completed", {
+                "is_valid": validation.is_valid,
+                "missing_fields": validation.missing_fields,
+                "violation_count": len(validation.violations),
+                "revised_confidence": validation.revised_confidence,
+            })
+            
+            # Emit stop event if not continuing
+            if next_action != NextAction.CONTINUE:
+                self.tracer.emit("semantic_stop_issued", {
+                    "next_action": next_action.value,
+                    "question": validation.clarifying_question,
+                    "violations": validation.violations,
+                })
+            
+            return SemanticPhaseResult(
+                envelope=envelope,
+                validation=validation,
+                next_action=next_action,
+            )
+            
+        except Exception as e:
+            self.tracer.emit("semantic_interpretation_failed", {
+                "error": str(e),
+            })
+            raise
+    
+    def _get_adapter_safe(self, product_id: str) -> ProductSemanticAdapter:
+        """Get adapter with fallback to default."""
+        try:
+            adapter = self.get_adapter(product_id)
+            return adapter if adapter else self.default_adapter
+        except Exception:
+            return self.default_adapter
+    
+    def _determine_next_action(
+        self,
+        envelope: SemanticEnvelope,
+        validation: ValidationResult,
+        threshold: float,
+    ) -> NextAction:
+        """Determine next action based on confidence and validation."""
+        # If validation failed, use its guidance
+        if not validation.is_valid:
+            if validation.clarifying_question:
+                return NextAction.ASK_USER
+            return NextAction.ABORT
+        
+        # Check confidence threshold
+        effective_confidence = min(
+            envelope.confidence,
+            validation.revised_confidence,
+        )
+        if effective_confidence < threshold:
+            return NextAction.ASK_USER
+        
+        # Use envelope's proposed action
+        return envelope.proposed_next_action
+    
+    def _create_passthrough_result(
+        self,
+        raw_input: str,
+        payload: dict,
+        product_id: str,
+    ) -> SemanticPhaseResult:
+        """Create passthrough result when semantic phase is skipped."""
+        envelope = SemanticEnvelope(
+            raw_input=raw_input,
+            normalized_input=raw_input,
+            product_id=product_id,
+            intent_type="passthrough",
+            entities=[],
+            constraints={},
+            confidence=1.0,
+            ambiguities=[],
+            proposed_next_action=NextAction.CONTINUE,
+        )
+        validation = ValidationResult(
+            is_valid=True,
+            missing_fields=[],
+            violations=[],
+            revised_confidence=1.0,
+            clarifying_question=None,
+        )
+        return SemanticPhaseResult(
+            envelope=envelope,
+            validation=validation,
+            next_action=NextAction.CONTINUE,
+        )
 ```
 
-### Prompt 9: Registry Unification
+Reference requirements: ORC-SEM-001...004, ORC-SEM-040...043
+```
+
+### Prompt 4.2: Create unit tests for semantic phase
 
 ```
-I'm implementing Phase 5 of refactor_plan.md - Registry Unification.
+Create `tests/unit/core/orchestrator/test_semantic_phase.py` with tests:
 
-Create a generic ComponentRegistry base class.
+1. Basic execution:
+   - test_semantic_phase_executes_interpret
+   - test_semantic_phase_executes_validate
+   - test_semantic_phase_applies_normalization
 
-1. Create `core/utils/registry.py`:
-      python
-   from typing import Generic, TypeVar, Callable, Dict
+2. Skip behavior:
+   - test_semantic_phase_skip_returns_passthrough
+   - test_semantic_phase_skip_confidence_is_one
+
+3. Adapter resolution:
+   - test_semantic_phase_uses_product_adapter
+   - test_semantic_phase_falls_back_to_default
+
+4. Next action determination:
+   - test_next_action_continue_when_valid_high_confidence
+   - test_next_action_ask_user_when_low_confidence
+   - test_next_action_ask_user_when_validation_has_question
+   - test_next_action_abort_when_validation_fails_no_question
+
+5. Trace events:
+   - test_emits_semantic_interpretation_started
+   - test_emits_semantic_interpretation_completed
+   - test_emits_semantic_validation_completed
+   - test_emits_semantic_stop_issued_on_ask_user
+   - test_emits_semantic_stop_issued_on_abort
+
+Use pytest fixtures and mocks for tracer and adapters.
+Reference requirements: ORC-SEM-001...004, ORC-SEM-040...043
+```
+
+---
+
+## Step 5: Integrate with Orchestrator Engine
+
+### Prompt 5.1: Modify engine.py to call semantic phase
+
+```
+Modify `core/orchestrator/engine.py` to integrate the semantic phase:
+
+1. Add import for SemanticPhase and related types
+
+2. Add `semantic_phase` to Engine.__init__():
+   ```python
+   self.semantic_phase = SemanticPhase(
+       tracer=self.tracer,
+       get_adapter_fn=self._get_semantic_adapter,
+       get_threshold_fn=self._get_confidence_threshold,
+   )
+   ```
+
+3. Add helper methods:
+   ```python
+   def _get_semantic_adapter(self, product_id: str):
+       # Resolve from product catalog
+       pass
    
-   T = TypeVar("T")
+   def _get_confidence_threshold(self, product_id: str) -> float:
+       # Get from settings, with product override
+       pass
+   ```
+
+4. In run_flow() method, AFTER run initialization but BEFORE step execution:
+   ```python
+   # Semantic interpretation phase
+   semantic_result = await self.semantic_phase.execute(
+       raw_input=payload.get("text", str(payload)),
+       payload=payload,
+       product_id=product_id,
+       skip_semantic=flow.config.get("skip_semantic_interpretation", False),
+   )
    
-   class ComponentRegistry(Generic[T]):
-       """Generic registry for agents, tools, or other component factories."""
-       
-       def __init__(self, component_type: str):
-           self._component_type = component_type
-           self._factories: Dict[str, Callable[..., T]] = {}
-       
-       def register(self, name: str, factory: Callable[..., T]) -> None: ...
-       def get(self, name: str) -> T: ...
-       def get_factory(self, name: str) -> Callable[..., T]: ...
-       def list_registered(self) -> list[str]: ...
-       def has(self, name: str) -> bool: ...
+   # Store envelope in run context
+   run_context.semantic_envelope = semantic_result.envelope
+   
+   # Handle next action
+   if semantic_result.next_action == NextAction.ASK_USER:
+       return await self._pause_for_semantic_clarification(
+           run_context,
+           semantic_result,
+       )
+   elif semantic_result.next_action == NextAction.ABORT:
+       return await self._fail_run_semantic(
+           run_context,
+           semantic_result,
+       )
+   elif semantic_result.next_action == NextAction.NEEDS_APPROVAL:
+       return await self._request_semantic_approval(
+           run_context,
+           semantic_result,
+       )
+   
+   # CONTINUE: proceed to step execution
+   ```
+
+5. Add helper methods for pause/fail:
+   ```python
+   async def _pause_for_semantic_clarification(self, run_context, semantic_result):
+       # Transition to PAUSED_WAITING_FOR_USER
+       # Return structured clarification response
+       pass
+   
+   async def _fail_run_semantic(self, run_context, semantic_result):
+       # Transition to FAILED with code "semantic_abort"
+       # Return structured error response
+       pass
+   ```
+
+Reference requirements: ORC-SEM-001, ORC-SEM-STOP-001...007
+```
+
+### Prompt 5.2: Update run_schema.py for semantic fields
+
+```
+Modify `core/contracts/run_schema.py`:
+
+1. Add import for SemanticEnvelope
+
+2. Add to RunRecord:
+   ```python
+   semantic_envelope: Optional[SemanticEnvelope] = None
+   ```
+
+3. Add new error codes to relevant enum:
+   ```python
+   SEMANTIC_INTERPRETATION_FAILED = "semantic_interpretation_failed"
+   SEMANTIC_ABORT = "semantic_abort"
+   ```
+
+4. Ensure SemanticEnvelope is serializable in RunRecord
+
+Reference requirements: ORC-SEM-003, ORC-SEM-004, ORC-SEM-STOP-004
+```
+
+---
+
+## Step 6: Add Confidence Threshold Configuration
+
+### Prompt 6.1: Update configs/app.yaml
+
+```
+Add to `configs/app.yaml`:
+
+```yaml
+# Semantic interpretation settings
+semantic:
+  # Default confidence threshold (0.0-1.0)
+  # Interpretations below this threshold trigger ASK_USER
+  default_confidence_threshold: 0.7
   
-
-2. Refactor `core/agents/registry.py`:
-   - Make AgentRegistry inherit from ComponentRegistry[BaseAgent]
-   - Keep existing API for backward compatibility
-   - Add any agent-specific methods as extensions
-
-3. Refactor `core/tools/registry.py`:
-   - Make ToolRegistry inherit from ComponentRegistry[BaseTool]
-   - Keep existing API for backward compatibility
-   - Add any tool-specific methods as extensions
-
-4. Update imports in orchestrator and products.
-
-5. Run all registry-related tests.
+  # Whether semantic phase is required (can be overridden per flow)
+  require_semantic_phase: true
 ```
 
-### Prompt 10: UI Modularization
-
-```
-I'm implementing Phase 6 of refactor_plan.md - UI Modularization.
-
-Split platform_app.py (1,046 lines) into page modules.
-
-1. Create directory structure:
-   
-   gateway/ui/
-   ├── platform_app.py      # Slim entry point (~150 lines)
-   ├── api_client.py        # HTTP client for API calls
-   ├── pages/
-   │   ├── __init__.py
-   │   ├── home.py          # Product catalog view
-   │   ├── run.py           # Run execution view
-   │   ├── approvals.py     # Pending approvals view
-   │   └── history.py       # Run history view
-   └── components/
-       ├── __init__.py
-       ├── run_card.py      # Reusable run display widget
-       └── approval_form.py # Approval interaction widget
-   
-
-2. Create `gateway/ui/api_client.py`:
-   - Wrap all HTTP calls to the FastAPI backend
-   - Remove any direct core/ imports from UI code
-   - Handle errors gracefully with user-friendly messages
-
-3. Extract page modules:
-   - Each page is a function that renders its Streamlit content
-   - Pages import only from api_client, not from core/
-   - Use st.session_state for page state management
-
-4. Slim down platform_app.py:
-   - Keep only: app initialization, navigation, page routing
-   - Import and call page functions based on navigation state
-
-5. Verify UI still works by running: `streamlit run gateway/ui/platform_app.py`
-
-Target: platform_app.py ≤ 200 lines, no direct core/ imports in UI
+Reference requirements: INT-SEM-CONF-003
 ```
 
-### Verification
-```bash
-# Verify governance structure
-python -c "from core.governance.gates import GateRegistry"
+### Prompt 6.2: Update configs/products.yaml
 
-# Verify registry unification
-python -c "from core.utils.registry import ComponentRegistry"
-python -c "from core.agents.registry import AgentRegistry"
-python -c "from core.tools.registry import ToolRegistry"
+```
+Add to `configs/products.yaml`:
 
-# Test UI (manual)
-streamlit run gateway/ui/platform_app.py
+```yaml
+# Per-product semantic settings
+by_product:
+  hello_world:
+    # More lenient threshold for demo product
+    semantic_confidence_threshold: 0.5
+  
+  ade:
+    # Stricter threshold for production product
+    semantic_confidence_threshold: 0.8
+```
 
-# Run all tests
-pytest tests/ -v
+Reference requirements: INT-SEM-CONF-004
+```
 
-# Commit
-git add -A
-git commit -m "Phases 4-6: Governance consolidation, registry unification, UI modularization"
+### Prompt 6.3: Update config loader to read semantic settings
+
+```
+Modify `core/config/loader.py` or relevant settings module:
+
+1. Add SemanticSettings model:
+   ```python
+   class SemanticSettings(BaseModel):
+       default_confidence_threshold: float = 0.7
+       require_semantic_phase: bool = True
+   ```
+
+2. Add to Settings:
+   ```python
+   semantic: SemanticSettings = SemanticSettings()
+   ```
+
+3. Add method to get product-specific threshold:
+   ```python
+   def get_semantic_threshold(self, product_id: str) -> float:
+       product_override = self.products.by_product.get(product_id, {})
+       return product_override.get(
+           "semantic_confidence_threshold",
+           self.semantic.default_confidence_threshold,
+       )
+   ```
+
+Reference requirements: INT-SEM-CONF-002...004
 ```
 
 ---
 
-## Batch E: Intelligence Enhancement (Phases 7-13)
+## Step 7: Add Governance Hook for Confidence
 
-### Purpose
-Add intelligence capabilities while maintaining governance. Medium risk, done incrementally.
-
-### Pre-Prompt Checklist
-- [ ] Batches A-D complete and committed
-- [ ] All tests passing
-
-### Prompt 11: Enhanced Descriptors & Evidence Model
+### Prompt 7.1: Add confidence check hook
 
 ```
-I'm implementing Phase 7 of refactor_plan.md - Enhanced Descriptors & Evidence Model.
+Add to `core/governance/hooks.py`:
 
-1. Expand `core/contracts/descriptors_schema.py`:
-      python
-   class ToolDescriptor(BaseModel):
-       name: str
-       description: str
-       capabilities: list[str] = []  # semantic tags like ["data_reading", "computation"]
-       input_schema_ref: str | None = None
-       output_schema_ref: str | None = None
-       read_only: bool = True
-       side_effect: bool = False
-       sensitivity_class: str = "internal"  # "public" | "internal" | "confidential" | "restricted"
-       cost_hint: str = "low"  # "low" | "medium" | "high"
-   
-   class AgentDescriptor(BaseModel):
-       name: str
-       purpose: str
-       capabilities: list[str] = []
-       input_schema_ref: str | None = None
-       output_schema_ref: str | None = None
-       cost_hint: str = "low"
-       allowed_step_types: list[str] = []  # e.g., ["advisory"]
-   
+```python
+from core.contracts.semantic_schema import SemanticEnvelope, NextAction
 
-2. Add `EvidenceItem` to `core/contracts/context_pack_schema.py`:
-      python
-   class EvidenceItem(BaseModel):
-       id: str
-       type: str  # "table" | "document" | "text" | "metric"
-       source: str  # tool name + uri
-       timestamp: datetime
-       confidence: float = 1.0
-       content_ref: str | None = None  # artifact reference
-       summary: str = ""
-       provenance: dict = {}  # filters, params used
-   
 
-3. Update `core/contracts/tool_schema.py`:
-   - Add `evidence: list[EvidenceItem] = []` to ToolResult
-   - Add backward-compatible handling for tools that don't return evidence
-
-4. Update registries to require descriptors:
-   - AgentRegistry.register() should accept or build AgentDescriptor
-   - ToolRegistry.register() should accept or build ToolDescriptor
-
-5. Update existing tools/agents in hello_world and ade products to include basic descriptors.
-
-6. Add tests for descriptor validation and evidence propagation.
+def check_semantic_confidence(
+    envelope: SemanticEnvelope,
+    threshold: float,
+) -> tuple[bool, str, NextAction | None]:
+    """
+    Check if semantic interpretation confidence meets threshold.
+    
+    Args:
+        envelope: Semantic interpretation result
+        threshold: Minimum required confidence
+        
+    Returns:
+        Tuple of (allowed, reason, suggested_action)
+    """
+    if envelope.confidence < threshold:
+        return (
+            False,
+            f"Semantic confidence {envelope.confidence:.2f} below threshold {threshold:.2f}",
+            NextAction.ASK_USER,
+        )
+    return (True, "", None)
 ```
 
-### Prompt 12: Context Pack Builder Enhancement
-
-```
-I'm implementing Phase 8 of refactor_plan.md - Context Pack Builder.
-
-Enhance the ContextPackBuilder for deterministic LLM context curation.
-
-1. Update `core/knowledge/context_pack.py`:
-      python
-   class ContextPackBuilder:
-       """Builds deterministic context packs from evidence items."""
-       
-       def __init__(self, max_tokens: int = 4000):
-           self.max_tokens = max_tokens
-       
-       def build(
-           self,
-           question: str,
-           evidence_items: list[EvidenceItem],
-           assumptions: list[str] | None = None,
-       ) -> ContextPack:
-           """Build context pack deterministically (no LLM calls)."""
-           ...
-       
-       def _summarize_tables(self, items: list[EvidenceItem]) -> list[TableSummary]: ...
-       def _summarize_documents(self, items: list[EvidenceItem]) -> list[DocSummary]: ...
-       def _build_evidence_index(self, items: list[EvidenceItem]) -> list[str]: ...
-       def _compute_hash(self, pack: ContextPack) -> str: ...
-   
-
-2. Update `core/contracts/context_pack_schema.py`:
-      python
-   class TableSummary(BaseModel):
-       source: str
-       row_count: int
-       columns: list[str]
-       sample_rows: list[dict] = []
-       statistics: dict = {}
-   
-   class DocSummary(BaseModel):
-       source: str
-       title: str
-       excerpt: str
-       word_count: int
-   
-   class ContextPack(BaseModel):
-       question: str
-       tables_summary: list[TableSummary] = []
-       documents_summary: list[DocSummary] = []
-       evidence_index: list[str] = []  # EvidenceItem IDs
-       assumptions: list[str] = []
-       limits: dict = {}  # data coverage info
-       hash: str = ""  # for reproducibility verification
-   
-
-3. Update LLM reasoner to use ContextPack:
-   - llm_reasoner.py should accept ContextPack instead of raw text
-   - Format ContextPack into prompt deterministically
-
-4. Add tests for:
-   - Same inputs produce same hash
-   - Evidence provenance is preserved
-   - Token limits are respected
-```
-
-### Prompt 13: Bounded Reasoning & Critic
-
-```
-I'm implementing Phase 9 of refactor_plan.md - Bounded Reasoning & Critic Pattern.
-
-1. Refactor `core/agents/reasoning_ladder.py`:
-      python
-   class ReasoningLadder:
-       """Bounded multi-pass reasoning with governance."""
-       
-       def __init__(self, llm_reasoner: LLMReasoner, budget: ReasoningBudget):
-           self.llm = llm_reasoner
-           self.budget = budget
-       
-       async def run(self, context_pack: ContextPack) -> ReasoningLadderOutput:
-           """Execute interpret → propose → select passes."""
-           interpret = await self._interpret_pass(context_pack)
-           propose = await self._propose_pass(context_pack, interpret)
-           select = await self._select_pass(context_pack, interpret, propose)
-           return ReasoningLadderOutput(
-               interpret=interpret,
-               propose=propose,
-               select=select,
-               ...
-           )
-   
-
-2. Refactor `core/agents/critic_evaluator.py`:
-      python
-   class CriticEvaluator:
-       """Bounded critic for quality/completeness checks."""
-       
-       def evaluate(self, context_pack: ContextPack, result: Any) -> CriticResult:
-           """Analyze without calling tools. Return structured recommendations."""
-           return CriticResult(
-               completeness_score=...,
-               inconsistency_flags=[...],
-               missing_evidence=[...],
-               confidence_adjustment=...,
-               recommended_action="NONE"  # or "USER_INPUT" | "HITL" | "FETCH_MORE_EVIDENCE"
-           )
-   
-
-3. Expand `core/governance/budgeting.py`:
-      python
-   class ReasoningBudget(BaseModel):
-       max_passes: int = 3
-       max_tool_calls: int = 10
-       max_parallel_calls: int = 3
-       max_total_cost_units: float = 100.0
-       max_latency_bucket: str = "medium"
-       escalate_on_exceed: bool = True  # trigger HITL if exceeded
-   
-
-4. Add governance integration:
-   - Budget checks before each reasoning pass
-   - HITL escalation when budget exceeded
-   - Trace events for budget consumption
-
-5. Add tests for bounded behavior and budget enforcement.
-```
-
-### Prompt 14: Parallel Tools, Question Loop, Retrieval
-
-```
-I'm implementing Phases 10-12 of refactor_plan.md - Parallel Tools, Question Loop, Retrieval.
-
-Phase 10 - TOOL_BATCH step type:
-
-1. Add to `core/contracts/flow_schema.py`:
-      python
-   class ToolBatchStepDef(BaseModel):
-       id: str
-       type: Literal["tool_batch"]
-       tools: list[str]
-       parallel: bool = True
-   
-
-2. Update step_executor.py to handle tool_batch:
-   - Validate all tools are read_only and side_effect=false
-   - Execute in parallel if parallel=true
-   - Merge results with deterministic ordering (by tool name)
-   - Collect all EvidenceItems
-
-Phase 11 - Missing-info question loop:
-
-1. Add to `core/contracts/interaction_schema.py`:
-      python
-   class Question(BaseModel):
-       id: str
-       text: str
-       type: str = "text"  # "text" | "choice" | "number"
-       required: bool = True
-       choices: list[str] | None = None
-       validation: dict = {}
-   
-   class QuestionSet(BaseModel):
-       questions: list[Question]
-       context: str = ""
-       validation_schema: dict = {}
-   
-
-2. Update user_input_handler.py to support QuestionSet:
-   - Validate answers against QuestionSet schema
-   - Merge validated answers into ContextPack
-
-Phase 12 - Retrieval augmentation:
-
-1. Update `core/tools/retrieval.py`:
-   - Add query_prior_runs() method
-   - Add query_approved_sources() method
-   - Return EvidenceItems with full provenance
-
-2. Add retrieval policy to configs/policies.yaml structure:
-      yaml
-   retrieval_policy:
-     allowed_sources:
-       - "runs:current_product"
-       - "knowledge:approved_docs"
-     blocked_sources:
-       - "runs:other_products"
-   
-
-3. Update governance hooks to enforce retrieval policy.
-
-Add tests for each new capability.
-```
-
-### Prompt 15: Advisory Agent Set
-
-```
-I'm implementing Phase 13 of refactor_plan.md - Advisory Agent Set.
-
-Refactor advisory.py into bounded advisory agents.
-
-1. Create `core/agents/advisors/` directory with:
-   
-   core/agents/advisors/
-   ├── __init__.py
-   ├── base.py           # AdvisoryAgent base class
-   ├── tool_selector.py  # ToolSelector agent
-   ├── agent_selector.py # AgentSelector agent
-   ├── gap_finder.py     # GapFinder agent
-   ├── summarizer.py     # Summarizer agent
-   └── risk_explainer.py # RiskExplainer agent
-   
-
-2. Base class in `core/agents/advisors/base.py`:
-      python
-   class AdvisoryAgent(BaseAgent):
-       """Base for advisory agents that cannot execute tools."""
-       
-       def __init__(self):
-           super().__init__()
-           self._can_execute_tools = False  # Enforced
-       
-       @abstractmethod
-       def advise(self, context: StepContext) -> AdvisoryResult: ...
-   
-
-3. Implement each advisor:
-   - ToolSelector: Recommend tools based on descriptors + context
-   - AgentSelector: Recommend agents for subtasks
-   - GapFinder: Identify missing evidence in context pack
-   - Summarizer: Condense evidence into narrative
-   - RiskExplainer: Explain confidence/risk factors
-
-4. Each advisor outputs structured results:
-      python
-   class ToolSelectionResult(BaseModel):
-       recommended_tools: list[str]
-       rationale: str
-       confidence: float
-   
-   # Similar for other advisors...
-   
-
-5. Add governance check:
-   - Advisors cannot invoke ToolExecutor
-   - Architecture test to enforce this
-
-6. Update core/agents/__init__.py to export advisors.
-
-7. Add tests verifying advisors cannot call tools.
-```
-
-### Verification
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run intelligence-specific tests
-pytest tests/core/test_reasoning_ladder.py -v
-pytest tests/core/test_critic_evaluator.py -v
-pytest tests/core/test_tool_batch.py -v
-pytest tests/core/test_context_pack_builder.py -v
-
-# Commit
-git add -A
-git commit -m "Phases 7-13: Intelligence enhancement with governance"
+Reference requirements: INT-SEM-CONF-001
 ```
 
 ---
 
-## Batch F: Product & Test Improvements (Phases 14-17)
+## Step 8: Update Tracing for Semantic Events
 
-### Purpose
-Simplify product boilerplate and harden test infrastructure.
-
-### Pre-Prompt Checklist
-- [ ] Batches A-E complete and committed
-- [ ] All tests passing
-
-### Prompt 16: Product Contract Simplification
+### Prompt 8.1: Add semantic trace event types
 
 ```
-I'm implementing Phase 14 of refactor_plan.md - Product Contract Simplification.
+Modify `core/memory/tracing.py`:
 
-Add auto-discovery and decorator-based registration for products.
+1. Add to TraceEventKind enum (or equivalent):
+   ```python
+   SEMANTIC_INTERPRETATION_STARTED = "semantic_interpretation_started"
+   SEMANTIC_INTERPRETATION_COMPLETED = "semantic_interpretation_completed"
+   SEMANTIC_VALIDATION_COMPLETED = "semantic_validation_completed"
+   SEMANTIC_STOP_ISSUED = "semantic_stop_issued"
+   SEMANTIC_INTERPRETATION_FAILED = "semantic_interpretation_failed"
+   ```
 
-1. Add decorators to `core/agents/base.py`:
-      python
-   def agent(
-       name: str,
-       purpose: str,
-       capabilities: list[str] = None,
-       cost_hint: str = "low",
-   ):
-       """Decorator for agent auto-discovery."""
-       def decorator(cls):
-           cls._agent_descriptor = AgentDescriptor(
-               name=name,
-               purpose=purpose,
-               capabilities=capabilities or [],
-               cost_hint=cost_hint,
-           )
-           return cls
-       return decorator
+2. Ensure Tracer.emit() can handle these event types with proper payload schemas
 
-
-2. Add decorators to `core/tools/base.py`:
-      python
-   def tool(
-       name: str,
-       description: str,
-       capabilities: list[str] = None,
-       read_only: bool = True,
-       side_effect: bool = False,
-       sensitivity_class: str = "internal",
-       cost_hint: str = "low",
-   ):
-       """Decorator for tool auto-discovery."""
-       ...
-   
-
-3. Add auto-discovery to `core/utils/product_loader.py`:
-      python
-   def auto_discover_agents(product_path: Path) -> list[tuple[str, Callable]]:
-       """Discover all @agent decorated classes in product/agents/."""
-       ...
-   
-   def auto_discover_tools(product_path: Path) -> list[tuple[str, Callable]]:
-       """Discover all @tool decorated classes in product/tools/."""
-       ...
-   
-   def auto_register(registries: ProductRegistries, product_path: Path) -> None:
-       """Auto-register all discovered agents and tools."""
-       for name, factory in auto_discover_agents(product_path):
-           registries.agent_registry.register(name, factory)
-       for name, factory in auto_discover_tools(product_path):
-           registries.tool_registry.register(name, factory)
-   
-
-4. Update hello_world product to use decorators:
-   - Add @agent decorator to simple_agent.py
-   - Add @tool decorator to echo_tool.py
-   - Simplify registry.py to use auto_register()
-
-5. Update ade product to use decorators (larger refactor):
-   - Add decorators to all 6 agents
-   - Add decorators to all 17 tools
-   - Simplify registry.py from ~85 lines to ~15 lines
-
-6. Add tests for auto-discovery.
+Reference requirements: ORC-SEM-040...043
 ```
 
-### Prompt 17: Product Test Consolidation
+---
+
+## Step 9: Create Architecture Tests
+
+### Prompt 9.1: Implement mandatory architecture tests
 
 ```
-I'm implementing Phase 15 of refactor_plan.md - Product Test Consolidation.
+Create `tests/architecture/test_semantic_isolation.py`:
 
-Reorganize tests for clear ownership.
+```python
+"""
+Architecture tests for semantic interpretation.
 
-1. Move misplaced ADE tests to product folder:
-   - Move tests/integration/test_ade_evidence_bundle.py → products/ade/tests/integration/
-   - Move tests/integration/test_business_report_html.py → products/ade/tests/integration/
+These tests enforce invariants that prevent regression of key behaviors.
+They verify:
+1. Semantic phase is mandatory
+2. Stop actions block execution
+3. Product adapters are isolated from core internals
 
-2. Create standard conftest.py for products:
-      python
-   # products/ade/tests/conftest.py
-   import pytest
-   from pathlib import Path
-   
-   @pytest.fixture
-   def ade_product_path():
-       return Path(__file__).parent.parent
-   
-   @pytest.fixture
-   def ade_test_data_path():
-       return Path(__file__).parent.parent / "data"
-   
+Reference requirements: ACC-SEM-001...005
+"""
 
-3. Update test documentation:
-   - Add README.md to tests/ explaining test organization
-   - Add README.md to products/ade/tests/ explaining product test scope
+import pytest
+from pathlib import Path
+from unittest.mock import Mock, AsyncMock, patch
 
-4. Update CI configuration (if exists) to run product tests in parallel.
 
-5. Verify all tests still discoverable:
-      bash
-   pytest tests/ --collect-only
-   pytest products/*/tests/ --collect-only
-   
+class TestSemanticPhaseMandatory:
+    """Tests that semantic phase always runs before step execution."""
+    
+    @pytest.mark.asyncio
+    async def test_semantic_phase_is_mandatory(self):
+        """
+        Verifies: ORC-SEM-001, ORC-SEM-003
+        
+        The orchestrator MUST call semantic phase before any step execution.
+        """
+        # Setup: Create mock tracer that records events
+        events = []
+        mock_tracer = Mock()
+        mock_tracer.emit = lambda kind, payload: events.append(kind)
+        
+        # Setup: Create mock semantic phase that returns CONTINUE
+        from core.contracts.semantic_schema import (
+            SemanticEnvelope, ValidationResult, NextAction
+        )
+        from core.orchestrator.semantic_phase import SemanticPhase, SemanticPhaseResult
+        
+        mock_result = SemanticPhaseResult(
+            envelope=SemanticEnvelope(
+                raw_input="test",
+                normalized_input="test",
+                product_id="test",
+                intent_type="test",
+                entities=[],
+                constraints={},
+                confidence=0.9,
+                ambiguities=[],
+                proposed_next_action=NextAction.CONTINUE,
+            ),
+            validation=ValidationResult(
+                is_valid=True,
+                missing_fields=[],
+                violations=[],
+                revised_confidence=0.9,
+            ),
+            next_action=NextAction.CONTINUE,
+        )
+        
+        # TODO: Run a flow through the engine
+        # Assert: semantic_interpretation_started appears BEFORE step_started
+        
+        # Check event order
+        semantic_idx = None
+        step_idx = None
+        for i, event in enumerate(events):
+            if event == "semantic_interpretation_started":
+                semantic_idx = i
+            if event == "step_started" and semantic_idx is None:
+                pytest.fail("step_started emitted before semantic_interpretation_started")
+
+
+class TestStopBlocksExecution:
+    """Tests that ASK_USER and ABORT prevent step execution."""
+    
+    @pytest.mark.asyncio
+    async def test_ask_user_blocks_execution(self):
+        """
+        Verifies: ORC-SEM-STOP-001, ORC-SEM-STOP-002
+        
+        NextAction=ASK_USER MUST prevent step execution.
+        """
+        events = []
+        
+        # TODO: Configure semantic phase to return ASK_USER
+        # TODO: Run flow
+        # Assert: NO step_started events
+        # Assert: run status is PAUSED_WAITING_FOR_USER
+        
+        assert "step_started" not in events
+    
+    @pytest.mark.asyncio
+    async def test_abort_blocks_execution(self):
+        """
+        Verifies: ORC-SEM-STOP-004, ORC-SEM-STOP-005
+        
+        NextAction=ABORT MUST fail the run without step execution.
+        """
+        events = []
+        
+        # TODO: Configure semantic phase to return ABORT
+        # TODO: Run flow
+        # Assert: NO step_started events
+        # Assert: run status is FAILED
+        # Assert: error code is semantic_abort
+        
+        assert "step_started" not in events
+
+
+class TestProductAdapterIsolation:
+    """Tests that product adapters don't import core internals and vice versa."""
+    
+    def test_core_does_not_import_products(self):
+        """
+        Verifies: PROD-SEM-INT-006, PROD-SEM-VAL-006
+        
+        Core orchestrator MUST NOT import product domain code.
+        """
+        core_orchestrator_path = Path("core/orchestrator")
+        
+        for py_file in core_orchestrator_path.glob("*.py"):
+            content = py_file.read_text()
+            
+            # Check for product imports
+            assert "from products" not in content, \
+                f"{py_file} imports from products"
+            assert "import products" not in content, \
+                f"{py_file} imports products"
+    
+    def test_products_do_not_import_orchestrator_internals(self):
+        """
+        Verifies: PROD-SEM-INT-005, PROD-SEM-VAL-005
+        
+        Product adapters MUST NOT import core orchestrator internals.
+        """
+        products_path = Path("products")
+        
+        for semantic_file in products_path.glob("*/semantic.py"):
+            content = semantic_file.read_text()
+            
+            # Check for orchestrator internal imports
+            assert "from core.orchestrator" not in content, \
+                f"{semantic_file} imports core.orchestrator"
+            assert "import core.orchestrator" not in content, \
+                f"{semantic_file} imports core.orchestrator"
+            
+            # Allowed imports from core
+            # - core.contracts.semantic_schema (the interface)
+            # That's it!
+    
+    def test_adapter_interface_used_via_router(self):
+        """
+        Verifies: PROD-SEM-005
+        
+        Adapters MUST be called via ProductRouter, not directly imported.
+        """
+        # TODO: Verify that semantic_phase.py only calls get_adapter()
+        # and doesn't directly import any product adapter classes
+        
+        semantic_phase_path = Path("core/orchestrator/semantic_phase.py")
+        if semantic_phase_path.exists():
+            content = semantic_phase_path.read_text()
+            assert "from products" not in content
+            assert "import products" not in content
 ```
 
-### Prompt 18: Test Infrastructure Hardening
-
-```
-I'm implementing Phases 16-17 of refactor_plan.md - Test Infrastructure Hardening.
-
-Add comprehensive test suites for critical gaps.
-
-1. Create `tests/core/test_hitl_edge_cases.py`:
-      python
-   def test_double_resume_idempotent():
-       """Resuming an already-resumed run is safe."""
-       ...
-   
-   def test_resume_wrong_approval_rejected():
-       """Approval for wrong step is rejected."""
-       ...
-   
-   def test_concurrent_approvals_serialized():
-       """Multiple approvers on same run are serialized."""
-       ...
-   
-
-2. Create `tests/core/test_budget_enforcement.py`:
-      python
-   def test_max_passes_enforced():
-       """Loop terminates at max_passes."""
-       ...
-   
-   def test_max_tool_calls_enforced():
-       """Run fails gracefully when budget exceeded."""
-       ...
-   
-   def test_budget_exceeded_triggers_hitl():
-       """Budget exceeded with escalation policy pauses for approval."""
-       ...
-   
-
-3. Create `tests/architecture/test_product_isolation.py`:
-      python
-   def test_no_cross_product_imports():
-       """No product imports another product."""
-       ...
-   
-   def test_product_cannot_access_other_product_runs():
-       """API enforces product isolation."""
-       ...
-   
-
-4. Create `tests/acceptance_intelligence/test_golden_paths.py`:
-      python
-   GOLDEN_PATHS = [
-       ("hello_world", "hello_world", {"message": "test"}, "hello_world_expected.json"),
-   ]
-   
-   @pytest.mark.parametrize("product,flow,payload,expected_file", GOLDEN_PATHS)
-   def test_golden_path(product, flow, payload, expected_file):
-       """Run golden path and compare to stored expected output."""
-       ...
-   
-
-5. Create golden path expected outputs:
-   - tests/acceptance_intelligence/golden/hello_world_expected.json
-
-6. Expand architecture invariant tests in tests/architecture/test_master_v1_invariants.py:
-   - test_agents_never_call_tools_directly
-   - test_tools_never_call_llm_directly
-   - test_no_env_reads_outside_config_loader
-   - test_no_persistence_outside_memory
+Reference requirements: ACC-SEM-001...005
 ```
 
-### Final Verification
+---
+
+## Step 10: Integration Testing
+
+### Prompt 10.1: Create integration tests for semantic flow
+
+```
+Create `tests/integration/test_semantic_flow.py`:
+
+```python
+"""
+Integration tests for semantic interpretation flow.
+"""
+
+import pytest
+
+
+class TestSemanticFlowIntegration:
+    """End-to-end tests for semantic phase in real flows."""
+    
+    @pytest.mark.asyncio
+    async def test_semantic_continue_executes_steps(self):
+        """High confidence input proceeds to step execution."""
+        # TODO: Run hello_world flow with "hello world"
+        # Assert: Run completes successfully
+        # Assert: semantic_interpretation_completed event has confidence > 0.7
+        pass
+    
+    @pytest.mark.asyncio
+    async def test_semantic_ask_user_pauses_run(self):
+        """Low confidence input pauses for clarification."""
+        # TODO: Run hello_world flow with ambiguous input
+        # Assert: Run status is PAUSED_WAITING_FOR_USER
+        # Assert: Response includes clarifying_question
+        pass
+    
+    @pytest.mark.asyncio
+    async def test_semantic_resume_after_clarification(self):
+        """Run can be resumed after user provides clarification."""
+        # TODO: Start run that pauses for clarification
+        # TODO: Resume with clarified input
+        # Assert: Run completes successfully
+        pass
+    
+    @pytest.mark.asyncio
+    async def test_semantic_skip_via_config(self):
+        """Semantic phase can be skipped via flow config."""
+        # TODO: Run flow with skip_semantic_interpretation: true
+        # Assert: No semantic_interpretation_started event
+        # Assert: Run proceeds directly to steps
+        pass
+```
+
+Reference requirements: ORC-SEM-001, ORC-SEM-002
+```
+
+---
+
+## Step 11: Final Validation
+
+### Prompt 11.1: Run all tests
+
+```
+Run the complete test suite to validate implementation:
+
 ```bash
-# Run complete test suite
-pytest tests/ products/*/tests/ -v
+# Run all semantic-related tests
+pytest tests/unit/core/contracts/test_semantic_schema.py -v
+pytest tests/unit/core/orchestrator/test_normalization.py -v
+pytest tests/unit/core/orchestrator/test_semantic_phase.py -v
+pytest tests/architecture/test_semantic_isolation.py -v
+pytest tests/integration/test_semantic_flow.py -v
 
-# Check test count increased
-pytest tests/ --collect-only | grep "test session starts"
+# Run full test suite
+pytest tests/ -v
 
-# Verify golden paths
-pytest tests/acceptance_intelligence/test_golden_paths.py -v
+# Check coverage
+pytest tests/ --cov=core/orchestrator --cov=core/contracts --cov-report=term-missing
+```
 
-# Commit
-git add -A
-git commit -m "Phases 14-17: Product simplification and test hardening"
+Expected results:
+- All tests pass
+- Coverage for semantic modules > 85%
+- No import violations in architecture tests
+```
 
-# Merge to main
-git checkout main
-git merge refactor/master-v2
-git push
+### Prompt 11.2: Manual smoke test
+
+```
+Perform manual smoke test:
+
+1. Start the platform:
+   ```bash
+   python -m gateway.cli run hello_world hello_world --payload '{"text": "hello world"}'
+   ```
+   Expected: Run completes with greeting response
+
+2. Test low confidence:
+   ```bash
+   python -m gateway.cli run hello_world hello_world --payload '{"text": "xyz123"}'
+   ```
+   Expected: Run pauses for clarification
+
+3. Check trace events:
+   ```bash
+   cat observability/hello_world/<run_id>/runtime/events.jsonl | grep semantic
+   ```
+   Expected: See semantic_interpretation_started, semantic_interpretation_completed
 ```
 
 ---
 
 ## Troubleshooting
 
-### If Tests Fail After a Batch
+### Common Issues
 
-1. **Don't proceed to next batch** - fix failures first
-2. Check the specific test output for error details
-3. Use this prompt to fix:
-   ```
-   The following tests are failing after implementing Phase X:
-   
-   [paste test output]
-   
-   Please fix the issues while maintaining the refactoring goals.
-   ```
+**Issue**: `ModuleNotFoundError: No module named 'core.contracts.semantic_schema'`
+- Ensure `core/contracts/__init__.py` exports semantic models
+- Check PYTHONPATH includes project root
 
-### If Imports Break
+**Issue**: Tests fail with "semantic_interpretation_started not found"
+- Verify tracer is properly injected into SemanticPhase
+- Check that emit() is being called (add debug logging)
 
-```
-After the refactoring, I'm getting import errors:
+**Issue**: Product adapter not found
+- Ensure `products/<name>/semantic.py` exists
+- Check that `SemanticAdapter` is exported
+- Verify product is enabled in `configs/products.yaml`
 
-[paste error]
-
-Please fix the imports while maintaining backward compatibility where specified in refactor_plan.md.
-```
-
-### If Performance Degrades
-
-```
-After implementing Phase X, I'm seeing performance degradation:
-
-[describe the issue]
-
-Please optimize while maintaining the architectural goals from refactor_plan.md.
-```
+**Issue**: Confidence threshold not being applied
+- Check `configs/app.yaml` has `semantic.default_confidence_threshold`
+- Verify `get_semantic_threshold()` is being called
+- Check product-specific override in `configs/products.yaml`
 
 ---
 
-## Post-Refactor Checklist
+## Checklist
 
-After all batches complete:
-
-- [ ] All 17 phases implemented
-- [ ] All tests passing (including new acceptance tests)
-- [ ] engine.py ≤ 500 lines
-- [ ] Contract files ≤ 14
-- [ ] Governance files ≤ 5
-- [ ] platform_app.py ≤ 200 lines
-- [ ] Product registry.py files simplified
-- [ ] No direct core/ imports in UI
-- [ ] Golden path tests passing
-- [ ] Architecture invariant tests passing
-- [ ] Documentation updated
-
-Final commit:
-```bash
-git tag v2.0.0-refactored
-git push --tags
-```
+- [ ] `core/contracts/semantic_schema.py` created with all models
+- [ ] `core/orchestrator/normalization.py` created with rules
+- [ ] `core/orchestrator/semantic_phase.py` created
+- [ ] `products/hello_world/semantic.py` created as reference
+- [ ] `core/orchestrator/engine.py` modified to call semantic phase
+- [ ] `configs/app.yaml` updated with semantic settings
+- [ ] `configs/products.yaml` updated with per-product thresholds
+- [ ] `core/governance/hooks.py` has confidence check
+- [ ] `core/memory/tracing.py` has semantic event types
+- [ ] Unit tests pass
+- [ ] Architecture tests pass
+- [ ] Integration tests pass
+- [ ] Manual smoke test passes

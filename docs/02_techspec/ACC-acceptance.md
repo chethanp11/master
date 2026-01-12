@@ -64,6 +64,53 @@ tests pass at the specified coverage levels.
 
 **Implementation**: `tests/architecture/`
 
+### 2.5 Semantic Interpretation Tests
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ACC-SEM-001** | [V1] `test_semantic_phase_is_mandatory` MUST verify pipeline always calls semantic phase before step execution | MUST |
+| **ACC-SEM-002** | [V1] `test_stop_blocks_execution` MUST verify `ASK_USER`/`ABORT` prevents planning/tool execution | MUST |
+| **ACC-SEM-003** | [V1] `test_product_adapter_isolated` MUST verify: products supply interpret/validate; core never imports product domain code; products never import core execution internals | MUST |
+| **ACC-SEM-004** | [V1] Semantic tests MUST be located in `tests/architecture/test_semantic_isolation.py` | MUST |
+| **ACC-SEM-005** | [V1] Semantic tests MUST use mock products to verify adapter interface contract | MUST |
+
+**Test Specifications**:
+
+```python
+# tests/architecture/test_semantic_isolation.py
+
+def test_semantic_phase_is_mandatory():
+    """
+    Verifies: ORC-SEM-001, ORC-SEM-003
+    
+    Ensures that the orchestrator always executes semantic_interpretation
+    phase before any step execution, unless explicitly skipped via config.
+    """
+    ...
+
+def test_stop_blocks_execution():
+    """
+    Verifies: ORC-SEM-STOP-001, ORC-SEM-STOP-004, ORC-SEM-STOP-007
+    
+    Ensures that NextAction=ASK_USER or ABORT prevents planning and tool
+    execution. Run must pause or fail with structured response.
+    """
+    ...
+
+def test_product_adapter_isolated():
+    """
+    Verifies: PROD-SEM-INT-005, PROD-SEM-INT-006, PROD-SEM-VAL-005, PROD-SEM-VAL-006
+    
+    Ensures:
+    1. Product adapters supply interpret() and validate() hooks
+    2. Core orchestrator never imports product domain code
+    3. Product adapters never import core/orchestrator/* internals
+    """
+    ...
+```
+
+**Implementation**: `tests/architecture/test_semantic_isolation.py`
+
 ### 2.4 Acceptance/Intelligence Tests
 
 | ID | Requirement | Level |
@@ -285,14 +332,14 @@ def test_run_lifecycle_start():
 
 | Domain | Spec Document | Requirement Count | Test Coverage |
 |--------|---------------|-------------------|---------------|
-| Orchestration | ORC-orchestration.md | ~60 | ≥85% |
+| Orchestration | ORC-orchestration.md | ~80 | ≥85% |
 | Agents/Tools | AGT-agents-tools.md | ~85 | ≥80% |
 | Governance | GOV-governance.md | ~120 | ≥85% |
 | Memory | MEM-memory.md | ~45 | ≥80% |
-| Intelligence | INT-intelligence.md | ~105 | ≥75% |
+| Intelligence | INT-intelligence.md | ~115 | ≥75% |
 | Gateway | GW-gateway.md | ~130 | ≥75% |
-| Products | PROD-products.md | ~55 | ≥80% |
-| **Total** | **All** | **~630** | **≥80%** |
+| Products | PROD-products.md | ~75 | ≥80% |
+| **Total** | **All** | **~680** | **≥80%** |
 
 ---
 
@@ -325,3 +372,6 @@ def test_run_lifecycle_start():
 | ACC-COV-001 | `pytest.ini` | CI coverage report |
 | ACC-FIX-001 | `tests/conftest.py` | Self-validated |
 | ACC-CI-001 | CI configuration | CI pipeline |
+| ACC-SEM-001 | `tests/architecture/test_semantic_isolation.py` | `test_semantic_phase_is_mandatory` |
+| ACC-SEM-002 | `tests/architecture/test_semantic_isolation.py` | `test_stop_blocks_execution` |
+| ACC-SEM-003 | `tests/architecture/test_semantic_isolation.py` | `test_product_adapter_isolated` |

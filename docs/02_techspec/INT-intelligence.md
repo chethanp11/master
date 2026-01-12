@@ -325,7 +325,37 @@ This layer enhances decision quality while maintaining governance constraints.
 
 ---
 
-## 6. Evidence Provenance Requirements
+## 6. Semantic Interpretation Requirements
+
+### 6.1 Confidence Propagation
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **INT-SEM-CONF-001** | [V1] Core MUST enforce: if `confidence < threshold` then `NextAction` MUST be `ASK_USER` or `ABORT` | MUST |
+| **INT-SEM-CONF-002** | [V1] Confidence thresholds MUST be config-driven with product-level overrides | MUST |
+| **INT-SEM-CONF-003** | [V1] Default confidence threshold MUST be 0.7 (configurable in `configs/app.yaml`) | MUST |
+| **INT-SEM-CONF-004** | [V1] Per-product thresholds MUST be defined in `configs/products.yaml` under `by_product.<product>.semantic_confidence_threshold` | MUST |
+| **INT-SEM-CONF-005** | [V1] Confidence MUST be bounded 0.0-1.0; values outside this range MUST raise validation error | MUST |
+| **INT-SEM-CONF-006** | [V1] Ambiguity count SHOULD inversely correlate with confidence (guidance, not enforced) | SHOULD |
+
+**Implementation**: `core/governance/hooks.py`, `core/contracts/semantic_schema.py`
+
+### 6.2 Semantic Validation Result
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **INT-SEM-VAL-001** | [V1] `ValidationResult` MUST include: `is_valid` (bool) | MUST |
+| **INT-SEM-VAL-002** | [V1] `ValidationResult` MUST include: `missing_fields` (list of field names) | MUST |
+| **INT-SEM-VAL-003** | [V1] `ValidationResult` MUST include: `violations` (list of violation descriptions) | MUST |
+| **INT-SEM-VAL-004** | [V1] `ValidationResult` MUST include: `revised_confidence` (float 0.0-1.0, after validation adjustments) | MUST |
+| **INT-SEM-VAL-005** | [V1] `ValidationResult` MAY include: `clarifying_question` (string, when user input needed) | MAY |
+| **INT-SEM-VAL-006** | [V1] If `is_valid=false`, `NextAction` MUST be `ASK_USER` or `ABORT` | MUST |
+
+**Implementation**: `core/contracts/semantic_schema.py`
+
+---
+
+## 7. Evidence Provenance Requirements
 
 | ID | Requirement | Level |
 |----|-------------|-------|
@@ -356,9 +386,9 @@ This layer enhances decision quality while maintaining governance constraints.
 
 ---
 
-## 8. Future Considerations
+## 9. Future Considerations
 
-### 8.1 V1.1 Enhancements
+### 9.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -366,7 +396,7 @@ This layer enhances decision quality while maintaining governance constraints.
 | **INT-FUTURE-002** | Evidence caching | Cache context packs across runs |
 | **INT-FUTURE-003** | Parallel advisory | Execute multiple advisory agents concurrently |
 
-### 8.2 V2 Features
+### 9.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -376,7 +406,7 @@ This layer enhances decision quality while maintaining governance constraints.
 
 ---
 
-## 9. Traceability Matrix
+## 10. Traceability Matrix
 
 | Requirement | Implementation | Test |
 |-------------|----------------|------|
@@ -386,3 +416,5 @@ This layer enhances decision quality while maintaining governance constraints.
 | INT-CP-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack.py` |
 | INT-CP-DET-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack_determinism.py` |
 | INT-CP-MRG-001 | `core/knowledge/context_pack_merge.py` | `tests/unit/core/knowledge/test_context_pack_merge.py` |
+| INT-SEM-CONF-001 | `core/governance/hooks.py` | `tests/unit/core/governance/test_semantic_confidence.py` |
+| INT-SEM-VAL-001 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` |

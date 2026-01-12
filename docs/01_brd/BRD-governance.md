@@ -75,8 +75,9 @@ A governance framework that provides:
 | **BRD-GOV-021** | Certain models must be prohibitable by policy | P0 | Compliance with model usage agreements |
 | **BRD-GOV-022** | Policy violations must block execution—not just warn | P0 | Enforceable governance |
 | **BRD-GOV-023** | Policies must be configurable per product | P1 | Product-specific governance |
-| **BRD-GOV-024** | Policy decisions must be logged for audit | P0 | Traceability |
-
+| **BRD-GOV-024** | Policy decisions must be logged for audit | P0 | Traceability || **BRD-GOV-025** | Low-confidence interpretations must pause for user clarification | P0 | Prevents misguided execution |
+| **BRD-GOV-026** | Confidence thresholds must be configurable per product | P1 | Domain-appropriate sensitivity |
+| **BRD-GOV-027** | Semantic validation failures must block execution | P0 | Fail-safe behavior |
 ### 3.4 Cost Controls
 
 | ID | Requirement | Priority | Rationale |
@@ -148,6 +149,9 @@ A governance framework that provides:
 |--------|-------------|------------------|
 | BRD-GOV-001 | Human approval | ORC-PAUSE-010...015, GOV-GATE-PLAN-* |
 | BRD-GOV-002 | Approval context | ORC-PAUSE-012 (summary, instructions) |
+| BRD-GOV-025 | Confidence-based pause | ORC-SEM-STOP-*, INT-SEM-CONF-* |
+| BRD-GOV-026 | Confidence thresholds | INT-SEM-CONF-010...020 |
+| BRD-GOV-027 | Semantic validation blocking | PROD-SEM-VAL-* |
 | BRD-GOV-003 | Approval decisions | ORC-RESUME-001...010 |
 | BRD-GOV-004 | Approval audit | ORC-RESUME-004 (resolved_by, decision) |
 | BRD-GOV-005 | Graceful pause | ORC-RUN-015...018 (PAUSED states) |

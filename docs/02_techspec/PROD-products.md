@@ -288,9 +288,52 @@ products/
 
 ---
 
-## 9. Product Configuration Requirements
+## 9. Product Semantic Adapter Requirements
 
-### 9.1 Configuration Loading
+### 9.1 Semantic Adapter Interface
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **PROD-SEM-001** | [V1] Products MAY provide a `ProductSemanticAdapter` class in `products/<name>/semantic.py` | MAY |
+| **PROD-SEM-002** | [V1] If provided, `ProductSemanticAdapter` MUST implement `interpret(context) -> SemanticEnvelope` | MUST |
+| **PROD-SEM-003** | [V1] If provided, `ProductSemanticAdapter` MUST implement `validate(envelope, context) -> ValidationResult` | MUST |
+| **PROD-SEM-004** | [V1] Products without adapter MUST use core default interpretation (passthrough + heuristics) | MUST |
+| **PROD-SEM-005** | [V1] Orchestrator MUST call adapter via product router; adapters MUST NOT import orchestrator internals | MUST |
+
+**Implementation**: `products/*/semantic.py`, `core/orchestrator/product_router.py`
+
+### 9.2 Interpret Hook
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **PROD-SEM-INT-001** | [V1] `interpret(context)` MUST receive: `raw_input`, `payload`, `product_config` | MUST |
+| **PROD-SEM-INT-002** | [V1] `interpret` MUST return a fully populated `SemanticEnvelope` | MUST |
+| **PROD-SEM-INT-003** | [V1] `interpret` MUST set `intent_type` from product-defined intent taxonomy | MUST |
+| **PROD-SEM-INT-004** | [V1] `interpret` MUST extract domain-specific entities (e.g., chart types, metrics, filters) | MUST |
+| **PROD-SEM-INT-005** | [V1] `interpret` MUST NOT call tools or agents directly | MUST |
+| **PROD-SEM-INT-006** | [V1] `interpret` MUST NOT import `core/orchestrator/*` internals | MUST |
+
+**Implementation**: `products/*/semantic.py`
+
+### 9.3 Validate Hook
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **PROD-SEM-VAL-001** | [V1] `validate(envelope, context)` MUST check domain-specific constraints | MUST |
+| **PROD-SEM-VAL-002** | [V1] `validate` MUST return `ValidationResult` with all required fields | MUST |
+| **PROD-SEM-VAL-003** | [V1] `validate` MAY adjust `revised_confidence` based on validation findings | MAY |
+| **PROD-SEM-VAL-004** | [V1] `validate` MAY generate a `clarifying_question` when input is ambiguous | MAY |
+| **PROD-SEM-VAL-005** | [V1] `validate` MUST NOT call tools or agents directly | MUST |
+| **PROD-SEM-VAL-006** | [V1] `validate` MUST NOT import `core/orchestrator/*` internals | MUST |
+| **PROD-SEM-VAL-007** | [V1] Domain rules (e.g., "trend chart requires time axis") MUST be in product adapter, not core | MUST |
+
+**Implementation**: `products/*/semantic.py`
+
+---
+
+## 10. Product Configuration Requirements
+
+### 10.1 Configuration Loading
 
 | ID | Requirement | Level |
 |----|-------------|-------|
@@ -303,9 +346,9 @@ products/
 
 ---
 
-## 10. Products.yaml Requirements
+## 11. Products.yaml Requirements
 
-### 10.1 Global Product Settings
+### 11.1 Global Product Settings
 
 | ID | Requirement | Level |
 |----|-------------|-------|
@@ -318,9 +361,9 @@ products/
 
 ---
 
-## 11. Example Products
+## 12. Example Products
 
-### 11.1 Hello World Product
+### 12.1 Hello World Product
 
 | ID | Requirement | Level |
 |----|-------------|-------|
@@ -330,7 +373,7 @@ products/
 
 **Implementation**: `products/hello_world/`
 
-### 11.2 ADE Product
+### 12.2 ADE Product
 
 | ID | Requirement | Level |
 |----|-------------|-------|
@@ -342,9 +385,9 @@ products/
 
 ---
 
-## 12. Future Considerations
+## 13. Future Considerations
 
-### 12.1 V1.1 Enhancements
+### 13.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -352,7 +395,7 @@ products/
 | **PROD-FUTURE-002** | Product dependencies | Declare inter-product dependencies |
 | **PROD-FUTURE-003** | Version constraints | Define min/max platform version |
 
-### 12.2 V2 Features
+### 13.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -362,7 +405,7 @@ products/
 
 ---
 
-## 13. Traceability Matrix
+## 14. Traceability Matrix
 
 | Requirement | Implementation | Test |
 |-------------|----------------|------|
@@ -372,3 +415,6 @@ products/
 | PROD-CAT-001 | `core/orchestrator/product_catalog.py` | `tests/unit/core/test_product_catalog.py` |
 | PROD-LOAD-001 | `core/orchestrator/product_loader.py` | `tests/unit/core/test_product_loader.py` |
 | PROD-RUN-001 | `core/orchestrator/product_runner.py` | `tests/unit/core/test_product_runner.py` |
+| PROD-SEM-001 | `products/*/semantic.py` | `tests/architecture/test_semantic_isolation.py` |
+| PROD-SEM-INT-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` |
+| PROD-SEM-VAL-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` |

@@ -1,1366 +1,642 @@
-# Architecture Review & Simplification Plan
+# Semantic Interpretation Implementation Plan
 
-**Repository:** master/  
-**Review Date:** 11 January 2026  
-**Reviewer:** Principal Architect
-
----
-
-## Guiding Constraints (Non-Negotiable)
-
-| Constraint | Implementation Implication |
-|------------|---------------------------|
-| **Orchestrator remains control plane** | Agents never decide control flow; they only propose |
-| **Tools only via ToolExecutor** | All tool calls routed through core executor |
-| **LLM calls centralized** | Only via LLM reasoner/router path |
-| **Auditability mandatory** | Every feature emits structured trace + artifacts |
-| **Enterprise-safe** | Side-effects require HITL; read-only loops allowed under budgets |
+> **Feature**: Semantic Interpretation Phase  
+> **Version**: V1.0  
+> **Status**: Planning  
+> **Last Updated**: 2026-01-12
 
 ---
 
-## A) Architectural Diagnosis
+## 1. Executive Summary
 
-### What Works ✓
+### 1.1 What We're Building
 
-| Strength | Evidence |
-|----------|----------|
-| **Clear core/product separation** | Products only define flows, agents, tools; no orchestration leakage |
-| **Strong contract discipline** | Pydantic models at all boundaries; typed envelopes for agent/tool results |
-| **Governance centralization** | All policy checks flow through `core/governance/hooks.py` |
-| **HITL as first-class primitive** | Pause/resume model is clean; approvals are audited |
-| **Deterministic replay design** | Run/step snapshots enable state reconstruction |
-| **Model isolation** | LLM calls only via `core/models/router.py` → providers |
+A **mandatory semantic interpretation phase** that runs before planning/execution for every orchestrator run. This phase:
+- Interprets user intent and normalizes input
+- Extracts entities and constraints
+- Assesses confidence and identifies ambiguities
+- Decides whether to proceed, ask for clarification, or abort
+- Enables product-specific interpretation via plugin adapters
 
-### What Is Over-Engineered ⚠️
+### 1.2 Why It Matters
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| **21 contract files** for ~40 models | `core/contracts/` | Cognitive overhead; hard to navigate |
-| **9 governance files** with thin gates | `core/governance/` | 5 gate files averaging 60 lines each |
-| **Reasoning ladder abstraction** | `core/agents/reasoning_ladder.py` | Unused by any product; adds indirection |
-| **Multiple memory backends** | sqlite + in_memory + tracing | Only sqlite used in practice |
-| **Tool backend abstraction** | local/mcp/remote | Only local used; remote explicitly disabled |
+| Problem | Solution |
+|---------|----------|
+| Misunderstood requests proceed to execution | Semantic phase catches ambiguity before any action |
+| No way to request clarification mid-flow | `ASK_USER` action pauses and prompts user |
+| Products can't customize interpretation | `ProductSemanticAdapter` provides domain hooks |
+| Confidence not tracked or enforced | Threshold-based gating prevents low-confidence execution |
+| No audit trail for interpretation | Structured trace events capture every decision |
 
-### What Is Fragile ⚠️
+### 1.3 Scope
 
-| Issue | Risk |
-|-------|------|
-| **engine.py (3,083 lines)** | Single point of failure; changes risk regression across all flows |
-| **Step type proliferation** | 10+ step types with different handlers complicate testing |
-| **Plan execution complexity** | `plan_propose` → `plan_gate` → `plan_execute` chain is intricate |
-| **User input ↔ context pack merge** | Multi-step validation/merge logic spread across modules |
+**In Scope (V1)**:
+- Core `SemanticEnvelope` and `ValidationResult` contracts
+- `NextAction` enum with CONTINUE/ASK_USER/ABORT
+- Orchestrator semantic phase integration
+- Product adapter interface (interpret + validate hooks)
+- Confidence threshold enforcement
+- Deterministic normalization rules
+- Trace events for semantic steps
+- 3 mandatory architecture tests
 
-### What Is Missing 🔴
-
-| Gap | Impact |
-|-----|--------|
-| **Auto-discovery for product agents/tools** | Verbose `registry.py` boilerplate |
-| **Contract versioning strategy** | No schema evolution plan |
-| **Structured error taxonomy** | Errors are data but lack classification (retriable, fatal, user-fixable) |
-| **Observability query interface** | Artifacts written but no standard query path |
-
-### Top 5 Root Causes of Complexity
-
-1. **Engine monolith**: `engine.py` accumulated responsibilities incrementally
-2. **Contract explosion**: New features added new schema files instead of extending existing ones
-3. **Gate proliferation**: Each governance concern got its own module instead of pluggable registry
-4. **Abstraction anticipation**: Built for hypothetical needs (remote tools, MCP, vector stores) not actual usage
-5. **Missing consolidation cycles**: Technical debt accumulated without dedicated simplification sprints
+**Out of Scope (V1.1+)**:
+- ML-based intent classification
+- Multi-turn clarification dialogs
+- Automatic entity resolution via external APIs
+- Learning from user corrections
 
 ---
 
-## B) Component Value Audit
+## 2. Architecture Overview
 
-### Core Orchestrator
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `orchestrator/engine.py` | Flow execution, state management, HITL | **C-SIMPLIFY** | Split into 4-5 focused modules | High |
-| `orchestrator/step_executor.py` | Tool/agent step dispatch | **A-CORE** | Keep as-is | — |
-| `orchestrator/branching.py` | Branch condition evaluation | **A-CORE** | Keep | — |
-| `orchestrator/looping.py` | Loop condition evaluation | **A-CORE** | Keep | — |
-| `orchestrator/templating.py` | Param/message rendering | **A-CORE** | Keep | — |
-| `orchestrator/hitl.py` | Approval creation/resolution | **B-CONSOLIDATE** | Merge into engine's extracted HITL module | Low |
-| `orchestrator/flow_loader.py` | YAML → FlowDef parsing | **A-CORE** | Keep | — |
-| `orchestrator/context.py` | RunContext/StepContext | **A-CORE** | Keep | — |
-| `orchestrator/state.py` | Status helpers | **B-CONSOLIDATE** | Inline into context.py | Low |
-| `orchestrator/error_policy.py` | Retry/backoff definitions | **A-CORE** | Keep | — |
-
-### Core Agents
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `agents/base.py` | BaseAgent contract | **A-CORE** | Keep | — |
-| `agents/registry.py` | Agent registration/lookup | **C-SIMPLIFY** | Unify with tool registry base class | Low |
-| `agents/llm_reasoner.py` | LLM invocation wrapper | **A-CORE** | Keep | — |
-| `agents/advisory.py` | Advisory agent pattern | **C-SIMPLIFY** | Refactor into bounded advisory agents (selector, gap-finder, summarizer) | Medium |
-| `agents/reasoning_ladder.py` | Multi-step reasoning | **C-SIMPLIFY** | Refactor into bounded interpret→propose→select pattern | Medium |
-| `agents/critic_evaluator.py` | Output critique | **C-SIMPLIFY** | Refactor into bounded critic with structured recommendations | Medium |
-
-### Core Tools
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `tools/base.py` | BaseTool contract | **A-CORE** | Keep | — |
-| `tools/registry.py` | Tool registration/lookup | **C-SIMPLIFY** | Unify with agent registry | Low |
-| `tools/executor.py` | Tool execution + governance | **A-CORE** | Keep | — |
-| `tools/retrieval.py` | Retrieval tool impl | **A-CORE** | Keep | — |
-| `tools/backends/local_backend.py` | Local tool execution | **A-CORE** | Keep | — |
-| `tools/backends/mcp_backend.py` | MCP protocol backend | **E-REMOVE** | Delete; unused and disabled | Very low |
-| `tools/backends/remote_backend.py` | Remote tool calls | **E-REMOVE** | Delete; unused and disabled | Very low |
-
-### Core Governance
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `governance/hooks.py` | Governance hook orchestration | **C-SIMPLIFY** | Reduce from 359 lines; extract hook registry | Medium |
-| `governance/policies.py` | Policy loading/evaluation | **A-CORE** | Keep | — |
-| `governance/security.py` | Redaction, injection checks | **A-CORE** | Keep | — |
-| `governance/budgeting.py` | Budget enforcement | **A-CORE** | Keep | — |
-| `governance/branch_gate.py` | Branch condition validation | **B-CONSOLIDATE** | Merge into unified `gates.py` | Low |
-| `governance/loop_gate.py` | Loop condition validation | **B-CONSOLIDATE** | Merge into `gates.py` | Low |
-| `governance/plan_gate.py` | Plan step validation | **B-CONSOLIDATE** | Merge into `gates.py` | Low |
-| `governance/critic_gate.py` | Critic output validation | **B-CONSOLIDATE** | Merge into `gates.py` | Low |
-| `governance/retrieval_policy.py` | Retrieval source filtering | **B-CONSOLIDATE** | Merge into `gates.py` | Low |
-
-### Core Memory
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `memory/base.py` | Memory interface | **A-CORE** | Keep | — |
-| `memory/router.py` | Backend routing | **A-CORE** | Keep | — |
-| `memory/sqlite_backend.py` | SQLite persistence | **A-CORE** | Keep | — |
-| `memory/in_memory.py` | In-memory backend | **C-SIMPLIFY** | Keep for tests; mark as test-only | Low |
-| `memory/observability_store.py` | Artifact file storage | **A-CORE** | Keep | — |
-| `memory/tracing.py` | Trace event emission | **A-CORE** | Keep | — |
-
-### Core Knowledge
-
-| Component | Purpose | Decision | Action | Risk |
-|-----------|---------|----------|--------|------|
-| `knowledge/base.py` | Knowledge interface | **A-CORE** | Keep | — |
-| `knowledge/retriever.py` | Document retrieval | **A-CORE** | Keep | — |
-| `knowledge/context_pack.py` | Context assembly | **A-CORE** | Keep | — |
-| `knowledge/context_pack_merge.py` | Context merging | **B-CONSOLIDATE** | Merge into context_pack.py | Low |
-| `knowledge/vector_store.py` | Vector DB interface | **D-DEPRECATE** | Feature-flag; evaluate need | Low |
-| `knowledge/structured.py` | Structured knowledge | **C-SIMPLIFY** | Audit usage; simplify or remove | Low |
-
-### Contracts Consolidation
-
-| Contract File | Decision | Action |
-|---------------|----------|--------|
-| `run_schema.py` | **A-CORE** | Keep |
-| `flow_schema.py` | **A-CORE** | Keep |
-| `agent_schema.py` | **A-CORE** | Keep |
-| `tool_schema.py` | **A-CORE** | Keep |
-| `user_input_schema.py` | **A-CORE** | Keep |
-| `hitl_schema.py` + `question_schema.py` | **B-CONSOLIDATE** | Merge → `interaction_schema.py` |
-| `budget_schema.py` | **A-CORE** | Keep |
-| `action_plan_schema.py` | **A-CORE** | Keep |
-| `plan_schema.py` | **B-CONSOLIDATE** | Merge into action_plan_schema.py |
-| `context_pack_schema.py` | **A-CORE** | Keep |
-| `evidence_schema.py` | **B-CONSOLIDATE** | Merge into context_pack_schema.py |
-| `branch_schema.py` + `loop_schema.py` | **B-CONSOLIDATE** | Merge into flow_schema.py |
-| `reasoning_schema.py` | **A-CORE** | Keep |
-| `reasoning_ladder_schema.py` | **C-SIMPLIFY** | Refactor for bounded multi-pass reasoning |
-| `critic_schema.py` | **C-SIMPLIFY** | Refactor for structured recommendations |
-| `descriptors_schema.py` | **A-CORE** | Expand with capability tags, cost hints, sensitivity class |
-| `retrieval_schema.py` | **A-CORE** | Keep |
-| `advisory_schema.py` | **C-SIMPLIFY** | Refactor for bounded advisory outputs |
-
-**Contract Consolidation Summary:** 21 files → 14 files (33% reduction)
-
-Note: Reasoning ladder, critic, and advisory schemas retained and simplified for intelligence capabilities rather than removed.
-
-### Gateway
-
-| Component | Decision | Action |
-|-----------|----------|--------|
-| `api/http_app.py` | **A-CORE** | Keep |
-| `api/routes_run.py` | **A-CORE** | Keep |
-| `api/deps.py` | **A-CORE** | Keep |
-| `cli/main.py` | **A-CORE** | Keep |
-| `ui/platform_app.py` (1046 lines) | **C-SIMPLIFY** | Split into page modules |
-
----
-
-## C) Simplification-Oriented Refactor Plan
-
-### Phase 0: Baseline & Safety Net (1 week)
-
-**Goals:**
-- Lock current behavior before touching anything
-- Create acceptance tests that prevent regressions
-- Enable confident refactoring
-
-**Deliverables:**
-- Tests that assert:
-  - Deterministic step transitions (same input → same output)
-  - Pause/resume correctness for HITL and user_input
-  - Governance denies disallowed tools/models
-  - Trace emission for every tool/model call
-  - Proposal steps do not execute tools directly
-
-**Exit Criteria:**
-- All acceptance tests pass on current codebase
-- Tests added to CI as blocking gates
-
----
-
-### Phase 1: Contract Consolidation (2 weeks)
-
-**Goals:**
-- Reduce cognitive load navigating contracts
-- Establish clear schema groupings
-- Remove unused schemas
-
-**Actions:**
-
-| Remove/Merge | Into | Migration |
-|--------------|------|-----------|
-| `reasoning_ladder_schema.py` | Delete | No references |
-| `critic_schema.py` | Delete or deprecate | Update imports to raise deprecation |
-| `advisory_schema.py` | Delete or deprecate | Update imports |
-| `hitl_schema.py` + `question_schema.py` | `interaction_schema.py` | Re-export from new location |
-| `plan_schema.py` | `action_plan_schema.py` | Re-export |
-| `evidence_schema.py` | `context_pack_schema.py` | Re-export |
-| `branch_schema.py` + `loop_schema.py` | `flow_schema.py` | Re-export |
-
-**Exit Criteria:**
-- Contract file count ≤ 12
-- All imports resolve
-- All tests pass
-
----
-
-### Phase 2: Unused Module Removal (1 week)
-
-**Goals:**
-- Remove dead code
-- Reduce maintenance surface
-- Clarify what's actually used
-
-**Actions:**
-
-| Remove | Justification |
-|--------|---------------|
-| `reasoning_ladder.py` | Zero product usage |
-| `mcp_backend.py` | Disabled in executor |
-| `remote_backend.py` | Disabled in executor |
-
-**Note:** `advisory.py`, `critic_evaluator.py`, and `vector_store.py` previously marked for deprecation are now retained for intelligence capabilities (see Phase 7-9).
-
-**Exit Criteria:**
-- Deleted modules have no import references
-- Deprecated modules raise warnings on import
-- CI passes with feature flags off
-
----
-
-### Phase 3: Engine Decomposition (3 weeks)
-
-**Goals:**
-- Break `engine.py` (3,083 lines) into focused modules
-- Each module owns one responsibility
-- Enable parallel development and safer changes
-
-**Proposed Module Structure:**
+### 2.1 Component Diagram
 
 ```
-core/orchestrator/
-├── engine.py              # Slim coordinator (~400 lines)
-├── run_lifecycle.py       # start_run, resume_run, complete_run (~300 lines)
-├── step_runner.py         # step iteration, artifact management (~400 lines)
-├── user_input_handler.py  # user_input pause/resume/validation (~250 lines)
-├── plan_executor.py       # plan_propose/gate/execute (~350 lines)
-├── loop_executor.py       # repeat_until handling (~150 lines)
-├── hitl_handler.py        # approval creation/resolution (~200 lines)
-├── step_executor.py       # (existing) tool/agent dispatch
-├── branching.py           # (existing)
-├── looping.py             # (existing)
-├── templating.py          # (existing)
-├── context.py             # (existing)
-├── flow_loader.py         # (existing)
-└── error_policy.py        # (existing)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Orchestrator Engine                          │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐    ┌──────────────────┐    ┌─────────────────┐   │
+│  │ Run Init     │───▶│ Semantic Phase   │───▶│ Step Execution  │   │
+│  └──────────────┘    └────────┬─────────┘    └─────────────────┘   │
+│                               │                                      │
+│                               ▼                                      │
+│                    ┌──────────────────┐                              │
+│                    │ NextAction Check │                              │
+│                    └────────┬─────────┘                              │
+│                             │                                        │
+│          ┌─────────────┬────┴────┬──────────────┐                   │
+│          ▼             ▼         ▼              ▼                   │
+│      CONTINUE      ASK_USER    ABORT    NEEDS_APPROVAL              │
+│          │             │         │              │                   │
+│          ▼             ▼         ▼              ▼                   │
+│      Execute       PAUSED_     FAILED      PENDING_                 │
+│       Steps      WAITING_FOR   (abort)      HUMAN                   │
+│                     _USER                                            │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Product Semantic Adapter                        │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐         ┌──────────────────┐                  │
+│  │   interpret()    │         │    validate()    │                  │
+│  │                  │         │                  │                  │
+│  │ - Extract intent │         │ - Domain rules   │                  │
+│  │ - Parse entities │         │ - Missing fields │                  │
+│  │ - Set confidence │         │ - Adjust conf.   │                  │
+│  └──────────────────┘         └──────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Before → After Responsibility Map:**
+### 2.2 Data Flow
 
-| Responsibility | Before (engine.py) | After |
-|----------------|-------------------|-------|
-| Run start/resume/complete | `_execute_run`, `_resume_from_pending` | `run_lifecycle.py` |
-| Step iteration | `_execute_steps`, `_run_step` | `step_runner.py` |
-| User input handling | `_pause_for_user_input`, `_handle_user_input_response` | `user_input_handler.py` |
-| Plan execution | `_handle_plan_propose`, `_handle_plan_gate`, `_handle_plan_execute` | `plan_executor.py` |
-| Loop handling | `_handle_repeat_until` | `loop_executor.py` |
-| HITL approvals | `_create_approval`, approval resolution | `hitl_handler.py` |
-| Tool/agent dispatch | (already in step_executor.py) | Keep |
-
-**Invariants (must never happen):**
-- Extracted modules must not import each other circularly
-- `engine.py` remains the only public entry point
-- No governance bypass in extracted modules
-- Trace events emitted consistently across modules
-
-**Exit Criteria:**
-- `engine.py` ≤ 500 lines
-- Each extracted module ≤ 400 lines
-- All existing tests pass
-- New unit tests for each extracted module
+```
+User Input (raw_input)
+       │
+       ▼
+┌──────────────────┐
+│ Core Normalizer  │  ← Trim, dedupe, stable order
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Product Adapter  │  ← interpret(context) → SemanticEnvelope
+│   .interpret()   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Product Adapter  │  ← validate(envelope, context) → ValidationResult
+│   .validate()    │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Confidence Gate  │  ← if confidence < threshold → ASK_USER/ABORT
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ NextAction Check │  ← CONTINUE/ASK_USER/ABORT/NEEDS_APPROVAL
+└────────┬─────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+ Execute    Pause/Fail
+  Steps     with Response
+```
 
 ---
 
-### Phase 4: Governance Consolidation (1 week)
+## 3. Implementation Phases
 
-**Goals:**
-- Consolidate 5 gate files into unified module
-- Reduce governance module count
-- Maintain enforcement rigor
+### Phase 1: Contracts & Schema (Days 1-2)
 
-**Actions:**
+**Goal**: Define all Pydantic models for semantic interpretation.
 
-| Merge | Into | Pattern |
-|-------|------|---------|
-| `branch_gate.py`, `loop_gate.py`, `plan_gate.py`, `critic_gate.py`, `retrieval_policy.py` | `gates.py` | Registry pattern |
+| Deliverable | File | Requirements |
+|-------------|------|--------------|
+| `SemanticEnvelope` | `core/contracts/semantic_schema.py` | ORC-SEM-010...019 |
+| `NextAction` enum | `core/contracts/semantic_schema.py` | ORC-SEM-020...022 |
+| `ValidationResult` | `core/contracts/semantic_schema.py` | INT-SEM-VAL-001...006 |
+| `Entity` model | `core/contracts/semantic_schema.py` | Supporting model |
+| `SemanticContext` | `core/contracts/semantic_schema.py` | Input to adapters |
 
-**Resulting Structure:**
-```
-core/governance/
-├── hooks.py        # Hook orchestration (~250 lines)
-├── policies.py     # Policy loading
-├── security.py     # Redaction, injection
-├── budgeting.py    # Budget enforcement
-└── gates.py        # All gates (~300 lines)
-```
-
-**Exit Criteria:**
-- Governance file count: 9 → 5
-- All governance tests pass
-- Hook behavior unchanged
+**Key Design Decisions**:
+- All models use `ConfigDict(extra="forbid")` for strict validation
+- Confidence bounded 0.0-1.0 with `ge=0.0, le=1.0`
+- `ambiguities` and `entities` capped at 20 items
+- `NextAction` uses string enum for JSON serialization
 
 ---
 
-### Phase 5: Registry Unification (1 week)
+### Phase 2: Core Normalization Rules (Day 3)
 
-**Goals:**
-- Single generic registry implementation
-- Reduce code duplication
-- Simplify product registration
+**Goal**: Implement domain-agnostic normalization in core.
 
-**Actions:**
+| Rule | Implementation | Requirements |
+|------|----------------|--------------|
+| Whitespace trimming | Strip leading/trailing, collapse internal | ORC-SEM-030 |
+| Case normalization | Lowercase for matching (preserve original) | ORC-SEM-030 |
+| Entity deduplication | Same type+value → single entity | ORC-SEM-031 |
+| Constraint merging | Deterministic merge of overlapping constraints | ORC-SEM-032 |
+| Stable ordering | Sort entities by (type, value), constraints by key | ORC-SEM-033 |
+| Schema coercion | String→int, string→date where schema declares | ORC-SEM-034 |
 
-Create `core/utils/registry.py`:
+**What NOT to Include**:
+- Domain rules like "trend requires time axis" (ORC-SEM-035)
+- Product-specific entity types
+- Business logic validation
+
+---
+
+### Phase 3: Product Adapter Interface (Days 4-5)
+
+**Goal**: Define and implement the product plugin interface.
+
+**Interface Definition**:
 ```python
-class ComponentRegistry[T]:
-    """Generic registry for agents, tools, or other factories."""
-    def register(self, name: str, factory: Callable[..., T]) -> None: ...
-    def get(self, name: str) -> T: ...
-    def list_registered(self) -> list[str]: ...
+# core/contracts/semantic_schema.py (or separate file)
+
+class ProductSemanticAdapter(ABC):
+    """
+    Product-provided semantic interpretation adapter.
+    Products implement this to customize interpretation and validation.
+    """
+    
+    @abstractmethod
+    def interpret(self, context: SemanticContext) -> SemanticEnvelope:
+        """
+        Interpret raw user input into a structured semantic envelope.
+        
+        Args:
+            context: Contains raw_input, payload, product_config
+            
+        Returns:
+            SemanticEnvelope with intent, entities, constraints, confidence
+        """
+        pass
+    
+    @abstractmethod
+    def validate(self, envelope: SemanticEnvelope, context: SemanticContext) -> ValidationResult:
+        """
+        Validate the semantic envelope against domain rules.
+        
+        Args:
+            envelope: Output from interpret()
+            context: Original context for reference
+            
+        Returns:
+            ValidationResult with is_valid, violations, revised_confidence
+        """
+        pass
 ```
 
-| Refactor | Action |
-|----------|--------|
-| `agents/registry.py` | Inherit from `ComponentRegistry[BaseAgent]` |
-| `tools/registry.py` | Inherit from `ComponentRegistry[BaseTool]` |
+**Default Adapter** (for products without custom adapter):
+- `interpret()`: Passthrough with basic heuristics
+- `validate()`: Always returns `is_valid=True`, confidence unchanged
 
-**Exit Criteria:**
-- Both registries share base implementation
-- Registration API unchanged
-- Tests pass
+**Registration**:
+- Adapters discovered from `products/<name>/semantic.py`
+- Registered via `ProductCatalog` during product load
+- Resolved via `ProductRouter.get_semantic_adapter(product_id)`
 
 ---
 
-### Phase 6: UI Modularization (1 week)
+### Phase 4: Orchestrator Integration (Days 6-8)
 
-**Goals:**
-- Split `platform_app.py` (1,046 lines)
-- Remove direct core imports
-- Establish page-based structure
+**Goal**: Integrate semantic phase into orchestrator engine.
 
-**Proposed Structure:**
+**File**: `core/orchestrator/semantic_phase.py`
+
+```python
+class SemanticPhase:
+    """Executes semantic interpretation before step execution."""
+    
+    def __init__(self, product_router: ProductRouter, tracer: Tracer):
+        self.product_router = product_router
+        self.tracer = tracer
+    
+    async def execute(
+        self,
+        raw_input: str,
+        payload: dict,
+        product_id: str,
+        flow_config: FlowConfig,
+    ) -> SemanticPhaseResult:
+        """
+        Execute semantic interpretation phase.
+        
+        Returns:
+            SemanticPhaseResult with envelope, validation, and next_action
+        """
+        # 1. Skip check
+        if flow_config.skip_semantic_interpretation:
+            return self._create_passthrough_result(raw_input, payload)
+        
+        # 2. Emit start event
+        self.tracer.emit("semantic_interpretation_started", {...})
+        
+        # 3. Build context
+        context = SemanticContext(
+            raw_input=raw_input,
+            payload=payload,
+            product_config=self.product_router.get_config(product_id),
+        )
+        
+        # 4. Get adapter (or default)
+        adapter = self.product_router.get_semantic_adapter(product_id)
+        
+        # 5. Interpret
+        envelope = adapter.interpret(context)
+        
+        # 6. Apply core normalization
+        envelope = self._apply_core_normalization(envelope)
+        
+        # 7. Validate
+        validation = adapter.validate(envelope, context)
+        
+        # 8. Confidence check
+        threshold = self._get_confidence_threshold(product_id)
+        if envelope.confidence < threshold and validation.is_valid:
+            envelope.proposed_next_action = NextAction.ASK_USER
+        
+        # 9. Emit completion event
+        self.tracer.emit("semantic_interpretation_completed", {
+            "envelope_hash": hash(envelope),
+            "confidence": envelope.confidence,
+            "ambiguity_count": len(envelope.ambiguities),
+            "next_action": envelope.proposed_next_action,
+        })
+        
+        return SemanticPhaseResult(
+            envelope=envelope,
+            validation=validation,
+            next_action=envelope.proposed_next_action,
+        )
 ```
-gateway/ui/
-├── platform_app.py      # App entry, routing (~150 lines)
-├── pages/
-│   ├── home.py          # Product catalog view
-│   ├── run.py           # Run execution view
-│   ├── approvals.py     # Pending approvals view
-│   └── history.py       # Run history view
-├── components/
-│   ├── run_card.py      # Reusable run display
-│   └── approval_form.py # Approval interaction
-└── api_client.py        # HTTP client for API calls
-```
 
-**Exit Criteria:**
-- `platform_app.py` ≤ 200 lines
-- All views work via API calls only
-- No direct `core/` imports in UI
+**Engine Integration** (`core/orchestrator/engine.py`):
+
+```python
+class OrchestrationEngine:
+    async def run_flow(self, ...):
+        # ... existing run init ...
+        
+        # NEW: Semantic phase (after init, before steps)
+        semantic_result = await self.semantic_phase.execute(
+            raw_input=payload.get("text", ""),
+            payload=payload,
+            product_id=product_id,
+            flow_config=flow.config,
+        )
+        
+        # Handle next action
+        match semantic_result.next_action:
+            case NextAction.CONTINUE:
+                pass  # Proceed to steps
+            case NextAction.ASK_USER:
+                return await self._pause_for_clarification(
+                    run_context,
+                    semantic_result,
+                )
+            case NextAction.ABORT:
+                return await self._fail_run(
+                    run_context,
+                    code="semantic_abort",
+                    reason=semantic_result.validation.violations,
+                )
+            case NextAction.NEEDS_APPROVAL:
+                return await self._request_semantic_approval(
+                    run_context,
+                    semantic_result,
+                )
+        
+        # ... existing step execution ...
+```
 
 ---
 
-### Phase 7: Enhanced Descriptors & Evidence Model (2 weeks)
+### Phase 5: Stop/Pause Mechanism (Days 9-10)
 
-**Goals:**
-- Build semantic catalog for intelligent tool/agent selection
-- Standardize evidence-based reasoning with provenance
+**Goal**: Implement structured responses for ASK_USER and ABORT.
 
-**Deliverables:**
-
-**7.1 Expand ToolDescriptor & AgentDescriptor:**
+**ASK_USER Response**:
 ```python
-class ToolDescriptor:
-    name: str
-    description: str
-    capabilities: list[str]  # semantic tags
-    input_schema_ref: str
-    output_schema_ref: str
-    read_only: bool
-    side_effect: bool
-    sensitivity_class: str  # "public" | "internal" | "confidential" | "restricted"
-    cost_hint: str  # "low" | "medium" | "high"
-
-class AgentDescriptor:
-    name: str
-    purpose: str
-    capabilities: list[str]
-    input_schema_ref: str
-    output_schema_ref: str
-    cost_hint: str
-    allowed_step_types: list[str]  # advisory only
-```
-
-**7.2 Introduce EvidenceItem model:**
-```python
-class EvidenceItem:
-    id: str
-    type: str  # "table" | "document" | "text" | "metric"
-    source: str  # tool name + uri
-    timestamp: datetime
-    confidence: float
-    content_ref: str  # artifact reference
-    summary: str
-    provenance: dict  # filters, params used
-```
-
-**7.3 Update ToolResult contract:**
-- Add `evidence: list[EvidenceItem]` field
-- Compatibility shim: existing tools auto-wrap output into minimal EvidenceItem
-
-**Exit Criteria:**
-- Every registered tool/agent has complete descriptor
-- Every tool run yields at least one EvidenceItem
-- Trace contains evidence IDs and source mapping
-
----
-
-### Phase 8: Context Pack Builder (2 weeks)
-
-**Goals:**
-- Curate LLM inputs deterministically
-- Enable auditable, reproducible reasoning
-
-**Deliverables:**
-
-**8.1 ContextPack schema:**
-```python
-class ContextPack:
+class ClarificationResponse(BaseModel):
+    """Returned when semantic phase needs user clarification."""
+    run_id: str
+    status: Literal["PAUSED_WAITING_FOR_USER"]
+    clarification_needed: bool = True
     question: str
-    tables_summary: list[TableSummary]  # stats, key rows, column profiles
-    documents_summary: list[DocSummary]  # excerpts, metadata
-    evidence_index: list[str]  # EvidenceItem references
-    assumptions: list[str]  # system-applied
-    limits: dict  # data coverage, sampling info
+    ambiguities: list[str]
+    original_confidence: float
+    context: dict  # What we understood so far
 ```
 
-**8.2 ContextPackBuilder utility:**
-- Takes EvidenceItems + question
-- Generates context pack deterministically (no LLM)
-- Stores as artifact with hash for reproducibility
+**ABORT Response**:
+```python
+class SemanticAbortError(BaseModel):
+    """Returned when semantic phase cannot proceed."""
+    run_id: str
+    status: Literal["FAILED"]
+    error_code: Literal["semantic_abort"]
+    reason: str
+    violations: list[str]
+    ambiguities: list[str]
+```
 
-**Exit Criteria:**
-- Same inputs → same context pack (hash-verified)
-- Context pack contains provenance links to all evidence
-- LLM calls receive ContextPack, not raw blobs
+**Trace Events**:
+- `semantic_stop_issued` with next_action, question (if ASK_USER), reason (if ABORT)
 
 ---
 
-### Phase 9: Bounded Reasoning & Critic Pattern (3 weeks)
+### Phase 6: Confidence Thresholds (Days 11-12)
 
-**Goals:**
-- Enable multi-pass reasoning with governance
-- Add critic for quality/completeness checks
-- Enforce reasoning budgets
+**Goal**: Implement configurable confidence thresholds.
 
-**Deliverables:**
-
-**9.1 ReasoningLadder refactor:**
-```python
-class ReasoningLadderOutput:
-    interpret: InterpretResult  # intent, entities, constraints
-    propose: ProposeResult      # candidates, tool_candidates, agent_candidates
-    select: SelectResult        # chosen, rationale, evidence_refs
-    confidence: float
-    assumptions: list[str]
-    unknowns: list[str]
-```
-
-Each pass:
-- Uses same ContextPack
-- Yields structured output
-- Emits trace events
-- Bounded by config budgets
-
-**9.2 Bounded Critic refactor:**
-```python
-class CriticResult:
-    completeness_score: float
-    inconsistency_flags: list[str]
-    missing_evidence: list[str]
-    confidence_adjustment: float
-    recommended_action: str  # "NONE" | "USER_INPUT" | "HITL" | "FETCH_MORE_EVIDENCE"
-```
-
-Rules:
-- Critic cannot call tools; only analyzes artifacts
-- Critic cannot produce "execute tool X"; only recommendations
-- Orchestrator gates all recommendations via policy
-
-**9.3 Reasoning Budgets (expand existing budgeting.py):**
-```python
-class ReasoningBudget:
-    max_passes: int
-    max_tool_calls: int
-    max_parallel_calls: int
-    max_total_cost_units: float
-    max_latency_bucket: str
-    policy_by_sensitivity: dict
-```
-
-Enforcement:
-- Exceeding budgets → deterministic stop or HITL escalation
-- No runaway loops
-
-**Exit Criteria:**
-- Reasoning ladder bounded by budgets
-- Critic output validates; failures are safe
-- Budget violations produce deterministic, traceable outcomes
-
----
-
-### Phase 10: Parallel Read-Only Tool Execution (1 week)
-
-**Goals:**
-- Enable efficient evidence gathering
-- Maintain determinism and auditability
-
-**Deliverables:**
-
-**10.1 Add TOOL_BATCH step type:**
+**Configuration** (`configs/app.yaml`):
 ```yaml
-- id: gather_evidence
-  type: tool_batch
-  tools:
-    - tool_a
-    - tool_b
-    - tool_c
-  parallel: true
+semantic:
+  default_confidence_threshold: 0.7
+  require_semantic_phase: true
 ```
 
-Rules:
-- All tools must have `read_only=true` and `side_effect=false`
-- Merge strategy: deterministic ordering by tool name
-- EvidenceItems appended with stable IDs
-
-**Exit Criteria:**
-- Batch rejects any tool not marked read_only
-- Deterministic merge order (reproducible)
-- Trace contains each tool call as separate event
-
----
-
-### Phase 11: Missing-Info Question Loop (1 week)
-
-**Goals:**
-- Structured information gathering from users
-- Validated, schema-driven input
-
-**Deliverables:**
-
-**11.1 QuestionSet artifact:**
-```python
-class QuestionSet:
-    questions: list[Question]
-    required_fields: list[str]
-    validation_schema: dict
-```
-
-**11.2 Flow pattern:**
+**Per-Product Override** (`configs/products.yaml`):
 ```yaml
-- id: check_completeness
-  type: agent
-  agent: critic
-
-- id: ask_questions
-  type: user_input
-  when: "{{artifacts.critic_result.recommended_action}} == 'USER_INPUT'"
-  params:
-    question_set: "{{artifacts.question_set}}"
+by_product:
+  ade:
+    semantic_confidence_threshold: 0.8  # Stricter for ADE
+  hello_world:
+    semantic_confidence_threshold: 0.5  # More lenient for demo
 ```
 
-Rules:
-- Invalid user input does not resume flow
-- Resume merges validated answers into ContextPack deterministically
+**Governance Hook**:
+```python
+# core/governance/hooks.py
 
-**Exit Criteria:**
-- User input validated against schema before resume
-- Answers appear in ContextPack with provenance
+def check_semantic_confidence(
+    envelope: SemanticEnvelope,
+    threshold: float,
+) -> GovernanceDecision:
+    """
+    Enforce confidence threshold on semantic interpretation.
+    """
+    if envelope.confidence < threshold:
+        return GovernanceDecision(
+            allowed=False,
+            reason=f"confidence {envelope.confidence} below threshold {threshold}",
+            suggested_action=NextAction.ASK_USER,
+        )
+    return GovernanceDecision(allowed=True)
+```
 
 ---
 
-### Phase 12: Retrieval Augmentation (1 week)
+### Phase 7: Trace Events (Days 13-14)
 
-**Goals:**
-- Enable approved-evidence-only retrieval
-- Support cross-run learning (within governance)
+**Goal**: Emit structured trace events for semantic steps.
 
-**Deliverables:**
+| Event | When | Payload |
+|-------|------|---------|
+| `semantic_interpretation_started` | Phase begins | `run_id`, `product_id`, `raw_input_length` |
+| `semantic_interpretation_completed` | Phase succeeds | `envelope_hash`, `confidence`, `ambiguity_count`, `entity_count`, `next_action` |
+| `semantic_validation_completed` | After validate() | `is_valid`, `missing_fields`, `violation_count`, `revised_confidence` |
+| `semantic_stop_issued` | ASK_USER or ABORT | `next_action`, `question` (if ASK_USER), `reason` (if ABORT), `violations` |
 
-**12.1 Retrieval tool enhancement:**
-- Query prior RunRecords/TraceEvents
-- Query approved knowledge sources (per-product whitelist)
-- Output as EvidenceItems with citations
-
-**12.2 Policy enforcement:**
-```yaml
-retrieval_policy:
-  allowed_sources:
-    - "runs:current_product"
-    - "knowledge:approved_docs"
-  blocked_sources:
-    - "runs:other_products"
-```
-
-**Exit Criteria:**
-- Retrieval cannot pull from disallowed sources
-- Every retrieved item has provenance (run_id, timestamp, artifact_ref)
+**Implementation** (`core/memory/tracing.py`):
+- Add event types to `TraceEventKind` enum
+- Ensure events include `ts`, `run_id`, `step_id` (null for semantic phase)
 
 ---
 
-### Phase 13: Advisory Agent Set (2 weeks)
+### Phase 8: Architecture Tests (Days 15-16)
 
-**Goals:**
-- Structured intelligence without control-flow authority
-- Bank-safe advisory patterns
+**Goal**: Implement 3 mandatory tests that lock behavior.
 
-**Deliverables:**
-
-**13.1 Refactor advisory.py into bounded agents:**
-
-| Agent | Purpose | Output |
-|-------|---------|--------|
-| `ToolSelector` | Recommend tools based on descriptors + context | `ToolSelectionResult` |
-| `AgentSelector` | Recommend agents for subtasks | `AgentSelectionResult` |
-| `GapFinder` | Identify missing evidence | `GapAnalysisResult` |
-| `Summarizer` | Condense evidence into narrative | `SummaryResult` |
-| `RiskExplainer` | Explain confidence/risk factors | `RiskExplanationResult` |
-
-Rules:
-- None can invoke ToolExecutor directly
-- All outputs are structured; no free-form control
-- Orchestrator uses them only via proposal→gate pattern
-
-**Exit Criteria:**
-- Advisory agents cannot call tools
-- All outputs validate against schemas
-- Orchestrator gates all recommendations
-
----
-
-## D) Target End-State Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Gateway Layer                           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────────────────┐   │
-│  │   CLI    │  │   API    │  │    UI (Streamlit pages)      │   │
-│  │          │  │ FastAPI  │  │    → calls API only          │   │
-│  └────┬─────┘  └────┬─────┘  └──────────────────────────────┘   │
-└───────┼─────────────┼───────────────────────────────────────────┘
-        │             │
-        └──────┬──────┘
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Orchestrator Layer                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ engine.py (coordinator)                                   │  │
-│  │   → run_lifecycle.py    (start/resume/complete)           │  │
-│  │   → step_runner.py      (iteration, artifacts)            │  │
-│  │   → user_input_handler  (user_input pause/resume)         │  │
-│  │   → hitl_handler        (approvals)                       │  │
-│  │   → plan_executor       (action plans)                    │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │                                  │
-│              ┌───────────────┼───────────────┐                  │
-│              ▼               ▼               ▼                  │
-│  ┌──────────────────┐ ┌────────────┐ ┌──────────────────────┐   │
-│  │  Step Executor   │ │ Governance │ │       Memory         │   │
-│  │  (tool/agent     │ │ (hooks,    │ │  (router, sqlite,    │   │
-│  │   dispatch)      │ │  gates,    │ │   observability)     │   │
-│  │                  │ │  policies) │ │                      │   │
-│  └────────┬─────────┘ └────────────┘ └──────────────────────┘   │
-│           │                                                     │
-│   ┌───────┴───────┐                                             │
-│   ▼               ▼                                             │
-│ ┌─────────┐  ┌──────────┐                                       │
-│ │ Agents  │  │  Tools   │                                       │
-│ │Registry │  │ Executor │                                       │
-│ └─────────┘  └──────────┘                                       │
-└─────────────────────────────────────────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Intelligence Layer                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ LLM Reasoner → Model Router → Providers                   │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                       Product Layer                             │
-│  ┌─────────────────┐  ┌─────────────────┐                       │
-│  │  hello_world/   │  │      ade/       │  ...more products     │
-│  │  ├─ manifest    │  │  ├─ manifest    │                       │
-│  │  ├─ config/     │  │  ├─ config/     │                       │
-│  │  ├─ flows/      │  │  ├─ flows/      │                       │
-│  │  ├─ agents/     │  │  ├─ agents/     │                       │
-│  │  ├─ tools/      │  │  ├─ tools/      │                       │
-│  │  └─ registry.py │  │  └─ registry.py │                       │
-│  └─────────────────┘  └─────────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Product Boundary Contract (Minimal)
-
-**Required files:**
-```
-products/{name}/
-├── manifest.yaml      # name, version, default_flow, ui config
-├── config/product.yaml # product-specific settings
-├── registry.py        # register(registries) → agents + tools
-└── flows/{flow}.yaml  # at least one flow
-```
-
-**Forbidden:**
-- Direct imports from `core/models/providers/`
-- Direct imports from `core/memory/*_backend.py`
-- Direct tool execution (must go through executor)
-- Direct model calls (must go through llm_reasoner)
-
----
-
-## E) Non-Goals (Explicit)
-
-| Do NOT | Reason |
-|--------|--------|
-| Rewrite the orchestrator | Extraction preserves working code; rewrite risks regression |
-| Replace FastAPI | Current API layer is clean; no benefit to switching |
-| Replace Streamlit | Works for internal/demo UI; custom UI is additive |
-| Add GraphQL | REST is sufficient; GraphQL adds complexity |
-| Add event sourcing | Current snapshot model works; event sourcing is overkill |
-| Add microservices | Single deployable is a strength; splitting adds operational cost |
-| Allow agents to control flow | Agents propose; orchestrator decides |
-| Allow tools to call tools | Single-level execution only |
-| Unbounded loops | All loops must have max_iters and budget caps |
-| Raw LLM context | LLM must receive curated ContextPack with evidence |
-
----
-
-## E.1) Intelligence Upgrade Reconciliation
-
-The following changes from the "Master v2 Intelligence Upgrade Plan" were reviewed and incorporated:
-
-| Change # | Description | Decision | Rationale |
-|----------|-------------|----------|-----------|
-| 1 | Tool/agent selection with metadata | ✓ Incorporated | Phase 7 + 13: Enables intelligent selection without bypassing governance |
-| 2 | Loops and conditional branching | ✓ Already exists | Branching/looping already in orchestrator; enhanced with budget enforcement |
-| 3 | Multi-pass reasoning ladder | ✓ Incorporated | Phase 9: Refactored from "remove" to "simplify with bounds" |
-| 4 | Proposal → Gate → Execute | ✓ Already exists | plan_propose/gate/execute pattern already implemented |
-| 5 | Context Pack Builder | ✓ Incorporated | Phase 8: Critical for auditable, reproducible LLM reasoning |
-| 6 | Bounded Critic | ✓ Incorporated | Phase 9: Refactored from "deprecate" to "simplify with bounds" |
-| 7 | Reduce schema overuse | ✓ Incorporated | Phase 1: Keep Pydantic at boundaries, lighter types internally |
-| 8 | Enhanced descriptors | ✓ Incorporated | Phase 7: Foundation for intelligent selection |
-| 9 | Missing-info question loop | ✓ Incorporated | Phase 11: Structured user input gathering |
-| 10 | Parallel read-only tools | ✓ Incorporated | Phase 10: New TOOL_BATCH step type |
-| 11 | Retrieval augmentation | ✓ Incorporated | Phase 12: Approved-source-only retrieval |
-| 12 | Reasoning budgets | ✓ Incorporated | Phase 9: Expanded beyond token limits |
-| 13 | Evidence model | ✓ Incorporated | Phase 7: EvidenceItem with provenance |
-| 14 | Advisory agent set | ✓ Incorporated | Phase 13: Bounded advisory agents |
-
-**Key Reconciliations:**
-- `reasoning_ladder.py`: Changed from E-REMOVE to C-SIMPLIFY (bounded multi-pass pattern is valuable)
-- `critic_evaluator.py`: Changed from D-DEPRECATE to C-SIMPLIFY (bounded critic adds value)
-- `advisory.py`: Changed from D-DEPRECATE to C-SIMPLIFY (structured advisory agents are useful)
-
----
-
-## F) Decision Principles ("Architectural Laws")
-
-### When to Add an Abstraction
-
-✓ Add when:
-- Multiple products need the same capability
-- External dependency isolation is required
-- Contract enforcement is needed at a boundary
-
-✗ Do NOT add when:
-- Only one use case exists today
-- "We might need it later" is the only justification
-
-### When to Delete Instead of Extend
-
-✓ Delete when:
-- Module has zero imports after grep search
-- Feature flag has been off for 90+ days
-- Complexity cost exceeds value delivered
-
-### Control vs Intelligence
-
-| Trust Model (Reasoning) | Enforce Determinism (Execution) |
-|-------------------------|--------------------------------|
-| Interpreting user intent | Tool invocation |
-| Planning action sequences | Step ordering |
-| Summarizing results | Artifact persistence |
-| Generating hypotheses | Approval state transitions |
-| Selecting tools/agents | Policy enforcement |
-| Identifying gaps | Budget limits |
-| Explaining risks | HITL triggers |
-
-**Pattern: "Reason, then Execute"**
-1. Agent reasons → produces structured decision (JSON)
-2. Decision stored as proposal artifact
-3. Gate validates proposal against governance (allowlists, budgets, sensitivity)
-4. Orchestrator executes only approved steps deterministically
-5. All execution is traced and auditable
-
-**Pattern: "Bounded Multi-Pass Reasoning"**
-1. Interpret pass → structured intent
-2. Propose pass → candidates with evidence refs
-3. Select pass → chosen action with rationale
-4. Each pass bounded by budget (max passes, cost units)
-5. Exceeding budget → deterministic stop or HITL escalation
-
-**Pattern: "Evidence-Based Context"**
-1. Tools return EvidenceItems with provenance
-2. ContextPackBuilder curates evidence deterministically
-3. LLM receives ContextPack, not raw data
-4. Reasoning cites evidence by ID
-5. Audit trail links decisions to source evidence
-
-### Product Isolation Rules
-
-1. Products may only import from `core.agents.base`, `core.tools.base`, `core.contracts.*`, `core.utils.product_loader`
-2. No cross-product imports
-3. All agents/tools registered explicitly in `registry.py`
-4. Architecture tests validate import boundaries
-
----
-
-## G) Summary: Simplification ROI
-
-### Simplification Phases (Weeks 1-10)
-
-| Phase | Effort | Complexity Reduction | Risk |
-|-------|--------|---------------------|------|
-| 0. Baseline & Safety Net | 1 week | Acceptance test foundation | Very Low |
-| 1. Contract Consolidation | 2 weeks | 21 → 14 files (33%) | Low |
-| 2. Unused Module Removal | 1 week | -3 modules | Very Low |
-| 3. Engine Decomposition | 3 weeks | 3083 → ~500 lines in main file | Medium |
-| 4. Governance Consolidation | 1 week | 9 → 5 files | Low |
-| 5. Registry Unification | 1 week | -~100 lines duplication | Low |
-| 6. UI Modularization | 1 week | 1046 → ~150 lines in main file | Low |
-
-### Intelligence Enhancement Phases (Weeks 11-22)
-
-| Phase | Effort | Capability Added | Risk |
-|-------|--------|-----------------|------|
-| 7. Descriptors & Evidence | 2 weeks | Semantic catalog + provenance | Medium |
-| 8. Context Pack Builder | 2 weeks | Deterministic LLM input curation | Low |
-| 9. Bounded Reasoning & Critic | 3 weeks | Multi-pass reasoning + quality checks | Medium |
-| 10. Parallel Tool Execution | 1 week | Efficient read-only batching | Low |
-| 11. Missing-Info Loop | 1 week | Structured user input gathering | Low |
-| 12. Retrieval Augmentation | 1 week | Approved cross-run learning | Medium |
-| 13. Advisory Agent Set | 2 weeks | Structured intelligence layer | Medium |
-
-### Dependency Map
-
-```
-Phase 0 (baseline)
-    │
-    ├── Phase 1 (contracts) ─────────────────────┐
-    │       │                                    │
-    │       └── Phase 7 (descriptors/evidence) ──┼── Phase 8 (context pack)
-    │                   │                        │           │
-    ├── Phase 2 (removal)                        │           └── Phase 9 (reasoning/critic)
-    │                                            │                   │
-    ├── Phase 3 (engine) ────────────────────────┼── Phase 10 (parallel tools)
-    │       │                                    │           │
-    │       └── Phase 11 (question loop) ────────┘           │
-    │                                                        │
-    ├── Phase 4 (governance) ── Phase 12 (retrieval) ────────┘
-    │
-    ├── Phase 5 (registry)
-    │
-    ├── Phase 6 (UI)
-    │
-    └── Phase 13 (advisory agents) ← depends on 7, 8, 9
-```
-
-**Total: ~22 weeks for simplification + intelligence upgrade while preserving governance and auditability.**
----
-
-## H) Product Refactoring Plan
-
-### Current Product Structure Analysis
-
-| Product | Agents | Tools | Flows | Tests | Boilerplate Lines |
-|---------|--------|-------|-------|-------|-------------------|
-| `hello_world` | 1 | 1 | 1 | 1 file | ~25 (registry.py) |
-| `ade` | 6 | 17 | 2 | 15 files | ~85 (registry.py) |
-
-### Issues Identified
-
-| Issue | Evidence | Impact |
-|-------|----------|--------|
-| **Verbose registry boilerplate** | `ade/registry.py` has 17 import lines + 17 register calls | High cognitive load; error-prone |
-| **No auto-discovery** | Every agent/tool requires manual import + registration | Friction adding new components |
-| **Duplicate build pattern** | Every agent/tool has `build()` function that's called twice (for name, then for registration) | Wasteful; could extract name from class |
-| **No product-level schema organization** | `ade/schemas/` has 9 files separate from `core/contracts/` | Unclear boundary; potential duplication |
-| **Inconsistent test organization** | Product tests under `products/ade/tests/` AND `tests/integration/` | Scattered coverage; hard to maintain |
-
-### Phase 14: Product Contract Simplification (2 weeks)
-
-**Goals:**
-- Reduce registry boilerplate by 80%
-- Enable auto-discovery of agents/tools
-- Standardize product schema location
-- Clarify test organization
-
-**Deliverables:**
-
-**14.1 Auto-discovery for agents and tools:**
+**File**: `tests/architecture/test_semantic_isolation.py`
 
 ```python
-# New: core/utils/product_loader.py enhancement
-def auto_discover_agents(product_path: Path) -> list[AgentFactory]:
-    """Discover all agents in products/{name}/agents/ with @agent decorator."""
-    ...
-
-def auto_discover_tools(product_path: Path) -> list[ToolFactory]:
-    """Discover all tools in products/{name}/tools/ with @tool decorator."""
-    ...
-```
-
-**14.2 Decorator-based registration:**
-
-```python
-# products/ade/agents/intent_agent.py
-from core.agents.base import agent
-
-@agent(
-    name="ade.intent_agent",
-    purpose="Extract user intent from query",
-    capabilities=["intent_extraction", "entity_recognition"],
-)
-class IntentAgent(BaseAgent):
-    def run(self, ctx: StepContext) -> AgentResult:
-        ...
-```
-
-**14.3 Simplified registry.py:**
-
-```python
-# Before (85 lines)
-from products.ade.agents.intent_agent import build as build_intent_agent
-# ... 22 more imports ...
-def register(registries: ProductRegistries) -> None:
-    registries.agent_registry.register(build_intent_agent().name, build_intent_agent)
-    # ... 22 more registrations ...
-
-# After (10 lines)
-from core.utils.product_loader import auto_register
-
-def register(registries: ProductRegistries) -> None:
-    auto_register(registries, product_path=Path(__file__).parent)
-```
-
-**14.4 Product schema guidelines:**
-
-| Schema Type | Location | Rationale |
-|-------------|----------|-----------|
-| Core contracts (AgentResult, ToolResult, etc.) | `core/contracts/` | Shared across all products |
-| Product-specific domain schemas | `products/{name}/schemas/` | Product-owned; not shared |
-| Cross-product domain schemas | `core/contracts/domain/` | New: for reusable domain models |
-
-**Exit Criteria:**
-- `ade/registry.py` ≤ 15 lines
-- New products require only decorated classes + minimal registry
-- All existing tests pass
-
----
-
-### Phase 15: Product Test Consolidation (1 week)
-
-**Goals:**
-- Clear test ownership (product vs platform)
-- Eliminate duplicate test patterns
-- Standardize product test structure
-
-**Deliverables:**
-
-**15.1 Test location rules:**
-
-| Test Type | Location | Runner |
-|-----------|----------|--------|
-| Product unit tests | `products/{name}/tests/unit/` | `pytest products/{name}/tests/unit/` |
-| Product integration tests | `products/{name}/tests/integration/` | `pytest products/{name}/tests/integration/` |
-| Product smoke tests | `products/{name}/tests/test_smoke.py` | `pytest products/{name}/tests/ -k smoke` |
-| Platform core tests | `tests/core/` | `pytest tests/core/` |
-| Platform integration tests | `tests/integration/` | `pytest tests/integration/` |
-| Architecture invariants | `tests/architecture/` | `pytest tests/architecture/` |
-| Intelligence acceptance | `tests/acceptance_intelligence/` | `pytest tests/acceptance_intelligence/` |
-
-**15.2 Move misplaced tests:**
-
-| Current Location | New Location | Reason |
-|------------------|--------------|--------|
-| `tests/integration/test_ade_evidence_bundle.py` | `products/ade/tests/integration/` | Product-specific |
-| `tests/integration/test_business_report_html.py` | `products/ade/tests/integration/` | Product-specific |
-
-**15.3 Standard product test template:**
-
-```
-products/{name}/tests/
-├── __init__.py
-├── conftest.py           # Product-specific fixtures
-├── test_smoke.py         # Quick sanity check
-├── unit/
-│   ├── __init__.py
-│   └── test_{tool}.py    # One file per tool
-└── integration/
-    ├── __init__.py
-    └── test_{flow}.py    # One file per flow
-```
-
-**Exit Criteria:**
-- All product tests under `products/{name}/tests/`
-- Platform tests under `tests/` test platform, not product logic
-- CI runs product tests in parallel by product
-
----
-
-## I) Comprehensive Test Plan
-
-### Current Test Inventory
-
-| Category | Location | Count | Coverage |
-|----------|----------|-------|----------|
-| Core unit tests | `tests/core/` | 38 files | Orchestrator, governance, contracts, tools, agents |
-| Integration tests | `tests/integration/` | 21 files | API, CLI, UI, end-to-end flows |
-| Architecture tests | `tests/architecture/` | 3 files | Import boundaries, invariants |
-| Acceptance tests | `tests/acceptance_intelligence/` | 2 files | Intelligence upgrade baselines |
-| Unit tests | `tests/unit/` | 13 files | Guardrails, boundaries |
-| ADE product tests | `products/ade/tests/` | 15 files | Product-specific unit + integration |
-| Hello World tests | `products/hello_world/tests/` | 1 file | Basic flow validation |
-
-### Test Gaps Identified
-
-| Gap | Risk | Priority |
-|-----|------|----------|
-| No explicit determinism tests | Replay may drift | High |
-| Limited HITL edge case coverage | Approval bugs in production | High |
-| No budget enforcement stress tests | Runaway loops | Medium |
-| No multi-product isolation tests | Cross-product leakage | Medium |
-| Missing trace contract validation | Observability regressions | Medium |
-| No performance regression tests | Latency creep | Low |
-
-### Phase 16: Test Infrastructure Hardening (2 weeks)
-
-**Goals:**
-- Fill critical test gaps
-- Standardize test patterns
-- Enable confident refactoring
-
-**Deliverables:**
-
-**16.1 Determinism Test Suite:**
-
-```python
-# tests/acceptance_intelligence/test_determinism.py
-
-def test_same_input_same_output():
-    """Run same flow twice with identical input; assert identical output."""
-    result1 = run_flow("hello_world", payload={"message": "test"})
-    result2 = run_flow("hello_world", payload={"message": "test"})
-    assert result1.artifacts == result2.artifacts
-    assert result1.trace_hash == result2.trace_hash
-
-def test_resume_produces_same_result():
-    """Pause at HITL, resume with same approval; assert same final state."""
-    ...
-```
-
-**16.2 HITL Edge Case Suite:**
-
-```python
-# tests/core/test_hitl_edge_cases.py
-
-def test_double_resume_idempotent():
-    """Resuming an already-resumed run is safe and idempotent."""
-
-def test_resume_with_wrong_approval_rejected():
-    """Approval for wrong step is rejected with clear error."""
-
-def test_resume_expired_approval():
-    """Approval after timeout is handled gracefully."""
-
-def test_concurrent_approvals_serialized():
-    """Multiple approvers on same run are serialized safely."""
-```
-
-**16.3 Budget Enforcement Suite:**
-
-```python
-# tests/core/test_budget_enforcement.py
-
-def test_max_passes_enforced():
-    """Loop terminates at max_passes even if condition not met."""
-
-def test_max_tool_calls_enforced():
-    """Run fails gracefully when tool call budget exceeded."""
-
-def test_budget_exceeded_triggers_hitl():
-    """Budget exceeded with HITL escalation policy pauses for approval."""
-
-def test_cost_units_tracked_accurately():
-    """Cost units accumulate correctly across tools and model calls."""
-```
-
-**16.4 Multi-Product Isolation Suite:**
-
-```python
-# tests/architecture/test_product_isolation.py
-
-def test_no_cross_product_imports():
-    """No product imports another product's modules."""
-
-def test_product_cannot_access_other_product_runs():
-    """API enforces product isolation for run queries."""
-
-def test_product_tools_only_registered_for_product():
-    """Tool registry is scoped per product at runtime."""
-```
-
-**16.5 Trace Contract Validation:**
-
-```python
-# tests/core/test_trace_contract.py (expand existing)
-
-def test_every_step_emits_trace():
-    """Every step type emits at least one trace event."""
-
-def test_trace_contains_required_fields():
-    """All trace events have run_id, step_id, timestamp, event_type."""
-
-def test_evidence_items_linked_in_trace():
-    """EvidenceItem IDs appear in trace with source mapping."""
-```
-
-**Exit Criteria:**
-- All test gaps covered with explicit tests
-- CI runs full suite on every PR
-- Test coverage report generated and tracked
-
----
-
-### Phase 17: Regression Prevention Framework (1 week)
-
-**Goals:**
-- Prevent regressions during refactoring
-- Lock in architectural invariants
-- Enable safe parallel development
-
-**Deliverables:**
-
-**17.1 Golden Path Tests:**
-
-```python
-# tests/acceptance_intelligence/test_golden_paths.py
-
-GOLDEN_PATHS = [
-    ("hello_world", "hello_world", {"message": "test"}, "expected_output.json"),
-    ("ade", "ade_v1", {"query": "revenue by region"}, "expected_ade_output.json"),
-]
-
-@pytest.mark.parametrize("product,flow,payload,expected", GOLDEN_PATHS)
-def test_golden_path(product, flow, payload, expected):
-    """Run golden path and compare to stored expected output."""
-    result = run_flow(product, flow, payload)
-    expected_data = load_expected(expected)
-    assert_golden_match(result, expected_data)
-```
-
-**17.2 Invariant Tests (expand existing):**
-
-```python
-# tests/architecture/test_master_v1_invariants.py (expand)
-
-def test_agents_never_call_tools_directly():
-    """Scan all agent files; assert no ToolExecutor imports."""
-
-def test_tools_never_call_llm_directly():
-    """Scan all tool files; assert no OpenAI/Anthropic imports."""
-
-def test_products_never_import_core_internals():
-    """Products only import from allowed core modules."""
-
-def test_no_env_reads_outside_config_loader():
-    """Only config/loader.py reads os.environ."""
-
-def test_no_persistence_outside_memory():
-    """Only memory/*.py writes to disk/DB."""
-```
-
-**17.3 Refactoring Safety Checklist:**
-
-Before each refactoring phase:
-- [ ] All golden path tests pass
-- [ ] All architecture invariant tests pass
-- [ ] All acceptance intelligence tests pass
-- [ ] No new warnings in deprecated module imports
-
-After each refactoring phase:
-- [ ] Same tests pass (regression check)
-- [ ] No new test failures
-- [ ] Coverage did not decrease
-- [ ] Performance benchmarks stable (±10%)
-
-**Exit Criteria:**
-- Golden paths defined for all products
-- Invariant tests cover all architectural rules
-- CI blocks merge on any invariant violation
-
----
-
-### Test Execution Strategy
-
-**CI Pipeline Stages:**
-
-```
-Stage 1: Fast Feedback (< 2 min)
-├── Lint (ruff, mypy)
-├── Architecture invariants
-└── Unit tests (parallel)
-
-Stage 2: Core Validation (< 5 min)
-├── Core tests
-├── Governance tests
-└── Contract tests
-
-Stage 3: Integration (< 10 min)
-├── API integration tests
-├── CLI integration tests
-├── Product integration tests (parallel by product)
-
-Stage 4: Acceptance (< 5 min)
-├── Intelligence acceptance tests
-├── Golden path tests
-└── Determinism tests
-
-Stage 5: Extended (nightly)
-├── Performance benchmarks
-├── Stress tests
-├── Full observability validation
-```
-
-**Test Markers:**
-
-```python
-@pytest.mark.fast        # < 100ms, no I/O
-@pytest.mark.unit        # Single module, mocked dependencies
-@pytest.mark.integration # Multiple modules, real dependencies
-@pytest.mark.acceptance  # End-to-end, black-box
-@pytest.mark.slow        # > 10s, run nightly
-@pytest.mark.flaky       # Known intermittent, tracked for fix
+import pytest
+from pathlib import Path
+
+class TestSemanticIsolation:
+    """
+    Architecture tests for semantic interpretation.
+    These tests prevent regression of key invariants.
+    """
+    
+    def test_semantic_phase_is_mandatory(self):
+        """
+        Verifies: ORC-SEM-001, ORC-SEM-003
+        
+        The orchestrator MUST call semantic phase before any step execution.
+        """
+        # 1. Create a mock flow with steps
+        # 2. Run the flow
+        # 3. Assert semantic_interpretation_started event emitted BEFORE step_started
+        # 4. Assert SemanticEnvelope is populated in run context
+        pass
+    
+    def test_stop_blocks_execution(self):
+        """
+        Verifies: ORC-SEM-STOP-001, ORC-SEM-STOP-004, ORC-SEM-STOP-007
+        
+        NextAction=ASK_USER or ABORT MUST prevent step execution.
+        """
+        # 1. Create adapter that returns ASK_USER
+        # 2. Run flow
+        # 3. Assert NO step_started events
+        # 4. Assert run status is PAUSED_WAITING_FOR_USER
+        
+        # 5. Create adapter that returns ABORT
+        # 6. Run flow
+        # 7. Assert NO step_started events
+        # 8. Assert run status is FAILED with code semantic_abort
+        pass
+    
+    def test_product_adapter_isolated(self):
+        """
+        Verifies: PROD-SEM-INT-005, PROD-SEM-INT-006, PROD-SEM-VAL-005, PROD-SEM-VAL-006
+        
+        Products supply interpret/validate; core never imports product domain code;
+        products never import core execution internals.
+        """
+        # 1. Scan all product semantic.py files
+        # 2. Assert NO imports from core/orchestrator/*
+        # 3. Scan core/orchestrator/*.py
+        # 4. Assert NO imports from products/*
+        # 5. Verify adapter interface is called via ProductRouter only
+        
+        core_orchestrator_files = Path("core/orchestrator").glob("*.py")
+        for f in core_orchestrator_files:
+            content = f.read_text()
+            assert "from products" not in content
+            assert "import products" not in content
+        
+        product_semantic_files = Path("products").glob("*/semantic.py")
+        for f in product_semantic_files:
+            content = f.read_text()
+            assert "from core.orchestrator" not in content
+            assert "import core.orchestrator" not in content
+        pass
 ```
 
 ---
 
-## G) Summary: Simplification ROI (Updated)
+## 4. File Inventory
 
-### Simplification Phases (Weeks 1-10)
+### New Files
 
-| Phase | Effort | Complexity Reduction | Risk |
-|-------|--------|---------------------|------|
-| 0. Baseline & Safety Net | 1 week | Acceptance test foundation | Very Low |
-| 1. Contract Consolidation | 2 weeks | 21 → 14 files (33%) | Low |
-| 2. Unused Module Removal | 1 week | -3 modules | Very Low |
-| 3. Engine Decomposition | 3 weeks | 3083 → ~500 lines in main file | Medium |
-| 4. Governance Consolidation | 1 week | 9 → 5 files | Low |
-| 5. Registry Unification | 1 week | -~100 lines duplication | Low |
-| 6. UI Modularization | 1 week | 1046 → ~150 lines in main file | Low |
+| File | Purpose | Requirements |
+|------|---------|--------------|
+| `core/contracts/semantic_schema.py` | Pydantic models for semantic interpretation | ORC-SEM-010...022, INT-SEM-VAL-* |
+| `core/orchestrator/semantic_phase.py` | Semantic phase executor | ORC-SEM-001...004, ORC-SEM-030...043 |
+| `core/orchestrator/product_router.py` | Route to product adapters | PROD-SEM-005 |
+| `products/hello_world/semantic.py` | Reference adapter implementation | PROD-SEM-* |
+| `tests/architecture/test_semantic_isolation.py` | Architecture invariant tests | ACC-SEM-* |
+| `tests/unit/core/contracts/test_semantic_schema.py` | Schema validation tests | — |
+| `tests/unit/core/orchestrator/test_semantic_phase.py` | Phase execution tests | — |
 
-### Intelligence Enhancement Phases (Weeks 11-22)
+### Modified Files
 
-| Phase | Effort | Capability Added | Risk |
-|-------|--------|-----------------|------|
-| 7. Descriptors & Evidence | 2 weeks | Semantic catalog + provenance | Medium |
-| 8. Context Pack Builder | 2 weeks | Deterministic LLM input curation | Low |
-| 9. Bounded Reasoning & Critic | 3 weeks | Multi-pass reasoning + quality checks | Medium |
-| 10. Parallel Tool Execution | 1 week | Efficient read-only batching | Low |
-| 11. Missing-Info Loop | 1 week | Structured user input gathering | Low |
-| 12. Retrieval Augmentation | 1 week | Approved cross-run learning | Medium |
-| 13. Advisory Agent Set | 2 weeks | Structured intelligence layer | Medium |
+| File | Changes |
+|------|---------|
+| `core/orchestrator/engine.py` | Add semantic phase call before step execution |
+| `core/orchestrator/run_lifecycle.py` | Add `semantic_envelope` to RunRecord |
+| `core/contracts/run_schema.py` | Add `semantic_envelope` field, new error codes |
+| `core/governance/hooks.py` | Add `check_semantic_confidence` hook |
+| `core/memory/tracing.py` | Add semantic trace event types |
+| `configs/app.yaml` | Add `semantic` section with defaults |
+| `configs/products.yaml` | Add per-product `semantic_confidence_threshold` |
 
-### Product & Test Phases (Weeks 23-26)
+---
 
-| Phase | Effort | Improvement | Risk |
-|-------|--------|-------------|------|
-| 14. Product Contract Simplification | 2 weeks | 80% less registry boilerplate | Low |
-| 15. Product Test Consolidation | 1 week | Clear test ownership | Very Low |
-| 16. Test Infrastructure Hardening | 2 weeks | Fill critical test gaps | Low |
-| 17. Regression Prevention Framework | 1 week | Golden paths + invariants | Very Low |
+## 5. Testing Strategy
 
-### Updated Dependency Map
+### Unit Tests
 
-```
-Phase 0 (baseline)
-    │
-    ├── Phase 1 (contracts) ─────────────────────┐
-    │       │                                    │
-    │       └── Phase 7 (descriptors/evidence) ──┼── Phase 8 (context pack)
-    │                   │                        │           │
-    ├── Phase 2 (removal)                        │           └── Phase 9 (reasoning/critic)
-    │                                            │                   │
-    ├── Phase 3 (engine) ────────────────────────┼── Phase 10 (parallel tools)
-    │       │                                    │           │
-    │       └── Phase 11 (question loop) ────────┘           │
-    │                                                        │
-    ├── Phase 4 (governance) ── Phase 12 (retrieval) ────────┘
-    │
-    ├── Phase 5 (registry) ── Phase 14 (product simplification)
-    │                               │
-    │                               └── Phase 15 (test consolidation)
-    ├── Phase 6 (UI)
-    │
-    ├── Phase 13 (advisory agents) ← depends on 7, 8, 9
-    │
-    └── Phase 16 (test hardening) ── Phase 17 (regression prevention)
-```
+| Test File | Coverage |
+|-----------|----------|
+| `test_semantic_schema.py` | All Pydantic models, validation, bounds |
+| `test_semantic_phase.py` | Phase execution, skip logic, normalization |
+| `test_product_router.py` | Adapter resolution, default fallback |
+| `test_semantic_confidence.py` | Threshold checking, governance hook |
 
-**Total: ~26 weeks for complete platform modernization including:**
-- 40-50% core complexity reduction
-- Intelligence upgrade with governance
-- 80% product boilerplate reduction
-- Comprehensive test coverage
+### Integration Tests
+
+| Test File | Scenario |
+|-----------|----------|
+| `test_semantic_flow.py` | Full flow with semantic phase |
+| `test_semantic_pause.py` | ASK_USER pauses correctly |
+| `test_semantic_abort.py` | ABORT fails with correct error |
+| `test_semantic_resume.py` | Resume after clarification |
+
+### Architecture Tests
+
+| Test | Invariant |
+|------|-----------|
+| `test_semantic_phase_is_mandatory` | Phase always runs |
+| `test_stop_blocks_execution` | ASK_USER/ABORT blocks steps |
+| `test_product_adapter_isolated` | No cross-layer imports |
+
+---
+
+## 6. Rollout Plan
+
+### Phase 1: Feature Flag (Week 1)
+- Deploy with `semantic.require_semantic_phase: false`
+- Run in shadow mode (interpret but don't block)
+- Collect metrics on confidence distribution
+
+### Phase 2: Opt-In Products (Week 2)
+- Enable for `hello_world` product only
+- Validate clarification flow works end-to-end
+- Tune confidence thresholds
+
+### Phase 3: All Products (Week 3)
+- Enable globally with `require_semantic_phase: true`
+- Monitor for unexpected ASK_USER/ABORT rates
+- Provide escape hatch via flow config
+
+---
+
+## 7. Success Metrics
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Misunderstood task rate | < 5% | User reports after clarification |
+| Clarification acceptance | > 80% | Users proceed after ASK_USER |
+| False positive rate | < 10% | Unnecessary ASK_USER events |
+| Semantic phase latency | < 100ms | P99 execution time |
+| Test coverage | 100% | Architecture tests passing |
+
+---
+
+## 8. Risk Mitigation
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Too many ASK_USER pauses | User frustration | Start with low threshold (0.5), tune up |
+| Product adapters slow | Run latency | Add timeout, fallback to default |
+| Backwards compatibility | Existing flows break | Feature flag, gradual rollout |
+| Complex domain rules | Maintenance burden | Keep core minimal, push to products |
+
+---
+
+## 9. Dependencies
+
+| Dependency | Type | Status |
+|------------|------|--------|
+| Pydantic v2 | Library | ✅ Available |
+| Tracer | Internal | ✅ Exists |
+| ProductCatalog | Internal | ✅ Exists |
+| GovernanceHooks | Internal | ✅ Exists |
+| User input resume flow | Internal | ✅ Exists |
+
+---
+
+## 10. Timeline Summary
+
+| Week | Phase | Deliverables |
+|------|-------|--------------|
+| Week 1 | Contracts + Normalization | `semantic_schema.py`, core rules |
+| Week 2 | Adapter + Integration | `semantic_phase.py`, engine changes |
+| Week 3 | Stop/Pause + Confidence | Response models, thresholds |
+| Week 4 | Tests + Rollout | Architecture tests, feature flag |
+
+**Total Effort**: ~16 engineering days
+
+---
+
+## 11. Traceability
+
+| BRD | Techspec | Implementation |
+|-----|----------|----------------|
+| BRD-AUTO-025 | ORC-SEM-001...004 | `semantic_phase.py` |
+| BRD-AUTO-026 | ORC-SEM-030...035 | Core normalization |
+| BRD-AUTO-027 | INT-SEM-CONF-* | Confidence thresholds |
+| BRD-GOV-025 | ORC-SEM-STOP-* | Stop/pause mechanism |
+| BRD-GOV-026 | INT-SEM-CONF-002...004 | Per-product thresholds |
+| BRD-GOV-027 | INT-SEM-VAL-006 | Validation blocking |

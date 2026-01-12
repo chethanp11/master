@@ -73,6 +73,86 @@ run lifecycle management, step execution, pause/resume mechanics, and control fl
 
 **Implementation**: `core/orchestrator/engine.py`, `core/governance/hooks.py`
 
+---
+
+## 3. Semantic Interpretation Phase Requirements
+
+### 3.1 Mandatory Semantic Phase
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-001** | [V1] The orchestrator MUST execute a `semantic_interpretation` phase before planning/execution for every run | MUST |
+| **ORC-SEM-002** | [V1] The semantic phase MAY be explicitly skipped only if `skip_semantic_interpretation: true` is set in flow config | MAY |
+| **ORC-SEM-003** | [V1] The semantic phase MUST produce a `SemanticEnvelope` result before any step execution | MUST |
+| **ORC-SEM-004** | [V1] If the semantic phase fails, the run MUST transition to `FAILED` with code `semantic_interpretation_failed` | MUST |
+
+**Implementation**: `core/orchestrator/engine.py`, `core/orchestrator/semantic_phase.py`
+
+### 3.2 SemanticEnvelope Contract
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-010** | [V1] `SemanticEnvelope` MUST be a Pydantic model in `core/contracts/semantic_schema.py` | MUST |
+| **ORC-SEM-011** | [V1] `SemanticEnvelope` MUST include: `raw_input` (original user input) | MUST |
+| **ORC-SEM-012** | [V1] `SemanticEnvelope` MUST include: `normalized_input` (cleaned/standardized input) | MUST |
+| **ORC-SEM-013** | [V1] `SemanticEnvelope` MUST include: `product_id` (resolved product identifier) | MUST |
+| **ORC-SEM-014** | [V1] `SemanticEnvelope` MUST include: `intent_type` (classified intent category) | MUST |
+| **ORC-SEM-015** | [V1] `SemanticEnvelope` MUST include: `entities` (list of extracted entities with type, value, confidence) | MUST |
+| **ORC-SEM-016** | [V1] `SemanticEnvelope` MUST include: `constraints` (dict of extracted constraints/filters) | MUST |
+| **ORC-SEM-017** | [V1] `SemanticEnvelope` MUST include: `confidence` (float 0.0-1.0) | MUST |
+| **ORC-SEM-018** | [V1] `SemanticEnvelope` MUST include: `ambiguities` (list of unresolved ambiguities) | MUST |
+| **ORC-SEM-019** | [V1] `SemanticEnvelope` MUST include: `proposed_next_action` (NextAction enum value) | MUST |
+
+**Implementation**: `core/contracts/semantic_schema.py`
+
+### 3.3 NextAction Enum
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-020** | [V1] `NextAction` enum MUST define: `CONTINUE`, `ASK_USER`, `ABORT` | MUST |
+| **ORC-SEM-021** | [V1] `NextAction` enum MAY define: `NEEDS_APPROVAL` for HITL gate integration | MAY |
+| **ORC-SEM-022** | [V1] `NextAction` MUST be enforced by the engine before step execution proceeds | MUST |
+
+**Implementation**: `core/contracts/semantic_schema.py`
+
+### 3.4 Orchestrator Stop/Pause Mechanism
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-STOP-001** | [V1] If `NextAction=ASK_USER`, execution MUST NOT proceed to planning/steps | MUST |
+| **ORC-SEM-STOP-002** | [V1] If `NextAction=ASK_USER`, run MUST transition to `PAUSED_WAITING_FOR_USER` | MUST |
+| **ORC-SEM-STOP-003** | [V1] If `NextAction=ASK_USER`, a structured response MUST be returned with `clarifying_question` and `ambiguities` | MUST |
+| **ORC-SEM-STOP-004** | [V1] If `NextAction=ABORT`, run MUST transition to `FAILED` with code `semantic_abort` | MUST |
+| **ORC-SEM-STOP-005** | [V1] If `NextAction=ABORT`, a structured error MUST include reason and ambiguities | MUST |
+| **ORC-SEM-STOP-006** | [V1] If `NextAction=NEEDS_APPROVAL`, run MUST transition to `PENDING_HUMAN` with semantic context | MAY |
+| **ORC-SEM-STOP-007** | [V1] Only `NextAction=CONTINUE` permits step execution to proceed | MUST |
+
+**Implementation**: `core/orchestrator/engine.py`, `core/orchestrator/semantic_phase.py`
+
+### 3.5 Deterministic Resolution Rules
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-030** | [V1] Core MUST apply domain-agnostic normalization: whitespace trimming, case normalization | MUST |
+| **ORC-SEM-031** | [V1] Core MUST apply entity deduplication (same type+value → single entity) | MUST |
+| **ORC-SEM-032** | [V1] Core MUST merge overlapping constraints deterministically | MUST |
+| **ORC-SEM-033** | [V1] Core MUST apply stable ordering to entities and constraints | MUST |
+| **ORC-SEM-034** | [V1] Core MUST apply schema coercions (string→int, string→date where schema declares type) | MUST |
+| **ORC-SEM-035** | [V1] Core MUST NOT contain domain-specific rules (e.g., "trend requires time axis") | MUST |
+
+**Implementation**: `core/orchestrator/semantic_phase.py`
+
+### 3.6 Semantic Trace Events
+
+| ID | Requirement | Level |
+|----|-------------|-------|
+| **ORC-SEM-040** | [V1] Semantic phase MUST emit `semantic_interpretation_started` event at phase start | MUST |
+| **ORC-SEM-041** | [V1] Semantic phase MUST emit `semantic_interpretation_completed` event with: envelope_hash, confidence, ambiguity_count, next_action | MUST |
+| **ORC-SEM-042** | [V1] If validation fails, MUST emit `semantic_validation_completed` event with: is_valid, missing_fields, violations | MUST |
+| **ORC-SEM-043** | [V1] If stop is issued, MUST emit `semantic_stop_issued` event with: next_action, question (if ASK_USER), reason (if ABORT) | MUST |
+
+**Implementation**: `core/memory/tracing.py`, `core/orchestrator/semantic_phase.py`
+
 ### 2.4 Run Completion
 
 | ID | Requirement | Level |
@@ -500,3 +580,6 @@ run lifecycle management, step execution, pause/resume mechanics, and control fl
 | ORC-BRANCH-001 | `core/orchestrator/branching.py` | `tests/unit/core/orchestrator/test_branching.py` |
 | ORC-LOOP-010 | `core/orchestrator/loop_executor.py` | `tests/unit/core/orchestrator/test_loop_executor.py` |
 | ORC-PLAN-001 | `core/orchestrator/plan_executor.py` | `tests/unit/core/orchestrator/test_plan_executor.py` |
+| ORC-SEM-001 | `core/orchestrator/semantic_phase.py` | `tests/architecture/test_semantic_isolation.py` |
+| ORC-SEM-010 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` |
+| ORC-SEM-STOP-001 | `core/orchestrator/engine.py` | `tests/architecture/test_semantic_isolation.py` |

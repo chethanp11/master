@@ -71,8 +71,9 @@ A platform that provides structured, composable, and governed AI agents that can
 | **BRD-AUTO-021** | System must select appropriate agents for subtasks | P0 | Enables dynamic delegation |
 | **BRD-AUTO-022** | System must identify gaps in information and request clarification | P1 | Improves task success rate |
 | **BRD-AUTO-023** | System must summarize complex results for human consumption | P1 | User experience |
-| **BRD-AUTO-024** | System must explain risks before executing high-impact actions | P1 | Informed decision-making |
-
+| **BRD-AUTO-024** | System must explain risks before executing high-impact actions | P1 | Informed decision-making || **BRD-AUTO-025** | System must interpret user intent before planning/execution | P0 | Prevents misunderstood tasks from proceeding |
+| **BRD-AUTO-026** | System must normalize and validate input before acting | P0 | Consistent, reliable processing |
+| **BRD-AUTO-027** | System must express interpretation confidence and request clarification when uncertain | P1 | User gets correct outcomes |
 ### 3.4 Reasoning Quality
 
 | ID | Requirement | Priority | Rationale |
@@ -135,6 +136,9 @@ A platform that provides structured, composable, and governed AI agents that can
 | BRD-AUTO-020 | Automatic tool selection | INT-ADV-001...005 (ToolSelector) |
 | BRD-AUTO-021 | Automatic agent selection | INT-ADV-010...015 (AgentSelector) |
 | BRD-AUTO-022 | Gap identification | INT-ADV-020...025 (GapFinder) |
+| BRD-AUTO-025 | Semantic interpretation | ORC-SEM-*, INT-SEM-* |
+| BRD-AUTO-026 | Input normalization | ORC-SEM-030...040 |
+| BRD-AUTO-027 | Confidence propagation | INT-SEM-CONF-* |
 | BRD-AUTO-030 | Structured reasoning | INT-RL-010...030 |
 | BRD-AUTO-031 | Critic evaluation | INT-CRIT-001...015 |
 | BRD-AUTO-040 | Workflow patterns | ORC-STEP-001...010, ORC-BRANCH-*, ORC-LOOP-* |
