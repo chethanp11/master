@@ -31,6 +31,9 @@ from core.contracts.reasoning_schema import ReasoningPurpose
 from core.governance.policies import PolicyEngine
 from core.models.providers.openai_provider import OpenAIProvider, OpenAIRequest, OpenAIResponse
 
+# Re-export request/response types for external use (avoids direct provider imports)
+__all__ = ["ModelRouter", "ModelSelection", "OpenAIRequest", "OpenAIResponse"]
+
 
 @dataclass(frozen=True)
 class ModelSelection:

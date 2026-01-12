@@ -374,3 +374,35 @@ Test Results
 
 
 
+Phase 13 implementation is complete. Here's what was created:
+
+Summary
+Created Directory Structure
+Key Features
+AdvisoryAgent Base Class (base.py):
+
+Extends BaseAgent with enforced _can_execute_tools = False
+can_execute_tools property always returns False
+Abstract _build_system_prompt() method for LLM guidance
+Injectable llm_reasoner for testing
+Five Bounded Advisors:
+
+ToolSelector: Recommends tools based on descriptors/context
+AgentSelector: Recommends agents for subtasks
+GapFinder: Identifies missing evidence
+Summarizer: Condenses evidence into narrative
+RiskExplainer: Explains confidence/risk factors
+Governance Enforcement:
+
+Architecture test in test_architecture_invariants.py:111 verifies advisors cannot import core.tools.executor
+Unit tests in test_advisors_bounded.py verify:
+All advisors have can_execute_tools = False
+Outputs are structured and validated
+Error handling works correctly
+Exports Updated:
+
+__init__.py exports all advisors and factory functions
+All 16 unit tests and 10 architecture tests pass.
+
+
+

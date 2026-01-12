@@ -109,6 +109,27 @@ def test_agents_do_not_import_memory_backends_or_tool_executor() -> None:
     assert not offenses, _format_offenses("Agents", offenses)
 
 
+def test_advisory_agents_cannot_import_tool_executor() -> None:
+    """
+    Phase 13 invariant: Advisory agents cannot invoke ToolExecutor.
+
+    Advisory agents are bounded intelligence components that:
+    - Provide structured recommendations
+    - Cannot execute tools directly
+    - Cannot bypass governance
+    """
+    advisors_root = REPO_ROOT / "core" / "agents" / "advisors"
+    files = list(_iter_python_files(advisors_root))
+    offenses = _find_offenses(
+        files,
+        forbidden_prefixes=(
+            "core.tools.executor",
+            "core.tools.backends",
+        ),
+    )
+    assert not offenses, _format_offenses("Advisory agents", offenses)
+
+
 def test_ui_does_not_import_core_runtime_layers() -> None:
     ui_root = REPO_ROOT / "gateway" / "ui"
     files = list(_iter_python_files(ui_root))
