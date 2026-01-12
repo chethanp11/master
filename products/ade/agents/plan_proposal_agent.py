@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
 from core.contracts.action_plan_schema import EstimatedCost, PlanProposal, PlanProposalStep as PlanStep
 
@@ -15,6 +15,13 @@ class PlanProposalInput(BaseModel):
     comment: str = Field(default="")
 
 
+@agent(
+    name="plan_proposal_agent",
+    purpose="Generates formal plan proposals for human approval",
+    capabilities=["plan_generation", "approval_workflow", "cost_estimation"],
+    cost_hint="LOW",
+    allowed_step_types=["agent", "plan_proposal"],
+)
 class PlanProposalAgent(BaseAgent):
     name = "plan_proposal_agent"
     description = "Generates a deterministic plan proposal for ADE flows."

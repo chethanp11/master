@@ -3,6 +3,15 @@ from __future__ import annotations
 # ==============================
 # Integration: ADE Evidence Bundle
 # ==============================
+"""
+Test that the ADE flow correctly assembles evidence bundles
+with proper provenance tracking for all tool outputs.
+
+This test validates:
+- Evidence items are created by tools
+- Each item has tool_step_id, dataset_id, inputs_hash
+- Evidence bundle aggregates all items correctly
+"""
 
 import shutil
 from pathlib import Path
@@ -17,12 +26,12 @@ from core.utils.product_loader import discover_products, register_enabled_produc
 
 
 @pytest.mark.integration
-def test_ade_evidence_bundle_created(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+def test_ade_evidence_bundle_created(tmp_path: Path, ade_product_path: Path) -> None:
+    repo_root = ade_product_path.parents[1]
     storage_dir = tmp_path / "storage"
     sqlite_path = tmp_path / "ade.sqlite"
     upload_id = "test_upload"
-    upload_dir = repo_root / "products" / "ade" / "staging" / "input"
+    upload_dir = ade_product_path / "staging" / "input"
     upload_dir.mkdir(parents=True, exist_ok=True)
     sample_csv = upload_dir / "sample.csv"
     rows = ["Expense,H22024,H2025,H2026", "A,10,12,14", "B,20,22,18"]

@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.decision_packet import DecisionPacket
 
 
@@ -192,6 +192,15 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
     )
 
 
+@tool(
+    name="render_decision_packet_html",
+    description="Renders a DecisionPacket into a plain HTML summary for review.",
+    capabilities=["html_rendering", "decision_visualization", "summary_generation"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class RenderDecisionPacketHtmlTool(BaseTool):
     name = "render_decision_packet_html"
     description = "Renders a DecisionPacket into a plain HTML summary."

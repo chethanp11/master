@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
 
 
@@ -16,6 +16,12 @@ class PlanningInput(BaseModel):
     previous_run: Dict[str, Any] = Field(default_factory=dict)
 
 
+@agent(
+    name="planning_agent",
+    purpose="High-level planning agent for complex analysis workflows",
+    capabilities=["planning", "workflow_orchestration", "resource_allocation"],
+    cost_hint="MED",
+)
 class PlanningAgent(BaseAgent):
     name = "planning_agent"
     description = "Produces a replan note and a suggested restart step based on rejection context."

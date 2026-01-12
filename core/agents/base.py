@@ -21,6 +21,10 @@ Interface:
 Notes:
 - Concrete agents MUST provide a stable `name` used in flows.
 - Concrete agents MUST return structured outputs (Pydantic models via AgentResult.data).
+
+Auto-discovery:
+- Use the @agent decorator to enable auto-discovery for product agents.
+- Decorated classes will be automatically registered when auto_register() is called.
 """
 
 from __future__ import annotations
@@ -28,10 +32,76 @@ from __future__ import annotations
 
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 from core.contracts.agent_schema import AgentResult
+from core.contracts.descriptors_schema import AgentDescriptor, CostHint
 from core.orchestrator.context import StepContext
+
+
+# Type variable for agent class
+T = TypeVar("T", bound="BaseAgent")
+
+
+def agent(
+    name: str,
+    purpose: str,
+    *,
+    capabilities: Optional[List[str]] = None,
+    cost_hint: str = "LOW",
+    allowed_step_types: Optional[List[str]] = None,
+) -> Callable[[Type[T]], Type[T]]:
+    """
+    Decorator for agent auto-discovery.
+
+    Marks an agent class for automatic registration with the agent registry.
+    The decorator attaches an AgentDescriptor to the class that provides
+    metadata for selection, governance, and cost estimation.
+
+    Args:
+        name: Unique agent name (used in flows and registries)
+        purpose: Primary purpose description of the agent
+        capabilities: Semantic tags like ['reasoning', 'planning', 'evaluation']
+        cost_hint: Cost estimate - "LOW", "MED", or "HIGH"
+        allowed_step_types: Step types this agent can handle (e.g., ["agent"])
+
+    Example:
+        @agent(
+            name="my_agent",
+            purpose="Analyzes data and provides insights",
+            capabilities=["analysis", "reasoning"],
+            cost_hint="LOW",
+        )
+        class MyAgent(BaseAgent):
+            ...
+
+    Note:
+        - The decorated class must have a `build()` function or be instantiable
+          with no required arguments for auto-registration.
+    """
+    def decorator(cls: Type[T]) -> Type[T]:
+        try:
+            hint = CostHint(cost_hint.upper())
+        except ValueError:
+            hint = CostHint.UNKNOWN
+
+        descriptor = AgentDescriptor(
+            name=name,
+            purpose=purpose,
+            capabilities=capabilities or [],
+            cost_hint=hint,
+            allowed_step_types=allowed_step_types or ["agent"],
+        )
+        cls._agent_descriptor = descriptor  # type: ignore[attr-defined]
+        cls._auto_discover = True  # type: ignore[attr-defined]
+
+        # Ensure the class has the name attribute set
+        if not hasattr(cls, "name") or cls.name == "":
+            cls.name = name  # type: ignore[misc]
+
+        return cls
+
+    return decorator
 
 
 class BaseAgent(ABC):

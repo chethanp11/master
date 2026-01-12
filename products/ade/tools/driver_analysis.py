@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 
 
 class SegmentRow(BaseModel):
@@ -76,6 +76,15 @@ def driver_analysis(payload: DriverAnalysisInput) -> DriverAnalysisOutput:
     )
 
 
+@tool(
+    name="driver_analysis",
+    description="Computes driver contributions for before/after segment comparisons.",
+    capabilities=["driver_analysis", "segment_comparison", "contribution_analysis"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="MED",
+)
 class DriverAnalysisTool(BaseTool):
     name = "driver_analysis"
     description = "Computes driver contributions for before/after segments."

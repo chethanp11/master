@@ -14,7 +14,7 @@ import pytest
 
 from core.contracts.run_schema import RunStatus
 from core.models.providers.openai_provider import OpenAIProvider, OpenAIResponse
-from tests.acceptance_intelligence import helpers
+from tests.acceptance_intelligence import test_helpers as helpers
 
 
 def _get_events_by_kind(events: List[Any], kind: str) -> List[Any]:

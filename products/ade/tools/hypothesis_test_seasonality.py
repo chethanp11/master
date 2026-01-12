@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.tools.detect_anomalies import Point
 from products.ade.tools.hypothesis_test_data_outage import HypothesisTestOutput
 from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
@@ -76,6 +76,15 @@ def hypothesis_test_seasonality(payload: SeasonalityInput) -> HypothesisTestOutp
     )
 
 
+@tool(
+    name="hypothesis_test_seasonality",
+    description="Tests whether the series shows seasonality signals or periodic patterns.",
+    capabilities=["hypothesis_testing", "seasonality_detection", "pattern_analysis"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class HypothesisTestSeasonalityTool(BaseTool):
     name = "hypothesis_test_seasonality"
     description = "Tests whether the series shows seasonality signals."

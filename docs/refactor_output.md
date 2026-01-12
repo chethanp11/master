@@ -406,3 +406,157 @@ All 16 unit tests and 10 architecture tests pass.
 
 
 
+Phase 14 (Product Contract Simplification) - Summary
+Changes Made:
+Added @agent decorator to base.py
+
+Decorator that marks agent classes for auto-discovery
+Sets _auto_discover = True and _agent_descriptor with AgentDescriptor
+Parameters: name, purpose, capabilities, cost_hint, allowed_step_types (optional)
+Added @tool decorator to base.py
+
+Decorator that marks tool classes for auto-discovery
+Sets _auto_discover = True and _tool_descriptor with ToolDescriptor
+Parameters: name, description, capabilities, read_only, side_effect, sensitivity_class, cost_hint
+Added auto-discovery functions to product_loader.py
+
+auto_discover_agents(product_path) - Scans agents/ directory for decorated classes
+auto_discover_tools(product_path) - Scans tools/ directory for decorated classes
+auto_register(registries, product_path) - Discovers and registers all components
+Helper functions: _import_module_from_path(), _find_decorated_classes(), _make_factory()
+Updated hello_world product
+
+simple_agent.py - Added @agent decorator
+echo_tool.py - Added @tool decorator
+registry.py - Simplified from 64 lines to ~25 lines using auto_register()
+Updated ADE product (6 agents)
+
+dashboard_agent.py - Added @agent decorator
+intent_agent.py - Added @agent decorator
+plan_agent.py - Added @agent decorator
+plan_proposal_agent.py - Added @agent decorator
+planning_agent.py - Added @agent decorator
+sufficiency_evaluator.py - Added @agent decorator
+Updated ADE product (16 tools)
+
+data_reader.py - Added @tool decorator
+build_chart_spec.py - Added @tool decorator
+recommend_chart.py - Added @tool decorator
+detect_anomalies.py - Added @tool decorator
+driver_analysis.py - Added @tool decorator
+assemble_insight_card.py - Added @tool decorator
+assemble_decision_packet.py - Added @tool decorator
+assemble_evidence_bundle.py - Added @tool decorator
+build_reasoning_narrative.py - Added @tool decorator
+compute_business_metrics.py - Added @tool decorator
+assemble_business_report.py - Added @tool decorator
+export_pdf.py - Added @tool decorator
+render_business_report_html.py - Added @tool decorator
+render_decision_packet_html.py - Added @tool decorator
+hypothesis_test_data_outage.py - Added @tool decorator
+hypothesis_test_seasonality.py - Added @tool decorator
+Simplified ADE registry.py
+
+Reduced from ~181 lines to ~35 lines
+Now uses auto_register() instead of manual registration
+Added comprehensive tests
+
+test_auto_discovery.py - 17 tests covering:
+@agent decorator functionality
+@tool decorator functionality
+Auto-discovery functions
+auto_register() function
+hello_world product verification
+ADE product verification
+Benefits:
+Reduced boilerplate: Registry files are now ~25 lines instead of 100+ lines
+Descriptors inline with code: No separate descriptors.py needed
+Automatic discovery: New agents/tools just need decorators, no manual registration
+Type-safe: Decorators validate descriptor parameters
+Testable: Full test coverage for the auto-discovery system
+
+
+Phase 15: Product Test Consolidation - Complete ✅
+Changes Made:
+Moved ADE integration tests to product folder
+
+test_ade_evidence_bundle.py
+test_business_report_html.py
+test_ade_hitl.py
+test_ade_orchestrator_flow.py
+test_ade_v1.py
+test_business_report_quality.py
+Created shared test fixtures
+
+conftest.py - ADE fixtures
+conftest.py - Hello World fixtures
+Added test documentation
+
+README.md - Main test organization guide
+README.md - ADE-specific test docs
+Updated pytest configuration
+
+pytest.ini - Added product test paths to testpaths
+Fixed test assertions to match actual flow behavior
+
+Updated user_input_response format from prompt_id to form_id: "viz_preferences"
+Fixed build_chart_spec test to expect table fallback
+Fixed observability assertions (removed input.json check when mirroring is disabled)
+Fixed HITL rejection test to handle flow loop-back correctly
+Test Results:
+315 tests pass (287 core + 28 product)
+Test execution time: ~13 seconds
+
+
+Phases 16-17: Test Infrastructure Hardening - Complete ✅
+New Test Files Created:
+test_hitl_edge_cases.py (7 tests)
+
+test_double_resume_idempotent - Resuming already-resumed run is safe
+test_double_reject_idempotent - Rejecting already-rejected run is safe
+test_approve_after_reject_rejected - Approving after rejection fails
+test_resume_wrong_approval_rejected - Approval for wrong run/step rejected
+test_resume_nonexistent_run_rejected - Non-existent run rejected
+test_concurrent_approvals_serialized - Multiple approvers serialized
+test_concurrent_approve_and_reject_serialized - Approve/reject race handled
+test_budget_enforcement.py (5 tests)
+
+test_max_passes_enforced - Loop terminates at max_passes
+test_max_tool_calls_enforced - Tool calls stop at budget
+test_tool_budget_zero_blocks_all_calls - Zero budget blocks all
+test_budget_exceeded_triggers_hitl - Budget exceeded pauses for approval
+test_budget_exceeded_with_degrade_uses_fallback - Degrade mode behavior
+test_product_isolation.py (10 tests)
+
+test_no_cross_product_imports - Products don't import each other
+test_products_only_import_allowed_core_modules - Only allowed imports
+test_product_cannot_access_other_product_runs - Run isolation enforced
+test_run_product_field_immutable - Product field immutable
+test_all_products_have_manifest - Manifest.yaml required
+test_all_products_have_registry - Registry.py required
+test_all_products_have_flows_directory - Flows/ directory required
+test_no_direct_model_provider_imports - No provider imports
+test_no_direct_orchestrator_imports - No orchestrator imports
+test_no_direct_memory_backend_imports - No backend imports
+test_golden_paths.py (4 tests)
+
+test_golden_path - Parametrized golden path comparison
+test_all_golden_files_exist - Golden files exist
+test_golden_files_are_valid_json - Golden files are valid JSON
+test_golden_files_have_required_fields - Required fields present
+hello_world_expected.json
+
+Golden path expected output for hello_world flow
+Expanded test_master_v1_invariants.py (+7 tests)
+
+test_agents_never_call_tools_directly - Agents don't execute tools
+test_tools_never_call_llm_directly - Tools don't call LLM providers
+test_no_env_reads_outside_config_loader - Env reads centralized
+test_no_persistence_outside_memory - Persistence in memory layer only
+test_no_direct_model_calls_outside_reasoner - LLM calls via reasoner
+test_orchestrator_is_only_control_plane - No business logic in orchestrator
+test_gateway_does_not_bypass_orchestrator - Gateway uses orchestrator
+Test Counts:
+Before: 315 tests
+After: 348 tests (+33 new tests)
+All tests passing

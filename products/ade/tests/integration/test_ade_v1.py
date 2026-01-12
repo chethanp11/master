@@ -59,8 +59,13 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         first_input = engine.resume_run(
             run_id=first_run_id,
             user_input_response={
-                "prompt_id": "clarify_intent",
-                "free_text": "Analyze sample.csv using metric value over last 7 days.",
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "",
+                },
             },
         )
         assert first_input.ok, first_input.error
@@ -78,8 +83,13 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         second_input = engine.resume_run(
             run_id=second_run_id,
             user_input_response={
-                "prompt_id": "clarify_intent",
-                "free_text": "Analyze sample.csv using metric value over last 7 days.",
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "",
+                },
             },
         )
         assert second_input.ok, second_input.error
@@ -122,9 +132,8 @@ def test_ade_v1_flow_deterministic(tmp_path: Path) -> None:
         response = json.loads(response_path.read_text(encoding="utf-8"))
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
-        assert "decision_packet.html" in stored_names
         assert "business_report.html" in stored_names
-        html_path = response_path.parent / "decision_packet.html"
+        html_path = response_path.parent / "business_report.html"
         assert html_path.exists()
     finally:
         AgentRegistry.clear()

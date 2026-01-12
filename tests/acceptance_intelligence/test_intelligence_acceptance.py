@@ -17,7 +17,7 @@ from core.orchestrator.engine import OrchestratorEngine
 from core.tools.registry import ToolRegistry
 from core.utils.product_loader import discover_products, register_enabled_products
 
-from tests.acceptance_intelligence import helpers
+from tests.acceptance_intelligence import test_helpers as helpers
 
 
 def _artifact_echo(step_output: dict[str, Any]) -> Any:

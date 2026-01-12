@@ -61,8 +61,13 @@ def test_business_report_quality_smoke(tmp_path: Path) -> None:
         engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "prompt_id": "clarify_intent",
-                "free_text": "Analyze sample.csv using metric H2026 over H2024-H2026.",
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "",
+                },
             },
         )
         engine.resume_run(run_id=run_id, approval_payload={"approved": True}, decision="APPROVED")

@@ -9,6 +9,10 @@ Responsibilities (v1):
 - Load product-local config (config/product.yaml)
 - Enumerate flows under products/<name>/flows/*.yaml
 - Import products/<name>/registry.py safely and call register(registries)
+
+Auto-discovery (v2):
+- Automatically discover @agent and @tool decorated classes
+- Support simplified registry.py that uses auto_register()
 """
 
 from __future__ import annotations
@@ -18,6 +22,9 @@ from __future__ import annotations
 __all__ = [
     "discover_products",
     "register_enabled_products",
+    "auto_discover_agents",
+    "auto_discover_tools",
+    "auto_register",
     "ProductCatalog",
     "ProductMeta",
     "ProductLoadError",
@@ -26,12 +33,13 @@ __all__ = [
 
 
 import importlib.util
+import inspect
 import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError, ConfigDict
@@ -321,3 +329,170 @@ def _import_registry_module(meta: ProductMeta) -> ModuleType:
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+# ==============================
+# Auto-Discovery Functions
+# ==============================
+
+
+def _import_module_from_path(module_name: str, path: Path) -> ModuleType:
+    """Import a Python module from a file path."""
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot import module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _find_decorated_classes(
+    module: ModuleType,
+    marker_attr: str,
+) -> List[Tuple[str, Type[Any], Any]]:
+    """
+    Find all classes in a module that have the specified marker attribute.
+
+    Returns list of (name, class, descriptor) tuples.
+    """
+    results: List[Tuple[str, Type[Any], Any]] = []
+
+    for name, obj in inspect.getmembers(module, inspect.isclass):
+        # Skip imported classes (only process classes defined in this module)
+        if obj.__module__ != module.__name__:
+            continue
+
+        # Check for auto-discovery marker
+        if not getattr(obj, "_auto_discover", False):
+            continue
+
+        # Get the descriptor
+        descriptor = getattr(obj, marker_attr, None)
+        if descriptor is None:
+            continue
+
+        results.append((descriptor.name, obj, descriptor))
+
+    return results
+
+
+def _make_factory(cls: Type[Any], module: ModuleType) -> Callable[[], Any]:
+    """
+    Create a factory function for an agent/tool class.
+
+    Looks for a `build()` function in the module first, then falls back
+    to direct instantiation.
+    """
+    # Check if module has a build() function
+    build_fn = getattr(module, "build", None)
+    if callable(build_fn):
+        return build_fn
+
+    # Fall back to direct instantiation
+    def factory() -> Any:
+        return cls()
+
+    return factory
+
+
+def auto_discover_agents(product_path: Path) -> List[Tuple[str, Callable[[], Any], Any]]:
+    """
+    Discover all @agent decorated classes in product/agents/.
+
+    Args:
+        product_path: Path to the product directory (e.g., products/hello_world)
+
+    Returns:
+        List of (name, factory_function, descriptor) tuples for each discovered agent.
+    """
+    agents_dir = product_path / "agents"
+    if not agents_dir.exists():
+        return []
+
+    results: List[Tuple[str, Callable[[], Any], Any]] = []
+    product_name = product_path.name
+
+    for py_file in sorted(agents_dir.glob("*.py")):
+        if py_file.name.startswith("_"):
+            continue
+
+        module_name = f"products.{product_name}.agents.{py_file.stem}_autodiscover"
+        try:
+            module = _import_module_from_path(module_name, py_file)
+            for name, cls, descriptor in _find_decorated_classes(module, "_agent_descriptor"):
+                factory = _make_factory(cls, module)
+                results.append((name, factory, descriptor))
+        except Exception as exc:
+            logger.warning("Failed to auto-discover agents from %s: %s", py_file, exc)
+
+    return results
+
+
+def auto_discover_tools(product_path: Path) -> List[Tuple[str, Callable[[], Any], Any]]:
+    """
+    Discover all @tool decorated classes in product/tools/.
+
+    Args:
+        product_path: Path to the product directory (e.g., products/hello_world)
+
+    Returns:
+        List of (name, factory_function, descriptor) tuples for each discovered tool.
+    """
+    tools_dir = product_path / "tools"
+    if not tools_dir.exists():
+        return []
+
+    results: List[Tuple[str, Callable[[], Any], Any]] = []
+    product_name = product_path.name
+
+    for py_file in sorted(tools_dir.glob("*.py")):
+        if py_file.name.startswith("_"):
+            continue
+
+        module_name = f"products.{product_name}.tools.{py_file.stem}_autodiscover"
+        try:
+            module = _import_module_from_path(module_name, py_file)
+            for name, cls, descriptor in _find_decorated_classes(module, "_tool_descriptor"):
+                factory = _make_factory(cls, module)
+                results.append((name, factory, descriptor))
+        except Exception as exc:
+            logger.warning("Failed to auto-discover tools from %s: %s", py_file, exc)
+
+    return results
+
+
+def auto_register(registries: ProductRegistries, product_path: Path) -> None:
+    """
+    Auto-register all discovered agents and tools from a product.
+
+    This function scans the product's agents/ and tools/ directories for
+    classes decorated with @agent and @tool, and registers them with the
+    appropriate registries.
+
+    Args:
+        registries: ProductRegistries containing agent and tool registries
+        product_path: Path to the product directory (e.g., products/hello_world)
+
+    Example:
+        def register(registries: ProductRegistries) -> None:
+            from pathlib import Path
+            from core.utils.product_loader import auto_register
+            auto_register(registries, Path(__file__).parent)
+    """
+    # Discover and register agents
+    for name, factory, descriptor in auto_discover_agents(product_path):
+        try:
+            registries.agent_registry.register(name, factory, descriptor=descriptor)
+            logger.debug("Auto-registered agent: %s", name)
+        except Exception as exc:
+            logger.warning("Failed to auto-register agent %s: %s", name, exc)
+
+    # Discover and register tools
+    for name, factory, descriptor in auto_discover_tools(product_path):
+        try:
+            registries.tool_registry.register(name, factory, descriptor=descriptor)
+            logger.debug("Auto-registered tool: %s", name)
+        except Exception as exc:
+            logger.warning("Failed to auto-register tool %s: %s", name, exc)
+

@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 
 
 class BuildReasoningInput(BaseModel):
@@ -76,6 +76,15 @@ def _summarize(events: List[Dict[str, Any]]) -> BuildReasoningOutput:
     return BuildReasoningOutput(narrative=narrative, steps=steps)
 
 
+@tool(
+    name="build_reasoning_narrative",
+    description="Builds a concise reasoning narrative from observability events.",
+    capabilities=["narrative_generation", "reasoning_summary", "observability"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class BuildReasoningNarrativeTool(BaseTool):
     name = "build_reasoning_narrative"
     description = "Builds a concise reasoning narrative from observability events."

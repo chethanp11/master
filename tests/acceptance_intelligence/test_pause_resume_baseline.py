@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from core.contracts.run_schema import RunStatus, StepStatus
-from tests.acceptance_intelligence import helpers
+from tests.acceptance_intelligence import test_helpers as helpers
 
 
 class TestHITLPausesCorrectly:

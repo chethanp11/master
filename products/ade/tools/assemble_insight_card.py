@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.card import InsightCard, KeyMetric
 from products.ade.schemas.citations import CitationRef
 from products.ade.schemas.slices import DataSlice
@@ -65,6 +65,15 @@ def assemble_insight_card(payload: AssembleInsightCardInput) -> AssembleInsightC
     return AssembleInsightCardOutput(card=card)
 
 
+@tool(
+    name="assemble_insight_card",
+    description="Assembles an InsightCard from validated inputs including chart specs and metrics.",
+    capabilities=["insight_assembly", "card_generation", "visualization_packaging"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class AssembleInsightCardTool(BaseTool):
     name = "assemble_insight_card"
     description = "Assembles an InsightCard from validated inputs."

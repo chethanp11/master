@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.evidence import EvidenceBundle, EvidenceItem
 
 
@@ -59,6 +59,15 @@ def assemble_evidence_bundle(payload: AssembleEvidenceBundleInput, ctx: Any) -> 
     return AssembleEvidenceBundleOutput(evidence_bundle=bundle)
 
 
+@tool(
+    name="assemble_evidence_bundle",
+    description="Aggregates evidence items into a single evidence bundle with summary statistics.",
+    capabilities=["evidence_aggregation", "bundle_assembly", "evidence_packaging"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class AssembleEvidenceBundleTool(BaseTool):
     name = "assemble_evidence_bundle"
     description = "Aggregates evidence items into a single evidence bundle."

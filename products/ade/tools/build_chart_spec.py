@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 
 ChartType = Literal["line", "bar", "area", "stacked_bar", "scatter", "table"]
 ChartInputType = Literal["auto", "line", "bar", "area", "stacked_bar", "scatter", "table"]
@@ -95,6 +95,15 @@ def build_chart_spec(payload: BuildChartSpecInput) -> BuildChartSpecOutput:
     )
 
 
+@tool(
+    name="build_chart_spec",
+    description="Builds a chart specification from structured inputs for visualization.",
+    capabilities=["chart_specification", "visualization", "chart_building"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class BuildChartSpecTool(BaseTool):
     name = "build_chart_spec"
     description = "Builds a chart specification from structured inputs."

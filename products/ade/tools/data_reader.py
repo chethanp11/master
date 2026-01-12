@@ -11,13 +11,22 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from core.contracts.tool_schema import ToolResult, ToolError, ToolErrorCode, ToolMeta
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 
 
 class ReadParams(BaseModel):
     dataset: str = Field(..., description="Dataset to read")
 
 
+@tool(
+    name="data_reader",
+    description="Reads and parses CSV datasets, extracting columns, rows, and basic metadata.",
+    capabilities=["data_reading", "csv_parsing", "data_extraction"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class DataReaderTool(BaseTool):
     name = "data_reader"
     description = "Returns a stubbed summary for a dataset"

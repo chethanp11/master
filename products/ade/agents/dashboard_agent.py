@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentErrorCode, AgentMeta
 
 
@@ -17,6 +17,12 @@ class DashboardAgentParams(BaseModel):
     )
 
 
+@agent(
+    name="dashboard_agent",
+    purpose="Coordinates dashboard generation and visualization tasks",
+    capabilities=["orchestration", "visualization", "coordination"],
+    cost_hint="MED",
+)
 class DashboardAgent(BaseAgent):
     name = "dashboard_agent"
     description = "Creates a narrative summary for the visual insights dashboard."

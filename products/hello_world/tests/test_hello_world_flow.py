@@ -95,10 +95,10 @@ def test_hello_world_end_to_end(tmp_path: Path) -> None:
         assert "summary" in summary_data
 
         observability_root = repo_root / "observability" / "hello_world" / run_id
-        input_path = observability_root / "input" / "input.json"
+        # Note: input/input.json is only written when observability_input_mirroring is enabled
+        # (default is false), so we only check for runtime and output files
         events_path = observability_root / "runtime" / "events.jsonl"
         response_path = observability_root / "output" / "response.json"
-        assert input_path.exists()
         assert events_path.exists()
         assert response_path.exists()
         response = json.loads(response_path.read_text(encoding="utf-8"))

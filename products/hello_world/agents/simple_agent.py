@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentResult, AgentError, AgentMeta, AgentErrorCode
 
 
@@ -16,6 +16,12 @@ class SimpleAgentParams(BaseModel):
     template: str = Field(default="Summarize the run.")
 
 
+@agent(
+    name="simple_agent",
+    purpose="Simple demonstration agent for hello_world product",
+    capabilities=["basic_response", "testing", "demonstration"],
+    cost_hint="LOW",
+)
 class SimpleAgent(BaseAgent):
     """
     A minimal agent that reads artifacts from the Any and produces a summary.

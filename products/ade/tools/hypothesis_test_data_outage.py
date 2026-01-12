@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.tools.detect_anomalies import Point
 from products.ade.schemas.evidence import HypothesisEvidence, EvidenceItem
 from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
@@ -68,6 +68,15 @@ def hypothesis_test_data_outage(payload: DataOutageInput) -> HypothesisTestOutpu
     )
 
 
+@tool(
+    name="hypothesis_test_data_outage",
+    description="Tests whether recent data indicates a potential outage or data quality issue.",
+    capabilities=["hypothesis_testing", "outage_detection", "data_quality"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class HypothesisTestDataOutageTool(BaseTool):
     name = "hypothesis_test_data_outage"
     description = "Tests whether recent data indicates a potential outage."

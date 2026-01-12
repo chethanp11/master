@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
 from products.ade.schemas.plan_spec import PlanDecision, PlanSpec
 
@@ -15,6 +15,12 @@ class PlanInput(BaseModel):
     comment: str = Field(default="")
 
 
+@agent(
+    name="plan_agent",
+    purpose="Creates analysis plans based on user requirements",
+    capabilities=["planning", "step_sequencing", "resource_estimation"],
+    cost_hint="MED",
+)
 class PlanAgent(BaseAgent):
     name = "plan_agent"
     description = "Builds a deterministic plan spec for ADE runs."

@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
 
 MIN_ROWS = 30
@@ -80,6 +80,12 @@ def evaluate_sufficiency(
     ).model_dump(mode="json")
 
 
+@agent(
+    name="sufficiency_evaluator",
+    purpose="Evaluates data sufficiency for analysis tasks",
+    capabilities=["data_quality", "sufficiency_analysis", "confidence_scoring"],
+    cost_hint="LOW",
+)
 class SufficiencyEvaluatorAgent(BaseAgent):
     name = "sufficiency_evaluator"
     description = "Evaluates data sufficiency for ADE decisions without model calls."

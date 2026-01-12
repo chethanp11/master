@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.evidence import DataQualityEvidence, OutlierEvidence, TrendEvidence, EvidenceItem
 from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
@@ -214,6 +214,15 @@ def compute_business_metrics(payload: BusinessMetricsInput) -> BusinessMetrics:
     )
 
 
+@tool(
+    name="compute_business_metrics",
+    description="Computes deterministic business metrics for ADE reports including trends, movers, and anomalies.",
+    capabilities=["business_metrics", "trend_analysis", "anomaly_detection"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="MED",
+)
 class ComputeBusinessMetricsTool(BaseTool):
     name = "compute_business_metrics"
     description = "Computes deterministic business metrics for ADE reports."

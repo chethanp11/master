@@ -3,6 +3,17 @@ from __future__ import annotations
 # ==============================
 # Integration: Business Report HTML
 # ==============================
+"""
+Test that the ADE flow generates a complete business report HTML
+with all required sections and visualizations.
+
+This test validates:
+- HTML file is generated and stored
+- Executive summary is present
+- Charts are rendered (Plotly or similar)
+- Expandable details sections exist
+- Duplicate rows are deduplicated
+"""
 
 import json
 import shutil
@@ -18,12 +29,12 @@ from core.utils.product_loader import discover_products, register_enabled_produc
 
 
 @pytest.mark.integration
-def test_business_report_html_generated(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+def test_business_report_html_generated(tmp_path: Path, ade_product_path: Path) -> None:
+    repo_root = ade_product_path.parents[1]
     storage_dir = tmp_path / "storage"
     sqlite_path = tmp_path / "ade.sqlite"
     upload_id = "test_upload"
-    upload_dir = repo_root / "products" / "ade" / "staging" / "input"
+    upload_dir = ade_product_path / "staging" / "input"
     upload_dir.mkdir(parents=True, exist_ok=True)
     sample_csv = upload_dir / "sample.csv"
     rows = [

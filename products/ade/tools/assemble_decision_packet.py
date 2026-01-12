@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.decision_section import DecisionSection
 
@@ -44,6 +44,15 @@ def assemble_decision_packet(payload: AssembleDecisionPacketInput) -> AssembleDe
     return AssembleDecisionPacketOutput(decision_packet=packet)
 
 
+@tool(
+    name="assemble_decision_packet",
+    description="Assembles a deterministic DecisionPacket from provided sections and metadata.",
+    capabilities=["decision_assembly", "packet_generation", "report_packaging"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class AssembleDecisionPacketTool(BaseTool):
     name = "assemble_decision_packet"
     description = "Assembles a deterministic DecisionPacket from provided sections."

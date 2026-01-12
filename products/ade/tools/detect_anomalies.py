@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, validator
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.evidence import OutlierEvidence, EvidenceItem
 from products.ade.tools.evidence_utils import evidence_id, inputs_hash, now_iso
 
@@ -81,6 +81,15 @@ def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
     return DetectAnomaliesOutput(anomalies=anomalies, summary=summary)
 
 
+@tool(
+    name="detect_anomalies",
+    description="Detects anomalies in a time series using z-score heuristics.",
+    capabilities=["anomaly_detection", "statistical_analysis", "outlier_detection"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="MED",
+)
 class DetectAnomaliesTool(BaseTool):
     name = "detect_anomalies"
     description = "Detects anomalies in a time series using z-score heuristics."

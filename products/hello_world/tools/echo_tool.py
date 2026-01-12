@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from core.contracts.tool_schema import ToolResult, ToolError, ToolMeta, ToolErrorCode
 
 
@@ -17,6 +17,15 @@ class EchoParams(BaseModel):
     message: str = Field(default="")
 
 
+@tool(
+    name="echo_tool",
+    description="Returns the provided message unchanged. Useful for testing and debugging.",
+    capabilities=["echo", "testing", "debugging"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class EchoTool(BaseTool):
     """
     Deterministic tool that returns whatever message it receives.

@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 import pytest
 
 from core.contracts.run_schema import RunStatus, StepStatus
-from tests.acceptance_intelligence import helpers
+from tests.acceptance_intelligence import test_helpers as helpers
 
 
 def _get_step_outputs(engine, run_id: str) -> Dict[str, Any]:

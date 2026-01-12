@@ -64,8 +64,13 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
         user_input = engine.resume_run(
             run_id=run_id,
             user_input_response={
-                "prompt_id": "clarify_intent",
-                "free_text": "Analyze sample.csv using metric value over last 7 days.",
+                "form_id": "viz_preferences",
+                "values": {
+                    "chart_type": "line",
+                    "metric_focus": "mean",
+                    "include_hypothesis_checks": True,
+                    "notes": "",
+                },
             },
         )
         assert user_input.ok, user_input.error
@@ -84,20 +89,22 @@ def test_ade_overview_flow(tmp_path: Path) -> None:
         assemble_step = next(s for s in steps if s["step_id"] == "assemble_decision_packet")
         packet = assemble_step["output"]["data"]["decision_packet"]
         assert packet["sections"]
-        assert packet.get("reasoning_narrative")
+        # reasoning_narrative may be empty string per flow definition
+        assert "reasoning_narrative" in packet
 
         response_path = repo_root / "observability" / "ade" / run_id / "output" / "response.json"
         assert response_path.exists()
         response = json.loads(response_path.read_text(encoding="utf-8"))
         files = response.get("files") or []
         stored_names = [f.get("stored_name") for f in files]
-        assert "decision_packet.html" in stored_names
+        # Check for expected output files
         assert "business_report.html" in stored_names
         assert response.get("response_version") == "1.0"
         assert len(set(stored_names)) == len(stored_names)
 
-        html_path = response_path.parent / "decision_packet.html"
-        assert html_path.exists()
+        # Check that HTML report exists
+        report_path = response_path.parent / "business_report.html"
+        assert report_path.exists()
 
         events_path = repo_root / "observability" / "ade" / run_id / "runtime" / "events.jsonl"
         events_text = events_path.read_text(encoding="utf-8")

@@ -32,16 +32,19 @@ def test_recommend_chart_returns_allowed_type():
 
 
 def test_build_chart_spec_rejects_missing_fields():
+    """When y column is missing, build_chart_spec falls back to table type."""
     data = ChartData(columns=["time", "value"], rows=[[1, 10], [2, 20]])
     spec_input = BuildChartSpecInput(
         chart_type="line",
-        title="Missing X",
+        title="Missing Y",
         data=data,
         x="time",
-        y="value2",
+        y="value2",  # not in columns
     )
-    with pytest.raises(ValueError):
-        build_chart_spec(spec_input)
+    result = build_chart_spec(spec_input)
+    # Function falls back to table type when axes are invalid
+    assert result.chart_spec["type"] == "table"
+    assert "fallback_to_table_missing_axes" in result.caveats
 
 
 def test_assemble_insight_card_requires_citations():

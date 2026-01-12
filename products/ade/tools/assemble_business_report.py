@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.business_report import (
     AnomalyRow,
@@ -197,6 +197,15 @@ def assemble_business_report(payload: AssembleBusinessReportInput) -> AssembleBu
     return AssembleBusinessReportOutput(report=report)
 
 
+@tool(
+    name="assemble_business_report",
+    description="Assembles a business-ready report from ADE metrics and decision packet.",
+    capabilities=["report_assembly", "business_reporting", "executive_summary"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="MED",
+    cost_hint="LOW",
+)
 class AssembleBusinessReportTool(BaseTool):
     name = "assemble_business_report"
     description = "Assembles a business-ready report from ADE metrics and decision packet."

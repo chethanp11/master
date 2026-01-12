@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.card import InsightCard
 from products.ade.tools.export_rendering import _build_html_bytes, _build_stub_payload, _render_cards_pdf
 
@@ -64,6 +64,15 @@ def export_pdf(payload: ExportPdfInput) -> ExportPdfOutput:
     )
 
 
+@tool(
+    name="export_pdf",
+    description="Exports insight cards to PDF and HTML artifacts.",
+    capabilities=["export", "pdf_generation", "html_generation"],
+    read_only=False,
+    side_effect=True,
+    sensitivity_class="LOW",
+    cost_hint="MED",
+)
 class ExportPdfTool(BaseTool):
     name = "export_pdf"
     description = "Exports insight cards to a PDF artifact."

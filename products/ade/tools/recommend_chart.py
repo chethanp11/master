@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, ConfigDict
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.tools.build_chart_spec import ChartType
 
 
@@ -56,6 +56,15 @@ def recommend_chart(payload: RecommendChartInput) -> RecommendChartOutput:
     )
 
 
+@tool(
+    name="recommend_chart",
+    description="Recommends a chart type based on basic data heuristics and dimensions.",
+    capabilities=["chart_recommendation", "visualization", "data_analysis"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="LOW",
+)
 class RecommendChartTool(BaseTool):
     name = "recommend_chart"
     description = "Recommends a chart type based on basic data heuristics."

@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from core.agents.base import BaseAgent
+from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
 from products.ade.schemas.intent_frame import IntentFrame
 
@@ -18,6 +18,12 @@ class IntentInput(BaseModel):
     input_text: Optional[str] = None
 
 
+@agent(
+    name="intent_agent",
+    purpose="Interprets user intent and extracts analysis requirements",
+    capabilities=["natural_language_understanding", "intent_classification", "parameter_extraction"],
+    cost_hint="MED",
+)
 class IntentAgent(BaseAgent):
     name = "intent_agent"
     description = "Interprets analyst intent into a structured frame for ADE."

@@ -1,0 +1,121 @@
+{
+  "flow": "hello_world",
+  "product": "hello_world",
+  "status": "COMPLETED",
+  "steps": [
+    {
+      "output": {
+        "artifacts": {
+          "tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8": {
+            "key": "tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8",
+            "kind": "json",
+            "meta": {
+              "tool": "echo_tool"
+            },
+            "uri": "memory://tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8"
+          }
+        },
+        "data": {
+          "echo": "golden_test"
+        },
+        "error": null,
+        "evidence": [
+          {
+            "confidence": 0.8,
+            "content_ref": {
+              "key": "tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8",
+              "kind": "json",
+              "meta": {
+                "tool": "echo_tool"
+              },
+              "uri": "memory://tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8"
+            },
+            "id": "echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8",
+            "provenance": {
+              "message": "golden_test"
+            },
+            "source": {
+              "ref": "tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8",
+              "tool": "echo_tool",
+              "uri": "memory://tool.echo_tool.evidence.echo_tool-3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8"
+            },
+            "summary": "{\"echo\": \"golden_test\", \"timestamp\": \"2026-01-12T04:57:56.879271+00:00\"}",
+            "type": "text"
+          }
+        ],
+        "meta": {
+          "backend": "local",
+          "cost_estimate": null,
+          "ended_at": null,
+          "latency_ms": 0,
+          "redacted": false,
+          "request_id": "3a02fe5b-7a07-487d-83a7-0cb2ac57f1f8",
+          "started_at": "2026-01-12T04:57:56.879491",
+          "tags": {},
+          "tool_name": "echo_tool"
+        },
+        "ok": true
+      },
+      "status": "COMPLETED",
+      "step_id": "echo",
+      "type": "tool"
+    },
+    {
+      "output": {
+        "approval": {
+          "comment": null,
+          "decision": "APPROVED",
+          "payload": {
+            "approved": true
+          }
+        },
+        "hitl_resolution": {
+          "comment": null,
+          "decision": "APPROVED",
+          "request_id": "appr_0325773220b941adbfc694d5c77b9cb6",
+          "request_type": "APPROVAL",
+          "resolved_at": 1768193876,
+          "resolved_by": null,
+          "status": "ACCEPTED",
+          "values": {}
+        }
+      },
+      "status": "COMPLETED",
+      "step_id": "approval",
+      "type": "human_approval"
+    },
+    {
+      "output": {
+        "data": {
+          "details": {
+            "approval_status": "approved",
+            "approved": true,
+            "message": "golden_test",
+            "notes": ""
+          },
+          "summary": "Summarize what happened and include whether it was approved.\n\n- Echoed message: 'golden_test'\n- Approval status: approved\n- Notes provided: ''\n"
+        },
+        "error": null,
+        "meta": {
+          "agent_name": "simple_agent",
+          "cost_estimate": null,
+          "ended_at": null,
+          "kind": "other",
+          "latency_ms": null,
+          "redacted": false,
+          "request_id": "82be8d62-1b14-4e05-99d0-a6d43f3b0cfc",
+          "started_at": "2026-01-12T04:57:56.890195",
+          "tags": {
+            "flow": "hello_world",
+            "product": "hello_world"
+          },
+          "token_estimate": null
+        },
+        "ok": true
+      },
+      "status": "COMPLETED",
+      "step_id": "summary",
+      "type": "agent"
+    }
+  ]
+}

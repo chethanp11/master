@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
-from core.tools.base import BaseTool
+from core.tools.base import BaseTool, tool
 from products.ade.schemas.business_report import BusinessReport
 
 
@@ -323,6 +323,15 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
     return RenderBusinessReportOutput(html=html, output_files=output_files)
 
 
+@tool(
+    name="render_business_report_html",
+    description="Renders a BusinessReport into an analyst-ready HTML report with charts and tables.",
+    capabilities=["html_rendering", "report_visualization", "chart_generation"],
+    read_only=True,
+    side_effect=False,
+    sensitivity_class="LOW",
+    cost_hint="MED",
+)
 class RenderBusinessReportHtmlTool(BaseTool):
     name = "render_business_report_html"
     description = "Renders a BusinessReport into an analyst-ready HTML report."
