@@ -1,10 +1,20 @@
 # BRD: Operational Excellence
 
 > **Document ID**: BRD-OPS  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-12 | Initial release |
+| 1.1 | 2026-01-13 | Added §3.7 Semantic Trace Events, §3.8 Architecture Tests |
 
 ---
 
@@ -122,12 +132,73 @@ An operational foundation that provides:
 
 ### 3.6 Operational Tooling
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-050** | Operators must be able to list all runs | P0 | — | 2026-01-12 |
-| **BRD-OPS-051** | Operators must be able to cancel stuck runs | P1 | — | 2026-01-12 |
-| **BRD-OPS-052** | Operators must be able to view run details | P0 | — | 2026-01-12 |
-| **BRD-OPS-053** | Operators must be able to export run data | P1 | — | 2026-01-12 |
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-OPS-050** | Operators must be able to list all runs | P0 | — | 1.0 | 2026-01-12 |
+| **BRD-OPS-051** | Operators must be able to cancel stuck runs | P1 | — | 1.0 | 2026-01-12 |
+| **BRD-OPS-052** | Operators must be able to view run details | P0 | — | 1.0 | 2026-01-12 |
+| **BRD-OPS-053** | Operators must be able to export run data | P1 | — | 1.0 | 2026-01-12 |
+
+### 3.7 Semantic Trace Events (Added: 2026-01-13)
+
+> **Source**: [INT-OPS-SEM](../00_developer_intent/intent.md#43-semantic-trace-events-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-OPS-SEM-001** | `semantic_interpretation_started` event must be emitted when phase begins | P0 | INT-OPS-SEM-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-002** | Started event must include: run_id, product_id, raw_input_length | P0 | INT-OPS-SEM-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-003** | `semantic_interpretation_completed` event must be emitted when phase succeeds | P0 | INT-OPS-SEM-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-004** | Completed event must include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | P0 | INT-OPS-SEM-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-005** | `semantic_validation_completed` event must be emitted after validation | P0 | INT-OPS-SEM-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-006** | Validation event must include: is_valid, missing_fields, violation_count, revised_confidence | P0 | INT-OPS-SEM-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-007** | `semantic_stop_issued` event must be emitted on ASK_USER or ABORT | P0 | INT-OPS-SEM-007 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-008** | Stop event must include: next_action, question (if ASK_USER), reason (if ABORT), violations | P0 | INT-OPS-SEM-008 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-009** | `semantic_interpretation_failed` event must be emitted on exception | P0 | INT-OPS-SEM-009 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-SEM-010** | Failed event must include: error message | P1 | INT-OPS-SEM-010 | 1.1 | Added: 2026-01-13 |
+
+**Event Catalog (New: 2026-01-13)**:
+| Event | When | Payload |
+|-------|------|---------|
+| `semantic_interpretation_started` | Phase begins | `run_id`, `product_id`, `raw_input_length` |
+| `semantic_interpretation_completed` | Phase succeeds | `envelope_hash`, `confidence`, `ambiguity_count`, `entity_count`, `next_action` |
+| `semantic_validation_completed` | After validate() | `is_valid`, `missing_fields`, `violation_count`, `revised_confidence` |
+| `semantic_stop_issued` | ASK_USER or ABORT | `next_action`, `question`, `reason`, `violations` |
+| `semantic_interpretation_failed` | Exception thrown | `error` |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Events are structured | Free-form log message instead of event |
+| Events include run_id | Event cannot be correlated to run |
+| Events have timestamps | Event missing `ts` field |
+
+### 3.8 Architecture Tests (Added: 2026-01-13)
+
+> **Source**: [INT-OPS-ARCH](../00_developer_intent/intent.md#47-architecture-tests-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-OPS-ARCH-001** | Architecture test must verify semantic phase is mandatory | P0 | INT-OPS-ARCH-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-002** | Architecture test must verify ASK_USER blocks all step execution | P0 | INT-OPS-ARCH-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-003** | Architecture test must verify ABORT blocks all step execution | P0 | INT-OPS-ARCH-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-004** | Architecture test must verify product adapters don't import core orchestrator | P0 | INT-OPS-ARCH-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-005** | Architecture test must verify core orchestrator doesn't import products | P0 | INT-OPS-ARCH-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-006** | Architecture tests must live in `tests/architecture/` directory | P1 | INT-OPS-ARCH-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-OPS-ARCH-007** | Architecture tests must be run as part of CI pipeline | P0 | INT-OPS-ARCH-007 | 1.1 | Added: 2026-01-13 |
+
+**Required Architecture Tests (New: 2026-01-13)**:
+| Test | Invariant Verified |
+|------|-------------------|
+| `test_semantic_phase_is_mandatory` | ORC-SEM-001: Semantic phase runs before any step execution |
+| `test_stop_blocks_execution` | ORC-SEM-STOP-001: ASK_USER/ABORT prevent step execution |
+| `test_product_adapter_isolated` | PROD-SEM-INT-005/006: No cross-layer imports |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Architecture tests must pass | Test failure ignored |
+| Tests verify structure, not behavior | Test only checks runtime values |
+| Tests are automated | Manual verification required |
 
 ---
 
@@ -168,27 +239,29 @@ An operational foundation that provides:
 
 ## 6. Techspec Mapping
 
-| BRD ID | Description | Derived Techspec |
-|--------|-------------|------------------|
-| BRD-OPS-001 | State persistence | MEM-SQL-001...010 |
-| BRD-OPS-002 | Resumable workflows | ORC-RESUME-001...010 |
-| BRD-OPS-003 | Durable storage | MEM-BACK-001...010 |
-| BRD-OPS-005 | Run queries | MEM-SQL-020...025 |
-| BRD-OPS-010 | Step tracing | MEM-TRACE-001...010 |
-| BRD-OPS-011 | Trace content | MEM-TRACE-005 (event structure) |
-| BRD-OPS-012 | Trace queries | OBS-STORE-010...015 |
-| BRD-OPS-013 | File storage | OBS-STORE-020...025 |
-| BRD-OPS-014 | Organized storage | OBS-STORE-001...005 |
-| BRD-OPS-016 | Reasoning observability | MEM-TRACE-REASON-* |
-| BRD-OPS-017 | Reasoning trace content | MEM-TRACE-REASON-010...020 |
-| BRD-OPS-018 | Reasoning trace queries | OBS-REASON-QUERY-* |
-| BRD-OPS-030 | Test coverage | ACC-COV-001...023 |
-| BRD-OPS-031 | Critical path coverage | ACC-COV-020...023 |
-| BRD-OPS-032 | CI/CD | ACC-CI-001...005 |
-| BRD-OPS-033 | Test performance | ACC-PERF-001...004 |
-| BRD-OPS-034 | Contract tests | ACC-VAL-001...004 |
-| BRD-OPS-040 | Error details | ORC-ERR-001...010 |
-| BRD-OPS-041 | Event timeline | GW-UI-097...099 |
+| BRD ID | Description | Derived Techspec | Ver |
+|--------|-------------|------------------|-----|
+| BRD-OPS-001 | State persistence | MEM-SQL-001...010 | 1.0 |
+| BRD-OPS-002 | Resumable workflows | ORC-RESUME-001...010 | 1.0 |
+| BRD-OPS-003 | Durable storage | MEM-BACK-001...010 | 1.0 |
+| BRD-OPS-005 | Run queries | MEM-SQL-020...025 | 1.0 |
+| BRD-OPS-010 | Step tracing | MEM-TRACE-001...010 | 1.0 |
+| BRD-OPS-011 | Trace content | MEM-TRACE-005 (event structure) | 1.0 |
+| BRD-OPS-012 | Trace queries | OBS-STORE-010...015 | 1.0 |
+| BRD-OPS-013 | File storage | OBS-STORE-020...025 | 1.0 |
+| BRD-OPS-014 | Organized storage | OBS-STORE-001...005 | 1.0 |
+| BRD-OPS-016 | Reasoning observability | MEM-TRACE-REASON-* | 1.0 |
+| BRD-OPS-017 | Reasoning trace content | MEM-TRACE-REASON-010...020 | 1.0 |
+| BRD-OPS-018 | Reasoning trace queries | OBS-REASON-QUERY-* | 1.0 |
+| BRD-OPS-030 | Test coverage | ACC-COV-001...023 | 1.0 |
+| BRD-OPS-031 | Critical path coverage | ACC-COV-020...023 | 1.0 |
+| BRD-OPS-032 | CI/CD | ACC-CI-001...005 | 1.0 |
+| BRD-OPS-033 | Test performance | ACC-PERF-001...004 | 1.0 |
+| BRD-OPS-034 | Contract tests | ACC-VAL-001...004 | 1.0 |
+| BRD-OPS-040 | Error details | ORC-ERR-001...010 | 1.0 |
+| BRD-OPS-041 | Event timeline | GW-UI-097...099 | 1.0 |
+| BRD-OPS-SEM-* | Semantic trace events | MEM-TRACE-SEM-*, OBS-SEM-* | 1.1 |
+| BRD-OPS-ARCH-* | Architecture tests | ACC-ARCH-*, TEST-ARCH-* | 1.1 |
 
 ---
 

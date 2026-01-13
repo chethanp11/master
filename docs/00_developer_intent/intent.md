@@ -21,10 +21,10 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 | Intent Section | Maps To | Theme |
 |----------------|---------|-------|
 | [Architecture Invariants](#architecture-invariants) | All BRDs | Non-negotiable platform laws |
-| [§1 INT-AUTO](#1-intelligent-automation-int-auto) | [BRD-automation.md](../01_brd/BRD-automation.md) | Agents, tools, reasoning, evidence |
-| [§2 INT-GOV](#2-governance--compliance-int-gov) | [BRD-governance.md](../01_brd/BRD-governance.md) | Approval, security, audit, budget |
+| [§1 INT-AUTO](#1-intelligent-automation-int-auto) | [BRD-automation.md](../01_brd/BRD-automation.md) | Agents, tools, reasoning, semantic interpretation |
+| [§2 INT-GOV](#2-governance--compliance-int-gov) | [BRD-governance.md](../01_brd/BRD-governance.md) | Approval, security, audit, budget, confidence thresholds |
 | [§3 INT-EXP](#3-developer--user-experience-int-exp) | [BRD-experience.md](../01_brd/BRD-experience.md) | API, CLI, UI, products |
-| [§4 INT-OPS](#4-operational-excellence-int-ops) | [BRD-operations.md](../01_brd/BRD-operations.md) | Persistence, observability, quality |
+| [§4 INT-OPS](#4-operational-excellence-int-ops) | [BRD-operations.md](../01_brd/BRD-operations.md) | Persistence, observability, semantic traces, architecture tests |
 | [§5 INT-LIFECYCLE](#5-developer-intent-lifecycle-int-lifecycle) | All BRDs | Ownership, evolution, feedback |
 | [§6 INT-FACTORY](#6-product-factory-model-int-factory) | All BRDs | Intent-driven product creation |
 
@@ -157,7 +157,105 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 > **Maps to**: [BRD-automation.md](../01_brd/BRD-automation.md)
 
-## 1.1 Agent Capabilities
+## 1.1 Semantic Interpretation Phase (Added: 2026-01-13)
+
+> **Intent**: Mandatory semantic interpretation before any planning or execution.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-AUTO-SEM-001** | Every orchestrator run must execute a semantic interpretation phase before step execution | Prevent misunderstood tasks from proceeding to action |
+| **INT-AUTO-SEM-002** | Semantic phase must interpret user intent and produce a structured envelope | Normalize and validate input before planning |
+| **INT-AUTO-SEM-003** | Semantic envelope must capture: intent_type, entities, constraints, confidence, ambiguities | Structured representation enables validation and audit |
+| **INT-AUTO-SEM-004** | Semantic phase must determine next action: CONTINUE, ASK_USER, ABORT, or NEEDS_APPROVAL | Explicit decision point for flow control |
+| **INT-AUTO-SEM-005** | Semantic envelope must be attached to run record for traceability | Every interpretation decision is auditable |
+| **INT-AUTO-SEM-006** | Core must provide domain-agnostic normalization rules (whitespace, deduplication, ordering) | Consistent preprocessing across all products |
+| **INT-AUTO-SEM-007** | Normalization must be deterministic and reproducible | Same input produces same normalized output |
+| **INT-AUTO-SEM-008** | Entities must be deduplicated (same type+value → single entity with highest confidence) | Prevent duplicate processing |
+| **INT-AUTO-SEM-009** | Constraints must be merged deterministically with stable key ordering | Predictable constraint handling |
+| **INT-AUTO-SEM-010** | Type coercion must be supported for schema-declared types (string→int, string→date) | Robust input handling |
+
+### Contracts (New: 2026-01-13)
+
+| Contract | Purpose | Fields |
+|----------|---------|--------|
+| `SemanticEnvelope` | Structured interpretation result | raw_input, normalized_input, product_id, intent_type, entities, constraints, confidence, ambiguities, proposed_next_action |
+| `NextAction` enum | Flow control decision | CONTINUE, ASK_USER, ABORT, NEEDS_APPROVAL |
+| `ValidationResult` | Domain validation outcome | is_valid, missing_fields, violations, revised_confidence, clarifying_question |
+| `SemanticContext` | Input to adapters | raw_input, payload, product_config |
+| `Entity` | Extracted entity | type, value, confidence, start_pos, end_pos |
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Semantic phase is mandatory | Steps execute without interpretation |
+| Normalization is domain-agnostic | Core normalization includes business rules |
+| Envelope is immutable once created | Envelope modified after semantic phase |
+| Confidence is bounded 0.0-1.0 | Confidence value outside range |
+
+---
+
+## 1.2 Product Semantic Adapter (Added: 2026-01-13)
+
+> **Intent**: Products customize semantic interpretation via plugin adapters.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-AUTO-ADAPT-001** | Products must be able to provide custom semantic interpretation via adapter interface | Domain-specific interpretation logic |
+| **INT-AUTO-ADAPT-002** | Adapter interface must define `interpret(context) → SemanticEnvelope` method | Standardized interpretation hook |
+| **INT-AUTO-ADAPT-003** | Adapter interface must define `validate(envelope, context) → ValidationResult` method | Domain-specific validation rules |
+| **INT-AUTO-ADAPT-004** | Default adapter must be provided for products without custom implementation | Graceful fallback behavior |
+| **INT-AUTO-ADAPT-005** | Default adapter must return passthrough envelope with confidence=1.0 | Non-blocking default behavior |
+| **INT-AUTO-ADAPT-006** | Adapters must be discovered from `products/<name>/semantic.py` | Convention-based discovery |
+| **INT-AUTO-ADAPT-007** | Adapters must be resolved via ProductRouter, not direct import | Maintain product isolation |
+| **INT-AUTO-ADAPT-008** | Product adapters must NOT import from `core/orchestrator/*` | Isolation: products don't depend on core internals |
+| **INT-AUTO-ADAPT-009** | Core orchestrator must NOT import from `products/*` | Isolation: core doesn't depend on products |
+| **INT-AUTO-ADAPT-010** | Adapter execution must have timeout with fallback to default | Prevent slow adapters from blocking |
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Adapters are pure functions | Adapter calls external API |
+| Adapters don't execute tools | Adapter triggers tool execution |
+| Adapters don't access other products | Adapter reads another product's config |
+| Isolation is bidirectional | Core imports product, or product imports core orchestrator |
+
+---
+
+## 1.3 Stop/Pause Mechanism (Added: 2026-01-13)
+
+> **Intent**: Structured handling of ASK_USER and ABORT next actions.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-AUTO-STOP-001** | ASK_USER must pause the run and return a structured clarification response | Enable user to provide additional context |
+| **INT-AUTO-STOP-002** | Clarification response must include: question, ambiguities, original confidence, context | User has information to respond |
+| **INT-AUTO-STOP-003** | Run status must be PAUSED_WAITING_FOR_USER during clarification | Clear state management |
+| **INT-AUTO-STOP-004** | ABORT must fail the run with structured error response | Clean failure with explanation |
+| **INT-AUTO-STOP-005** | Abort error must include: error_code=semantic_abort, reason, violations, ambiguities | Debugging information preserved |
+| **INT-AUTO-STOP-006** | Run status must be FAILED after ABORT | Terminal failure state |
+| **INT-AUTO-STOP-007** | ASK_USER and ABORT must prevent any step execution | No partial execution on interpretation failure |
+| **INT-AUTO-STOP-008** | Trace event `semantic_stop_issued` must be emitted on stop | Observability for stop decisions |
+| **INT-AUTO-STOP-009** | Paused runs must be resumable with user-provided clarification | Continue workflow after clarification |
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Stop blocks all steps | Step executes after ASK_USER |
+| Abort is terminal | Run continues after ABORT |
+| Clarification is structured | Free-form error message only |
+
+---
+
+## 1.4 Agent Capabilities
 
 ### Intent
 
@@ -311,7 +409,51 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
-## 2.4 Cost Controls
+## 2.4 Semantic Confidence Governance (Added: 2026-01-13)
+
+> **Intent**: Confidence thresholds and governance hooks for semantic interpretation.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-GOV-CONF-001** | Default confidence threshold must be configurable in `configs/app.yaml` | Platform-wide baseline |
+| **INT-GOV-CONF-002** | Per-product confidence threshold override must be supported in `configs/products.yaml` | Domain-appropriate sensitivity |
+| **INT-GOV-CONF-003** | Default threshold must be 0.7 (adjustable) | Balance between usability and safety |
+| **INT-GOV-CONF-004** | Confidence below threshold must trigger ASK_USER (not silent failure) | User gets opportunity to clarify |
+| **INT-GOV-CONF-005** | Governance hook `check_semantic_confidence` must enforce thresholds | Enforceable via governance layer |
+| **INT-GOV-CONF-006** | Effective confidence is minimum of (envelope.confidence, validation.revised_confidence) | Conservative confidence calculation |
+| **INT-GOV-CONF-007** | Threshold enforcement must be logged with confidence values | Audit trail for threshold decisions |
+
+### Configuration (New: 2026-01-13)
+
+**Platform Default** (`configs/app.yaml`):
+```yaml
+semantic:
+  default_confidence_threshold: 0.7
+  require_semantic_phase: true
+```
+
+**Per-Product Override** (`configs/products.yaml`):
+```yaml
+by_product:
+  ade:
+    semantic_confidence_threshold: 0.8  # Stricter for production
+  hello_world:
+    semantic_confidence_threshold: 0.5  # More lenient for demo
+```
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Threshold is enforced | Low confidence proceeds without check |
+| Override requires explicit config | Implicit threshold changes |
+| Confidence check is governance hook | Check embedded in business logic |
+
+---
+
+## 2.5 Cost Controls
 
 ### Intent
 
@@ -325,7 +467,7 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
-## 2.5 Audit & Traceability
+## 2.6 Audit & Traceability
 
 ### Intent
 
@@ -465,7 +607,46 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
-## 4.3 Performance
+## 4.3 Semantic Trace Events (Added: 2026-01-13)
+
+> **Intent**: Structured trace events for semantic interpretation phase.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-OPS-SEM-001** | `semantic_interpretation_started` event must be emitted when phase begins | Track phase lifecycle |
+| **INT-OPS-SEM-002** | Started event must include: run_id, product_id, raw_input_length | Context for debugging |
+| **INT-OPS-SEM-003** | `semantic_interpretation_completed` event must be emitted when phase succeeds | Track successful interpretation |
+| **INT-OPS-SEM-004** | Completed event must include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | Interpretation metrics |
+| **INT-OPS-SEM-005** | `semantic_validation_completed` event must be emitted after validation | Track validation outcome |
+| **INT-OPS-SEM-006** | Validation event must include: is_valid, missing_fields, violation_count, revised_confidence | Validation metrics |
+| **INT-OPS-SEM-007** | `semantic_stop_issued` event must be emitted on ASK_USER or ABORT | Track stop decisions |
+| **INT-OPS-SEM-008** | Stop event must include: next_action, question (if ASK_USER), reason (if ABORT), violations | Stop context |
+| **INT-OPS-SEM-009** | `semantic_interpretation_failed` event must be emitted on exception | Error visibility |
+| **INT-OPS-SEM-010** | Failed event must include: error message | Debugging information |
+
+### Event Catalog (New: 2026-01-13)
+
+| Event | When | Payload |
+|-------|------|---------|
+| `semantic_interpretation_started` | Phase begins | `run_id`, `product_id`, `raw_input_length` |
+| `semantic_interpretation_completed` | Phase succeeds | `envelope_hash`, `confidence`, `ambiguity_count`, `entity_count`, `next_action` |
+| `semantic_validation_completed` | After validate() | `is_valid`, `missing_fields`, `violation_count`, `revised_confidence` |
+| `semantic_stop_issued` | ASK_USER or ABORT | `next_action`, `question`, `reason`, `violations` |
+| `semantic_interpretation_failed` | Exception thrown | `error` |
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Events are structured | Free-form log message instead of event |
+| Events include run_id | Event cannot be correlated to run |
+| Events have timestamps | Event missing `ts` field |
+
+---
+
+## 4.4 Performance
 
 ### Intent
 
@@ -478,7 +659,7 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
-## 4.4 Quality Assurance
+## 4.5 Quality Assurance
 
 ### Intent
 
@@ -492,7 +673,7 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
-## 4.5 Debugging Support
+## 4.6 Debugging Support
 
 ### Intent
 
@@ -503,6 +684,40 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 | **INT-OPS-042** | Input/output data must be inspectable | Data debugging |
 | **INT-OPS-043** | LLM calls and responses must be logged | AI debugging |
 | **INT-OPS-044** | Tool calls and results must be logged | Integration debugging |
+
+---
+
+## 4.7 Architecture Tests (Added: 2026-01-13)
+
+> **Intent**: Mandatory tests that lock critical semantic behavior.
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-OPS-ARCH-001** | Architecture test must verify semantic phase is mandatory | Prevent regression of mandatory phase |
+| **INT-OPS-ARCH-002** | Architecture test must verify ASK_USER blocks all step execution | Lock stop behavior |
+| **INT-OPS-ARCH-003** | Architecture test must verify ABORT blocks all step execution | Lock abort behavior |
+| **INT-OPS-ARCH-004** | Architecture test must verify product adapters don't import core orchestrator | Enforce isolation |
+| **INT-OPS-ARCH-005** | Architecture test must verify core orchestrator doesn't import products | Enforce isolation |
+| **INT-OPS-ARCH-006** | Architecture tests must live in `tests/architecture/` directory | Clear test organization |
+| **INT-OPS-ARCH-007** | Architecture tests must be run as part of CI pipeline | Continuous enforcement |
+
+### Required Architecture Tests (New: 2026-01-13)
+
+| Test | Invariant Verified |
+|------|-------------------|
+| `test_semantic_phase_is_mandatory` | ORC-SEM-001: Semantic phase runs before any step execution |
+| `test_stop_blocks_execution` | ORC-SEM-STOP-001: ASK_USER/ABORT prevent step execution |
+| `test_product_adapter_isolated` | PROD-SEM-INT-005/006: No cross-layer imports |
+
+### Constraints (Non-Negotiable)
+
+| Constraint | Violation Example |
+|------------|-------------------|
+| Architecture tests must pass | Test failure ignored |
+| Tests verify structure, not behavior | Test only checks runtime values |
+| Tests are automated | Manual verification required |
 
 ---
 
@@ -622,6 +837,9 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 | Flows are explicit | Implicit execution path |
 | Intent precedes BRD | BRD created without intent source |
 | Feedback is not intent | User request treated as requirement |
+| Semantic phase is mandatory | Steps execute without interpretation |
+| Stop blocks all steps | Step executes after ASK_USER |
+| Product adapters are isolated | Adapter imports core orchestrator |
 
 ---
 
@@ -637,6 +855,10 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 | Platform availability | > 99.5% | Uptime monitoring |
 | Intent→BRD traceability | 100% | Document review |
 | Failure smell occurrences | 0 | Architecture reviews |
+| Semantic misunderstanding rate | < 5% | User reports after clarification |
+| Clarification acceptance rate | > 80% | Users proceed after ASK_USER |
+| Semantic phase latency | < 100ms | P99 execution time |
+| Architecture tests passing | 100% | CI pipeline |
 
 ---
 
@@ -645,7 +867,7 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 | Document | Derivation |
 |----------|------------|
 | [Vision.md](Vision.md) | Framework philosophy and architecture |
-| [BRD-automation.md](../01_brd/BRD-automation.md) | INT-AUTO-* → BRD-AUTO-* |
-| [BRD-governance.md](../01_brd/BRD-governance.md) | INT-GOV-* → BRD-GOV-* |
+| [BRD-automation.md](../01_brd/BRD-automation.md) | INT-AUTO-*, INT-AUTO-SEM-*, INT-AUTO-ADAPT-*, INT-AUTO-STOP-* → BRD-AUTO-* |
+| [BRD-governance.md](../01_brd/BRD-governance.md) | INT-GOV-*, INT-GOV-CONF-* → BRD-GOV-* |
 | [BRD-experience.md](../01_brd/BRD-experience.md) | INT-EXP-* → BRD-EXP-* |
-| [BRD-operations.md](../01_brd/BRD-operations.md) | INT-OPS-* → BRD-OPS-* |
+| [BRD-operations.md](../01_brd/BRD-operations.md) | INT-OPS-*, INT-OPS-SEM-*, INT-OPS-ARCH-* → BRD-OPS-* |

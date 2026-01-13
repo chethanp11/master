@@ -1,9 +1,18 @@
 # Governance Technical Specification
 
 > **Document ID**: GOV  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial release |
+| 1.1.0 | 2026-01-13 | Added §12 Semantic Confidence Governance, §13 Decision Artifact Requirements, §14 Explicit Non-Goals, updated BRD mappings |
 
 ---
 
@@ -436,9 +445,128 @@ persisting state or performing logging directly.
 
 ---
 
-## 12. Future Considerations
+## 12. Semantic Confidence Governance (Added: 2026-01-13)
 
-### 12.1 V1.1 Enhancements
+> **Source**: BRD-GOV-CONF-001...007, INV-3
+
+### 12.1 Confidence Threshold Enforcement
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **GOV-SEM-CONF-001** | [V1] `check_semantic_confidence` hook MUST be called after semantic interpretation | MUST | 1.1 |
+| **GOV-SEM-CONF-002** | [V1] Default confidence threshold MUST be `0.7` | MUST | 1.1 |
+| **GOV-SEM-CONF-003** | [V1] Threshold MUST be configurable in `configs/app.yaml` under `semantic.default_confidence_threshold` | MUST | 1.1 |
+| **GOV-SEM-CONF-004** | [V1] Per-product override MUST be supported in `configs/products.yaml` under `by_product.<product>.semantic_confidence_threshold` | MUST | 1.1 |
+| **GOV-SEM-CONF-005** | [V1] Effective confidence = `min(envelope.confidence, validation.revised_confidence)` | MUST | 1.1 |
+| **GOV-SEM-CONF-006** | [V1] If effective confidence < threshold, hook MUST return `allowed=False` with `reason=confidence_below_threshold` | MUST | 1.1 |
+| **GOV-SEM-CONF-007** | [V1] Confidence check MUST emit `semantic_confidence_checked` trace event | MUST | 1.1 |
+
+**Implementation**: `core/governance/hooks.py`
+
+### 12.2 Confidence Hook Signature
+
+```python
+def check_semantic_confidence(
+    envelope: SemanticEnvelope,
+    validation: ValidationResult,
+    product: str,
+    settings: Settings
+) -> HookDecision:
+    """
+    Enforce confidence threshold from governance policy.
+    
+    Returns:
+        HookDecision with allowed=True if confidence meets threshold,
+        allowed=False with reason="confidence_below_threshold" otherwise.
+    """
+```
+
+### 12.3 Configuration Schema
+
+**Platform Default** (`configs/app.yaml`):
+```yaml
+semantic:
+  default_confidence_threshold: 0.7
+  require_semantic_phase: true
+  max_ambiguities_before_abort: 5
+```
+
+**Per-Product Override** (`configs/products.yaml`):
+```yaml
+by_product:
+  ade:
+    semantic_confidence_threshold: 0.8  # Stricter for production
+  hello_world:
+    semantic_confidence_threshold: 0.5  # Relaxed for demo
+```
+
+---
+
+## 13. Decision Artifact Requirements (Added: 2026-01-13)
+
+> **Source**: BRD-GOV-045...047, INV-4
+
+### 13.1 Decision Artifact Structure
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **GOV-DEC-001** | [V1] Every gated decision MUST produce a `DecisionArtifact` | MUST | 1.1 |
+| **GOV-DEC-002** | [V1] `DecisionArtifact` MUST include: `decision_id` (UUID) | MUST | 1.1 |
+| **GOV-DEC-003** | [V1] `DecisionArtifact` MUST include: `options_considered` (list of alternatives) | MUST | 1.1 |
+| **GOV-DEC-004** | [V1] `DecisionArtifact` MUST include: `evidence_refs` (list of supporting evidence) | MUST | 1.1 |
+| **GOV-DEC-005** | [V1] `DecisionArtifact` MUST include: `critique_input` (critic evaluation if applicable) | MAY | 1.1 |
+| **GOV-DEC-006** | [V1] `DecisionArtifact` MUST include: `choice` (selected option) | MUST | 1.1 |
+| **GOV-DEC-007** | [V1] `DecisionArtifact` MUST include: `justification` (reasoning for choice) | MUST | 1.1 |
+| **GOV-DEC-008** | [V1] `DecisionArtifact` MUST include: `confidence` (0.0-1.0) | MUST | 1.1 |
+| **GOV-DEC-009** | [V1] `DecisionArtifact` MUST be immutable once persisted | MUST | 1.1 |
+
+**DecisionArtifact Schema**:
+```python
+class DecisionArtifact(BaseModel):
+    decision_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: int = Field(default_factory=lambda: int(time.time()))
+    options_considered: List[Dict[str, Any]]  # Alternative options
+    evidence_refs: List[str]  # URIs or IDs of supporting evidence
+    critique_input: Optional[Dict[str, Any]] = None  # Critic output if used
+    choice: Dict[str, Any]  # The selected option
+    justification: str  # Why this choice was made
+    confidence: float = Field(ge=0.0, le=1.0)
+    model_config = ConfigDict(extra="forbid")
+```
+
+**Implementation**: `core/contracts/decision_schema.py`, `core/governance/gates.py`
+
+### 13.2 Artifact Persistence
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **GOV-DEC-PERS-001** | [V1] Decision artifacts MUST be stored in `run_context.artifacts` | MUST | 1.1 |
+| **GOV-DEC-PERS-002** | [V1] Artifact key MUST be `decision.{decision_id}` | MUST | 1.1 |
+| **GOV-DEC-PERS-003** | [V1] Artifact creation MUST emit `decision_artifact_created` trace event | MUST | 1.1 |
+| **GOV-DEC-PERS-004** | [V1] Artifacts MUST NOT be modified after creation | MUST | 1.1 |
+
+**Implementation**: `core/orchestrator/context.py`, `core/memory/tracing.py`
+
+---
+
+## 14. Explicit Non-Goals (Added: 2026-01-13)
+
+> **Governance MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Bypassable hooks | Violates INV-6 | Developer flag disables governance |
+| Soft limits | Budget exhaustion must be enforced | Warning logged but run continues |
+| Agent-controlled policies | Violates INV-2 | Agent modifies its own permissions |
+| Hidden policy decisions | Violates auditability | Policy check without trace event |
+| Runtime policy modification | Governance is config-driven | Code changes policy at runtime |
+| Probabilistic enforcement | Governance is deterministic | Random sampling of policy checks |
+
+---
+
+## 15. Future Considerations
+
+### 15.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -446,7 +574,7 @@ persisting state or performing logging directly.
 | **GOV-FUTURE-002** | Audit logging | Persistent audit trail |
 | **GOV-FUTURE-003** | Rate limiting | Per-user/product rate limits |
 
-### 12.2 V2 Features
+### 15.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -456,12 +584,35 @@ persisting state or performing logging directly.
 
 ---
 
-## 13. Traceability Matrix
+## 16. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| GOV-HOOK-001 | `core/governance/hooks.py` | `tests/unit/core/governance/test_hooks.py` |
-| GOV-POL-020 | `core/governance/policies.py` | `tests/unit/core/governance/test_policies.py` |
-| GOV-SEC-010 | `core/governance/security.py` | `tests/unit/core/governance/test_security.py` |
-| GOV-BUD-010 | `core/governance/budgeting.py` | `tests/unit/core/governance/test_budgeting.py` |
-| GOV-GATE-010 | `core/governance/gates.py` | `tests/unit/core/governance/test_gates.py` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| GOV-HOOK-001 | `core/governance/hooks.py` | `tests/unit/core/governance/test_hooks.py` | BRD-GOV-010 |
+| GOV-POL-020 | `core/governance/policies.py` | `tests/unit/core/governance/test_policies.py` | BRD-GOV-020 |
+| GOV-SEC-010 | `core/governance/security.py` | `tests/unit/core/governance/test_security.py` | BRD-GOV-030 |
+| GOV-BUD-010 | `core/governance/budgeting.py` | `tests/unit/core/governance/test_budgeting.py` | BRD-GOV-040 |
+| GOV-GATE-010 | `core/governance/gates.py` | `tests/unit/core/governance/test_gates.py` | BRD-GOV-010 |
+| GOV-SEM-CONF-001...007 | `core/governance/hooks.py` | `tests/unit/core/governance/test_semantic_confidence.py` | BRD-GOV-CONF-001...007 |
+| GOV-DEC-001...009 | `core/contracts/decision_schema.py` | `tests/unit/core/governance/test_decision_artifacts.py` | BRD-GOV-045...047 |
+
+---
+
+## 17. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD Requirement | Techspec Requirement(s) | Status |
+|-----------------|-------------------------|--------|
+| BRD-GOV-CONF-001 | GOV-SEM-CONF-001 | Mapped |
+| BRD-GOV-CONF-002 | GOV-SEM-CONF-002, GOV-SEM-CONF-003 | Mapped |
+| BRD-GOV-CONF-003 | GOV-SEM-CONF-004 | Mapped |
+| BRD-GOV-CONF-004 | GOV-SEM-CONF-005 | Mapped |
+| BRD-GOV-CONF-005 | GOV-SEM-CONF-006 | Mapped |
+| BRD-GOV-CONF-006 | GOV-SEM-CONF-007 | Mapped |
+| BRD-GOV-CONF-007 | GOV-SEM-CONF-006 | Mapped |
+| BRD-GOV-045 | GOV-DEC-001...009 | Mapped |
+| BRD-GOV-046 | GOV-DEC-PERS-001...004 | Mapped |
+| BRD-GOV-047 | GOV-DEC-003, GOV-DEC-007 | Mapped |
+| BRD-GOV-010...019 | GOV-HOOK-001...011 | Existing |
+| BRD-GOV-020...029 | GOV-POL-020...027 | Existing |
+| BRD-GOV-030...039 | GOV-SEC-010...023 | Existing |
+| BRD-GOV-040...044 | GOV-BUD-010...041 | Existing |

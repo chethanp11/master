@@ -1,9 +1,18 @@
 # Agents and Tools Technical Specification
 
 > **Document ID**: AGT / TOOL  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial release |
+| 1.1.0 | 2026-01-13 | Added §2.4 Reasoning & Intelligence Boundaries, §2.5 Explicit Non-Goals, updated BRD mappings |
 
 ---
 
@@ -67,6 +76,79 @@ perform computations.
 | **AGT-BEHAV-005** | [V1] Agents MUST emit trace events via hooks for observability | MUST |
 
 **Implementation**: `core/agents/base.py`
+
+---
+
+## 2.4 Reasoning & Intelligence Boundaries (Added: 2026-01-13)
+
+> **Source**: BRD-AUTO-030...036, INV-1, INV-2, INV-7
+
+### 2.4.1 Agent Reasoning Constraints
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **AGT-REASON-001** | [V1] Agents MUST NOT perform open-ended reasoning; all reasoning MUST be bounded by phase | MUST | 1.1 |
+| **AGT-REASON-002** | [V1] Agents MUST NOT make autonomous decisions about execution path | MUST | 1.1 |
+| **AGT-REASON-003** | [V1] Agent reasoning outputs MUST be structured artifacts, not free-form text | MUST | 1.1 |
+| **AGT-REASON-004** | [V1] Agent reasoning confidence MUST be explicitly computed and bounded 0.0-1.0 | MUST | 1.1 |
+| **AGT-REASON-005** | [V1] Agent reasoning traces MUST expose: options_considered, confidence, rejection_reasons | MUST | 1.1 |
+
+**Implementation**: `core/agents/base.py`, `core/agents/advisory.py`
+
+### 2.4.2 Critique Constraints (INV-2)
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **AGT-CRIT-001** | [V1] Critic agents MUST be advisory only; MUST NOT execute tools | MUST | 1.1 |
+| **AGT-CRIT-002** | [V1] Critic agents MUST NOT route flows or override policies | MUST | 1.1 |
+| **AGT-CRIT-003** | [V1] Critic agents MAY lower confidence or recommend escalation | MAY | 1.1 |
+| **AGT-CRIT-004** | [V1] Critic outputs MUST include `confidence_adjustment` bounded -1.0 to 1.0 | MUST | 1.1 |
+| **AGT-CRIT-005** | [V1] Critic outputs MUST include `recommended_next_action` from allowed enum | MUST | 1.1 |
+
+**Allowed Critic Actions**:
+| Action | Description | Control Effect |
+|--------|-------------|----------------|
+| `NONE` | No action required | None |
+| `USER_INPUT` | Request user clarification | Advisory only |
+| `HITL` | Escalate to human | Advisory only |
+| `FETCH_MORE_EVIDENCE` | Suggest more evidence | Advisory only |
+
+**Forbidden Critic Actions**:
+| Forbidden | Why |
+|-----------|-----|
+| Execute tools | Violates INV-2 (non-controlling) |
+| Route flows | Violates INV-2 (non-controlling) |
+| Override policies | Violates INV-6 (laws are explicit) |
+| Force decisions | Violates INV-2 (advisory only) |
+
+**Implementation**: `core/agents/critic_evaluator.py`
+
+### 2.4.3 Reasoning Artifact Contract
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **AGT-ARTIFACT-001** | [V1] Every agent invocation MUST produce a structured artifact | MUST | 1.1 |
+| **AGT-ARTIFACT-002** | [V1] Artifact MUST include `invocation_id` (UUID) for traceability | MUST | 1.1 |
+| **AGT-ARTIFACT-003** | [V1] Artifact MUST include `timestamp` (epoch) for temporal ordering | MUST | 1.1 |
+| **AGT-ARTIFACT-004** | [V1] Artifact MUST include `reasoning_trace` with decision path | SHOULD | 1.1 |
+| **AGT-ARTIFACT-005** | [V1] Artifacts MUST be immutable once persisted | MUST | 1.1 |
+
+**Implementation**: `core/contracts/agent_schema.py`
+
+---
+
+## 2.5 Explicit Non-Goals (Added: 2026-01-13)
+
+> **Agents and Tools MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Autonomous execution | Violates INV-5, INV-6 | Agent decides to run tool without orchestrator |
+| Self-modification | Violates governance | Agent updates own policy or permissions |
+| Domain inference | Core is domain-agnostic | Agent infers business rules from patterns |
+| Hidden heuristics | Violates auditability | Agent uses undocumented scoring rules |
+| Open-ended exploration | Violates bounded reasoning | Agent explores indefinitely without stop condition |
+| Direct LLM control | Tools are deterministic | Tool calls LLM to make decision |
 
 ---
 
@@ -436,11 +518,37 @@ perform computations.
 
 ## 14. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| AGT-BASE-001 | `core/agents/base.py` | `tests/unit/core/agents/test_base.py` |
-| AGT-RUN-002 | `core/contracts/agent_schema.py` | `tests/unit/core/contracts/test_agent_schema.py` |
-| TOOL-BASE-001 | `core/tools/base.py` | `tests/unit/core/tools/test_base.py` |
-| REG-BASE-002 | `core/utils/registry.py` | `tests/unit/core/utils/test_registry.py` |
-| EXEC-FLOW-001 | `core/tools/executor.py` | `tests/unit/core/tools/test_executor.py` |
-| DEC-AGENT-001 | `core/agents/registry.py` | `tests/unit/core/agents/test_registry.py` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| AGT-BASE-001 | `core/agents/base.py` | `tests/unit/core/agents/test_base.py` | BRD-AUTO-001 |
+| AGT-RUN-002 | `core/contracts/agent_schema.py` | `tests/unit/core/contracts/test_agent_schema.py` | BRD-AUTO-002 |
+| AGT-BEHAV-001 | `core/agents/base.py` | `tests/unit/core/agents/test_base.py` | BRD-AUTO-005 |
+| TOOL-BASE-001 | `core/tools/base.py` | `tests/unit/core/tools/test_base.py` | BRD-AUTO-010 |
+| REG-BASE-002 | `core/utils/registry.py` | `tests/unit/core/utils/test_registry.py` | BRD-AUTO-003 |
+| EXEC-FLOW-001 | `core/tools/executor.py` | `tests/unit/core/tools/test_executor.py` | BRD-AUTO-014 |
+| DEC-AGENT-001 | `core/agents/registry.py` | `tests/unit/core/agents/test_registry.py` | BRD-AUTO-021 |
+| AGT-REASON-001 | `core/agents/base.py` | `tests/architecture/test_agent_boundaries.py` | BRD-AUTO-030 |
+| AGT-CRIT-001 | `core/agents/critic_evaluator.py` | `tests/unit/core/agents/test_critic_evaluator.py` | BRD-AUTO-031 |
+| AGT-ARTIFACT-001 | `core/contracts/agent_schema.py` | `tests/unit/core/contracts/test_agent_schema.py` | BRD-AUTO-036 |
+
+---
+
+## 15. BRD Requirement Mapping
+
+| BRD ID | Description | Techspec IDs | Ver |
+|--------|-------------|--------------|-----|
+| BRD-AUTO-001 | Multi-step reasoning | AGT-BASE-001...005, AGT-REASON-001...005 | 1.1 |
+| BRD-AUTO-002 | Evidence-backed decisions | AGT-RUN-002, EVID-GEN-001...004 | 1.0 |
+| BRD-AUTO-003 | Agent composition | REG-AGENT-001...004, AGT-BASE-003 | 1.0 |
+| BRD-AUTO-004 | Failure handling | AGT-RUN-003, AGT-ERR-001...003 | 1.0 |
+| BRD-AUTO-005 | Deterministic behavior | AGT-BEHAV-001...005 | 1.0 |
+| BRD-AUTO-010 | Tool discoverability | DESC-TOOL-001...006 | 1.0 |
+| BRD-AUTO-011 | Typed tool interfaces | TOOL-RUN-001...003 | 1.0 |
+| BRD-AUTO-012 | Tool isolation testing | TOOL-EXEC-001, EXEC-LOCAL-001...003 | 1.0 |
+| BRD-AUTO-013 | Tool evidence | EVID-STRUCT-001...004 | 1.0 |
+| BRD-AUTO-014 | Tool observability | EXEC-RESULT-003, OBS-TRACE-* | 1.0 |
+| BRD-AUTO-030 | Structured reasoning | AGT-REASON-001...005 | 1.1 |
+| BRD-AUTO-031 | Critic evaluation | AGT-CRIT-001...005 | 1.1 |
+| BRD-AUTO-034 | Reasoning observability | AGT-REASON-005, AGT-ARTIFACT-004 | 1.1 |
+| BRD-AUTO-035 | Reasoning traces | AGT-ARTIFACT-001...005 | 1.1 |
+| BRD-AUTO-036 | Reasoning artifacts | AGT-ARTIFACT-001...005 | 1.1 |

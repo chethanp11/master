@@ -1,9 +1,16 @@
 # Acceptance Criteria Technical Specification
 
 > **Document ID**: ACC  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial V1 specification |
+| 1.1.0 | 2026-01-13 | Added: §2.6 Semantic Phase Coverage, §2.7 Architecture Invariant Tests, §12.1 Explicit Non-Goals, §16 BRD Requirement Mapping |
 
 ---
 
@@ -121,6 +128,120 @@ def test_product_adapter_isolated():
 | **ACC-AI-004** | [V1] Acceptance tests SHOULD use real product flows | SHOULD |
 
 **Implementation**: `tests/acceptance_intelligence/`
+
+### 2.6 Semantic Phase Coverage Tests (Added: 2026-01-13)
+
+> **Source**: BRD-OPS-ARCH-001...007, INV-1, INV-3
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **ACC-SEM-COV-001** | [V1] `test_semantic_envelope_all_fields` MUST verify all SemanticEnvelope fields are populated | MUST | 1.1 |
+| **ACC-SEM-COV-002** | [V1] `test_confidence_threshold_enforced` MUST verify low confidence blocks execution | MUST | 1.1 |
+| **ACC-SEM-COV-003** | [V1] `test_ask_user_produces_clarification` MUST verify ClarificationRequest is generated | MUST | 1.1 |
+| **ACC-SEM-COV-004** | [V1] `test_abort_produces_artifact` MUST verify AbortArtifact is generated | MUST | 1.1 |
+| **ACC-SEM-COV-005** | [V1] `test_semantic_events_emitted` MUST verify all required trace events are emitted | MUST | 1.1 |
+| **ACC-SEM-COV-006** | [V1] `test_entity_extraction_coverage` MUST verify entities are extracted correctly | MUST | 1.1 |
+| **ACC-SEM-COV-007** | [V1] `test_ambiguity_detection_coverage` MUST verify ambiguities are detected | MUST | 1.1 |
+
+**Test Specifications**:
+
+```python
+# tests/architecture/test_semantic_coverage.py
+
+def test_semantic_envelope_all_fields():
+    """
+    Verifies: ORC-SEM-002, ORC-SEM-ENV-001...007
+    
+    Ensures that SemanticEnvelope has all required fields populated
+    after semantic interpretation phase completes.
+    """
+    ...
+
+def test_confidence_threshold_enforced():
+    """
+    Verifies: GOV-SEM-CONF-001...007
+    
+    Ensures that confidence below threshold blocks execution
+    and returns appropriate error response.
+    """
+    ...
+
+def test_ask_user_produces_clarification():
+    """
+    Verifies: INT-EXIT-001...002, INT-EXIT-ART-001...004
+    
+    Ensures that ASK_USER exit produces a properly structured
+    ClarificationRequest with question and options.
+    """
+    ...
+
+def test_abort_produces_artifact():
+    """
+    Verifies: INT-EXIT-003...005, ORC-SEM-STOP-004
+    
+    Ensures that ABORT exit produces a properly structured
+    AbortArtifact with reason and partial_work.
+    """
+    ...
+```
+
+**Implementation**: `tests/architecture/test_semantic_coverage.py`
+
+### 2.7 Architecture Invariant Tests (Added: 2026-01-13)
+
+> **Source**: BRD-OPS-ARCH-001...007, INV-1...INV-10
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **ACC-INV-001** | [V1] `test_inv1_reasoning_as_primitive` MUST verify agents provide reasoning, not truth | MUST | 1.1 |
+| **ACC-INV-002** | [V1] `test_inv2_critic_non_controlling` MUST verify critics suggest, don't command | MUST | 1.1 |
+| **ACC-INV-003** | [V1] `test_inv3_probabilistic_semantics` MUST verify all interpretations have confidence | MUST | 1.1 |
+| **ACC-INV-004** | [V1] `test_inv4_auditable_decisions` MUST verify all decisions produce artifacts | MUST | 1.1 |
+| **ACC-INV-005** | [V1] `test_inv5_orchestrator_control` MUST verify iteration is orchestrator-owned | MUST | 1.1 |
+| **ACC-INV-006** | [V1] `test_inv6_explicit_platform_laws` MUST verify governance cannot be bypassed | MUST | 1.1 |
+| **ACC-INV-007** | [V1] `test_inv7_reasoning_observability` MUST verify all reasoning is traced | MUST | 1.1 |
+
+**Test Specifications**:
+
+```python
+# tests/architecture/test_invariants.py
+
+def test_inv2_critic_non_controlling():
+    """
+    Verifies: INV-2 - Bounded Critique
+    
+    Ensures that CriticEvaluator outputs are suggestions that
+    the orchestrator can ignore, not commands that must be followed.
+    """
+    critic_output = {"recommendation": "FETCH_MORE_EVIDENCE"}
+    # Orchestrator must be able to override
+    assert orchestrator.can_ignore_recommendation(critic_output)
+
+def test_inv3_probabilistic_semantics():
+    """
+    Verifies: INV-3 - Probabilistic Semantics
+    
+    Ensures that all LLM-derived interpretations carry confidence
+    scores and are never treated as deterministic facts.
+    """
+    envelope = semantic_interpret(user_input)
+    assert 0.0 <= envelope.confidence <= 1.0
+    assert envelope.proposed_next_action != "EXECUTE_BLINDLY"
+
+def test_inv6_explicit_platform_laws():
+    """
+    Verifies: INV-6 - Explicit Platform Laws
+    
+    Ensures that governance hooks cannot be bypassed by any code path
+    and that all hooks are called in the correct order.
+    """
+    # Verify hook chain is complete
+    assert all_hooks_called(run_context)
+    # Verify no bypass flags exist
+    assert not hasattr(settings, 'skip_governance')
+```
+
+**Implementation**: `tests/architecture/test_invariants.py`
 
 ---
 
@@ -332,14 +453,27 @@ def test_run_lifecycle_start():
 
 | Domain | Spec Document | Requirement Count | Test Coverage |
 |--------|---------------|-------------------|---------------|
-| Orchestration | ORC-orchestration.md | ~80 | ≥85% |
-| Agents/Tools | AGT-agents-tools.md | ~85 | ≥80% |
-| Governance | GOV-governance.md | ~120 | ≥85% |
-| Memory | MEM-memory.md | ~45 | ≥80% |
-| Intelligence | INT-intelligence.md | ~115 | ≥75% |
-| Gateway | GW-gateway.md | ~130 | ≥75% |
-| Products | PROD-products.md | ~75 | ≥80% |
-| **Total** | **All** | **~680** | **≥80%** |
+| Orchestration | ORC-orchestration.md | ~100 | ≥85% |
+| Agents/Tools | AGT-agents-tools.md | ~100 | ≥80% |
+| Governance | GOV-governance.md | ~140 | ≥85% |
+| Memory | MEM-memory.md | ~65 | ≥80% |
+| Intelligence | INT-intelligence.md | ~130 | ≥75% |
+| Gateway | GW-gateway.md | ~145 | ≥75% |
+| Products | PROD-products.md | ~95 | ≥80% |
+| **Total** | **All** | **~775** | **≥80%** |
+
+### 12.1 Explicit Non-Goals (Added: 2026-01-13)
+
+> **Acceptance Tests MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Flaky tests | Tests must be deterministic | Test passes 90% of time |
+| External dependencies in unit tests | Unit tests must be isolated | Unit test calls OpenAI API |
+| Shared mutable state | Tests must be independent | Test A modifies global used by Test B |
+| Skipped critical tests | Critical paths must be tested | `@pytest.mark.skip` on governance test |
+| Mocked governance in integration tests | Governance must be tested end-to-end | Integration test stubs all hooks |
+| Performance as acceptance | Performance is SLO, not acceptance | Test fails if >500ms |
 
 ---
 
@@ -365,13 +499,30 @@ def test_run_lifecycle_start():
 
 ## 14. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| ACC-UNIT-001 | `tests/unit/` | Self-validated |
-| ACC-INT-001 | `tests/integration/` | Self-validated |
-| ACC-COV-001 | `pytest.ini` | CI coverage report |
-| ACC-FIX-001 | `tests/conftest.py` | Self-validated |
-| ACC-CI-001 | CI configuration | CI pipeline |
-| ACC-SEM-001 | `tests/architecture/test_semantic_isolation.py` | `test_semantic_phase_is_mandatory` |
-| ACC-SEM-002 | `tests/architecture/test_semantic_isolation.py` | `test_stop_blocks_execution` |
-| ACC-SEM-003 | `tests/architecture/test_semantic_isolation.py` | `test_product_adapter_isolated` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| ACC-UNIT-001 | `tests/unit/` | Self-validated | BRD-OPS-ARCH-001 |
+| ACC-INT-001 | `tests/integration/` | Self-validated | BRD-OPS-ARCH-002 |
+| ACC-COV-001 | `pytest.ini` | CI coverage report | BRD-OPS-ARCH-003 |
+| ACC-FIX-001 | `tests/conftest.py` | Self-validated | BRD-OPS-ARCH-004 |
+| ACC-CI-001 | CI configuration | CI pipeline | BRD-OPS-ARCH-005 |
+| ACC-SEM-001 | `tests/architecture/test_semantic_isolation.py` | `test_semantic_phase_is_mandatory` | BRD-OPS-ARCH-006 |
+| ACC-SEM-002 | `tests/architecture/test_semantic_isolation.py` | `test_stop_blocks_execution` | BRD-OPS-ARCH-006 |
+| ACC-SEM-003 | `tests/architecture/test_semantic_isolation.py` | `test_product_adapter_isolated` | BRD-OPS-ARCH-007 |
+| ACC-SEM-COV-001...007 | `tests/architecture/test_semantic_coverage.py` | Various | BRD-OPS-ARCH-006 |
+| ACC-INV-001...007 | `tests/architecture/test_invariants.py` | Various | BRD-OPS-ARCH-007 |
+
+---
+
+## 15. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD Requirement | Techspec Requirement(s) | Status |
+|-----------------|-------------------------|--------|
+| BRD-OPS-ARCH-001 | ACC-UNIT-001...006, ACC-COV-001...023 | Mapped |
+| BRD-OPS-ARCH-002 | ACC-INT-001...005 | Mapped |
+| BRD-OPS-ARCH-003 | ACC-ARCH-001...004 | Mapped |
+| BRD-OPS-ARCH-004 | ACC-FIX-001...013 | Mapped |
+| BRD-OPS-ARCH-005 | ACC-CI-001...007 | Mapped |
+| BRD-OPS-ARCH-006 | ACC-SEM-001...005, ACC-SEM-COV-001...007 | Mapped |
+| BRD-OPS-ARCH-007 | ACC-INV-001...007 | Mapped |
+| BRD-OPS-010...049 | ACC-TRACE-001...003, ACC-DATA-001...004 | Existing |

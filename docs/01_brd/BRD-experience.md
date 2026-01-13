@@ -1,10 +1,20 @@
 # BRD: Developer & User Experience
 
 > **Document ID**: BRD-EXP  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-12 | Initial release |
+| 1.1 | 2026-01-13 | Added §3.7 Product Factory Model, updated Cross-Cutting Requirements |
 
 ---
 
@@ -98,26 +108,26 @@ An experience layer that provides:
 
 ### 3.4 Product System
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-EXP-030** | New products must be creatable from standard structure | P0 | INT-EXP-030 | 2026-01-12 |
-| **BRD-EXP-031** | Products must declare capabilities via manifest | P0 | INT-EXP-031 | 2026-01-12 |
-| **BRD-EXP-032** | Products must be auto-discovered without restart | P1 | INT-EXP-032 | 2026-01-12 |
-| **BRD-EXP-033** | Products must be independently enableable/disableable | P0 | INT-EXP-033 | 2026-01-12 |
-| **BRD-EXP-034** | Product load errors must not crash the platform | P0 | INT-EXP-034 | 2026-01-12 |
-| **BRD-EXP-035** | Products must be shippable in < 1 day | P1 | INT-FACTORY-003 | Added: 2026-01-13 |
-| **BRD-EXP-036** | Products must focus on domain logic only, no infrastructure burden | P0 | INT-FACTORY-004 | Added: 2026-01-13 |
-| **BRD-EXP-037** | Products must be evolvable via intent updates | P1 | INT-FACTORY-005 | Added: 2026-01-13 |
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-EXP-030** | New products must be creatable from standard structure | P0 | INT-EXP-030 | 1.0 | 2026-01-12 |
+| **BRD-EXP-031** | Products must declare capabilities via manifest | P0 | INT-EXP-031 | 1.0 | 2026-01-12 |
+| **BRD-EXP-032** | Products must be auto-discovered without restart | P1 | INT-EXP-032 | 1.0 | 2026-01-12 |
+| **BRD-EXP-033** | Products must be independently enableable/disableable | P0 | INT-EXP-033 | 1.0 | 2026-01-12 |
+| **BRD-EXP-034** | Product load errors must not crash the platform | P0 | INT-EXP-034 | 1.0 | 2026-01-12 |
+| **BRD-EXP-035** | Products must be shippable in < 1 day | P1 | INT-FACTORY-003 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-036** | Products must focus on domain logic only, no infrastructure burden | P0 | INT-FACTORY-004 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-037** | Products must be evolvable via intent updates | P1 | INT-FACTORY-005 | 1.0 | Added: 2026-01-13 |
 
 ### 3.5 Product Isolation
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-EXP-040** | Products must not access other products' agents or tools | P0 | INT-EXP-040, INV-6 | 2026-01-12 |
-| **BRD-EXP-041** | Products must not access other products' data | P0 | INT-EXP-041, INV-6 | 2026-01-12 |
-| **BRD-EXP-042** | Product failures must not affect other products | P0 | INT-EXP-042 | 2026-01-12 |
-| **BRD-EXP-043** | Products must have isolated observability directories | P0 | INT-EXP-043 | 2026-01-12 |
-| **BRD-EXP-044** | Products cannot modify core framework | P0 | INV-6 | Added: 2026-01-13 |
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-EXP-040** | Products must not access other products' agents or tools | P0 | INT-EXP-040, INV-6 | 1.0 | 2026-01-12 |
+| **BRD-EXP-041** | Products must not access other products' data | P0 | INT-EXP-041, INV-6 | 1.0 | 2026-01-12 |
+| **BRD-EXP-042** | Product failures must not affect other products | P0 | INT-EXP-042 | 1.0 | 2026-01-12 |
+| **BRD-EXP-043** | Products must have isolated observability directories | P0 | INT-EXP-043 | 1.0 | 2026-01-12 |
+| **BRD-EXP-044** | Products cannot modify core framework | P0 | INV-6 | 1.0 | Added: 2026-01-13 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -137,13 +147,13 @@ An experience layer that provides:
 
 ### 3.7 Product Factory Model
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-EXP-060** | Product creation is primarily an intent-driven activity | P0 | INT-FACTORY-001 | Added: 2026-01-13 |
-| **BRD-EXP-061** | Code is a generated artifact, not the source of truth | P0 | INT-FACTORY-002 | Added: 2026-01-13 |
-| **BRD-EXP-062** | Products define what, framework defines how | P0 | INT-FACTORY-013 | Added: 2026-01-13 |
-| **BRD-EXP-063** | Framework provides 90% of functionality, products add 10% | P1 | INT-FACTORY-014 | Added: 2026-01-13 |
-| **BRD-EXP-064** | Products are forbidden from re-implementing framework services | P0 | INT-FACTORY-011, INV-10 | Added: 2026-01-13 |
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-EXP-060** | Product creation is primarily an intent-driven activity | P0 | INT-FACTORY-001 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-061** | Code is a generated artifact, not the source of truth | P0 | INT-FACTORY-002 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-062** | Products define what, framework defines how | P0 | INT-FACTORY-013 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-063** | Framework provides 90% of functionality, products add 10% | P1 | INT-FACTORY-014 | 1.0 | Added: 2026-01-13 |
+| **BRD-EXP-064** | Products are forbidden from re-implementing framework services | P0 | INT-FACTORY-011, INV-10 | 1.0 | Added: 2026-01-13 |
 
 ---
 

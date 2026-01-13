@@ -1,9 +1,16 @@
 # Product System Technical Specification
 
 > **Document ID**: PROD  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial V1 specification |
+| 1.1.0 | 2026-01-13 | Added: §12.3 Semantic Adapter Isolation, §13 Explicit Non-Goals, §16 BRD Requirement Mapping |
 
 ---
 
@@ -383,11 +390,45 @@ products/
 
 **Implementation**: `products/ade/`
 
+### 12.3 Semantic Adapter Isolation (Added: 2026-01-13)
+
+> **Source**: BRD-AUTO-ADAPT-001...010, INV-6, INV-10
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **PROD-SEM-ISO-001** | [V1] Product semantic adapter MUST be imported via dynamic import, not static | MUST | 1.1 |
+| **PROD-SEM-ISO-002** | [V1] Adapter module MUST NOT import `core.orchestrator.*` (enforced by arch test) | MUST | 1.1 |
+| **PROD-SEM-ISO-003** | [V1] Adapter MUST NOT hold state between calls; all state in SemanticEnvelope | MUST | 1.1 |
+| **PROD-SEM-ISO-004** | [V1] Adapter MUST NOT call LLM directly; use `advisory_service` if reasoning needed | MUST | 1.1 |
+| **PROD-SEM-ISO-005** | [V1] Adapter MUST NOT access other products' data or configuration | MUST | 1.1 |
+| **PROD-SEM-ISO-006** | [V1] Adapter failures MUST NOT crash orchestrator; return `SemanticEnvelope` with `confidence=0.0` | MUST | 1.1 |
+| **PROD-SEM-ISO-007** | [V1] Adapter MUST receive only: `raw_input`, `payload`, `product_config` | MUST | 1.1 |
+| **PROD-SEM-ISO-008** | [V1] Adapter MUST NOT have network access; all external calls via registered tools | MUST | 1.1 |
+| **PROD-SEM-ISO-009** | [V1] Adapter execution timeout MUST be enforced (default: 5s) | MUST | 1.1 |
+| **PROD-SEM-ISO-010** | [V1] Adapter MUST emit `product_adapter_invoked` trace event | MUST | 1.1 |
+
+**Implementation**: `core/orchestrator/product_router.py`, `products/*/semantic.py`
+
 ---
 
-## 13. Future Considerations
+## 13. Explicit Non-Goals (Added: 2026-01-13)
 
-### 13.1 V1.1 Enhancements
+> **Product System MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Cross-product data access | Product isolation is mandatory | Product A reads Product B's files |
+| Direct orchestrator import in adapters | Dependency inversion principle | `from core.orchestrator import engine` |
+| Stateful adapters | Reproducibility requires statelessness | Adapter caches between runs |
+| Direct LLM calls from adapters | Intelligence must go through advisory | Adapter calls OpenAI directly |
+| Network access from adapters | Security and auditability | Adapter makes HTTP requests |
+| Control flow in adapters | Adapters interpret, don't execute | Adapter calls tools |
+
+---
+
+## 14. Future Considerations
+
+### 14.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -395,7 +436,7 @@ products/
 | **PROD-FUTURE-002** | Product dependencies | Declare inter-product dependencies |
 | **PROD-FUTURE-003** | Version constraints | Define min/max platform version |
 
-### 13.2 V2 Features
+### 14.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -405,16 +446,35 @@ products/
 
 ---
 
-## 14. Traceability Matrix
+## 15. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| PROD-DIR-001 | `products/*/` | `tests/unit/products/test_structure.py` |
-| PROD-MAN-001 | `products/*/manifest.yaml` | `tests/unit/products/test_manifest.py` |
-| PROD-REG-001 | `products/*/registry.py` | `tests/unit/products/test_registry.py` |
-| PROD-CAT-001 | `core/orchestrator/product_catalog.py` | `tests/unit/core/test_product_catalog.py` |
-| PROD-LOAD-001 | `core/orchestrator/product_loader.py` | `tests/unit/core/test_product_loader.py` |
-| PROD-RUN-001 | `core/orchestrator/product_runner.py` | `tests/unit/core/test_product_runner.py` |
-| PROD-SEM-001 | `products/*/semantic.py` | `tests/architecture/test_semantic_isolation.py` |
-| PROD-SEM-INT-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` |
-| PROD-SEM-VAL-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| PROD-DIR-001 | `products/*/` | `tests/unit/products/test_structure.py` | BRD-AUTO-010 |
+| PROD-MAN-001 | `products/*/manifest.yaml` | `tests/unit/products/test_manifest.py` | BRD-AUTO-020 |
+| PROD-REG-001 | `products/*/registry.py` | `tests/unit/products/test_registry.py` | BRD-AUTO-030 |
+| PROD-CAT-001 | `core/orchestrator/product_catalog.py` | `tests/unit/core/test_product_catalog.py` | BRD-AUTO-040 |
+| PROD-LOAD-001 | `core/orchestrator/product_loader.py` | `tests/unit/core/test_product_loader.py` | BRD-AUTO-040 |
+| PROD-RUN-001 | `core/orchestrator/product_runner.py` | `tests/unit/core/test_product_runner.py` | BRD-AUTO-050 |
+| PROD-SEM-001 | `products/*/semantic.py` | `tests/architecture/test_semantic_isolation.py` | BRD-AUTO-ADAPT-001 |
+| PROD-SEM-INT-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` | BRD-AUTO-ADAPT-002 |
+| PROD-SEM-VAL-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` | BRD-AUTO-ADAPT-003 |
+| PROD-SEM-ISO-001...010 | `core/orchestrator/product_router.py` | `tests/architecture/test_adapter_isolation.py` | BRD-AUTO-ADAPT-001...010 |
+
+---
+
+## 16. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD Requirement | Techspec Requirement(s) | Status |
+|-----------------|-------------------------|--------|
+| BRD-AUTO-ADAPT-001 | PROD-SEM-001, PROD-SEM-ISO-001 | Mapped |
+| BRD-AUTO-ADAPT-002 | PROD-SEM-INT-001...006, PROD-SEM-ISO-007 | Mapped |
+| BRD-AUTO-ADAPT-003 | PROD-SEM-VAL-001...007 | Mapped |
+| BRD-AUTO-ADAPT-004 | PROD-SEM-ISO-003 | Mapped |
+| BRD-AUTO-ADAPT-005 | PROD-SEM-ISO-004 | Mapped |
+| BRD-AUTO-ADAPT-006 | PROD-SEM-ISO-005 | Mapped |
+| BRD-AUTO-ADAPT-007 | PROD-SEM-ISO-006 | Mapped |
+| BRD-AUTO-ADAPT-008 | PROD-SEM-ISO-008 | Mapped |
+| BRD-AUTO-ADAPT-009 | PROD-SEM-ISO-009 | Mapped |
+| BRD-AUTO-ADAPT-010 | PROD-SEM-ISO-010 | Mapped |
+| BRD-AUTO-010...050 | PROD-DIR-*, PROD-MAN-*, PROD-RUN-* | Existing |

@@ -1,9 +1,18 @@
 # Intelligence Layer Technical Specification
 
 > **Document ID**: INT  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial release |
+| 1.1.0 | 2026-01-13 | Added §8 Failure Modes & Safe Exits, §9 Explicit Non-Goals, updated BRD mappings |
 
 ---
 
@@ -386,7 +395,83 @@ This layer enhances decision quality while maintaining governance constraints.
 
 ---
 
-## 9. Future Considerations
+## 8. Failure Modes & Safe Exits (Added: 2026-01-13)
+
+> **Source**: BRD-AUTO-SEM-*, BRD-AUTO-STOP-*, BRD-GOV-CONF-*
+
+### 8.1 Intelligence Layer Exit States
+
+| Exit State | Condition | Output | Run Status |
+|------------|-----------|--------|------------|
+| `SUCCESS` | Reasoning completes with confidence ≥ threshold | Full result artifact | RUNNING (continue) |
+| `PARTIAL_SUCCESS` | Reasoning completes below confidence | Result + warnings | RUNNING (may pause) |
+| `ASK_USER` | Ambiguity exceeds threshold OR validation fails | Clarification request | PAUSED_WAITING_FOR_USER |
+| `ABORT` | Unrecoverable interpretation failure | Error artifact | FAILED |
+| `BUDGET_EXCEEDED` | Reasoning budget exhausted | Partial result + reason | FAILED or HITL |
+
+### 8.2 Confidence-Based Exit Decisions
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **INT-EXIT-001** | [V1] If `confidence < threshold` and `ambiguity_count > 0`, MUST return `ASK_USER` | MUST | 1.1 |
+| **INT-EXIT-002** | [V1] If `validation.is_valid = false`, MUST return `ASK_USER` or `ABORT` | MUST | 1.1 |
+| **INT-EXIT-003** | [V1] If `validation.violations` contain critical violations, MUST return `ABORT` | MUST | 1.1 |
+| **INT-EXIT-004** | [V1] Exit decision MUST be deterministic given same inputs | MUST | 1.1 |
+| **INT-EXIT-005** | [V1] Exit decision MUST be logged with all factors in trace event | MUST | 1.1 |
+
+**Implementation**: `core/agents/reasoning_ladder.py`, `core/orchestrator/semantic_phase.py`
+
+### 8.3 Safe Exit Artifacts
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **INT-EXIT-ART-001** | [V1] `ASK_USER` exit MUST produce `ClarificationRequest` artifact | MUST | 1.1 |
+| **INT-EXIT-ART-002** | [V1] `ClarificationRequest` MUST include: `question`, `ambiguities`, `original_confidence`, `context` | MUST | 1.1 |
+| **INT-EXIT-ART-003** | [V1] `ABORT` exit MUST produce `AbortArtifact` with: `error_code`, `reason`, `violations`, `ambiguities` | MUST | 1.1 |
+| **INT-EXIT-ART-004** | [V1] All exit artifacts MUST be persisted to run record | MUST | 1.1 |
+
+**ClarificationRequest Schema**:
+```python
+class ClarificationRequest(BaseModel):
+    question: str  # Human-readable question
+    ambiguities: List[str]  # List of unresolved ambiguities
+    original_confidence: float  # Confidence before exit decision
+    context: Dict[str, Any]  # Additional context for user
+    suggested_answers: Optional[List[str]] = None  # If choices available
+    model_config = ConfigDict(extra="forbid")
+```
+
+**AbortArtifact Schema**:
+```python
+class AbortArtifact(BaseModel):
+    error_code: Literal["semantic_abort", "validation_failed", "unrecoverable"]
+    reason: str  # Human-readable explanation
+    violations: List[str]  # Specific rule violations
+    ambiguities: List[str]  # Unresolved ambiguities
+    recovery_hint: Optional[str] = None  # How user might fix
+    model_config = ConfigDict(extra="forbid")
+```
+
+**Implementation**: `core/contracts/semantic_schema.py`
+
+---
+
+## 9. Explicit Non-Goals (Added: 2026-01-13)
+
+> **The Intelligence Layer MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Autonomous decision-making | Intelligence is advisory only (INV-2) | System decides next step without orchestrator |
+| Self-modification | Governance is immutable at runtime | System updates its own thresholds |
+| Domain inference in core | Products own domain rules (INV-10) | Core intelligence infers "trend requires time axis" |
+| Hidden heuristics | All decisions must be auditable (INV-4) | Undocumented scoring algorithm |
+| Treating LLM output as truth | Interpretations are hypotheses (INV-3) | Using raw LLM response as fact |
+| Unbounded exploration | Reasoning is bounded (INV-1) | Infinite reasoning loops |
+
+---
+
+## 10. Future Considerations
 
 ### 9.1 V1.1 Enhancements
 
@@ -406,15 +491,58 @@ This layer enhances decision quality while maintaining governance constraints.
 
 ---
 
-## 10. Traceability Matrix
+## 10. Future Considerations
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| INT-ADV-001 | `core/agents/advisory.py` | `tests/unit/core/agents/test_advisory.py` |
-| INT-RL-001 | `core/agents/reasoning_ladder.py` | `tests/unit/core/agents/test_reasoning_ladder.py` |
-| INT-CRIT-001 | `core/agents/critic_evaluator.py` | `tests/unit/core/agents/test_critic_evaluator.py` |
-| INT-CP-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack.py` |
-| INT-CP-DET-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack_determinism.py` |
-| INT-CP-MRG-001 | `core/knowledge/context_pack_merge.py` | `tests/unit/core/knowledge/test_context_pack_merge.py` |
-| INT-SEM-CONF-001 | `core/governance/hooks.py` | `tests/unit/core/governance/test_semantic_confidence.py` |
-| INT-SEM-VAL-001 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` |
+### 10.1 V1.1 Enhancements
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| **INT-FUTURE-001** | Confidence calibration | Learn from historical accuracy |
+| **INT-FUTURE-002** | Evidence caching | Cache context packs across runs |
+| **INT-FUTURE-003** | Parallel advisory | Execute multiple advisory agents concurrently |
+
+### 10.2 V2 Features
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| **INT-FUTURE-010** | Multi-model reasoning | Ensemble reasoning with multiple LLMs |
+| **INT-FUTURE-011** | Self-critique loop | Iterative refinement via critic feedback |
+| **INT-FUTURE-012** | External knowledge | Integration with external knowledge bases |
+
+---
+
+## 11. Traceability Matrix
+
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| INT-ADV-001 | `core/agents/advisory.py` | `tests/unit/core/agents/test_advisory.py` | BRD-AUTO-020, BRD-AUTO-021 |
+| INT-RL-001 | `core/agents/reasoning_ladder.py` | `tests/unit/core/agents/test_reasoning_ladder.py` | BRD-AUTO-030 |
+| INT-CRIT-001 | `core/agents/critic_evaluator.py` | `tests/unit/core/agents/test_critic_evaluator.py` | BRD-AUTO-031 |
+| INT-CP-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack.py` | BRD-AUTO-032 |
+| INT-CP-DET-001 | `core/knowledge/context_pack.py` | `tests/unit/core/knowledge/test_context_pack_determinism.py` | BRD-AUTO-005 |
+| INT-CP-MRG-001 | `core/knowledge/context_pack_merge.py` | `tests/unit/core/knowledge/test_context_pack_merge.py` | BRD-EXP-025 |
+| INT-SEM-CONF-001 | `core/governance/hooks.py` | `tests/unit/core/governance/test_semantic_confidence.py` | BRD-GOV-CONF-001...007 |
+| INT-SEM-VAL-001 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` | BRD-AUTO-SEM-003 |
+| INT-EXIT-001 | `core/orchestrator/semantic_phase.py` | `tests/architecture/test_semantic_isolation.py` | BRD-AUTO-STOP-001...009 |
+| INT-EXIT-ART-001 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` | BRD-AUTO-STOP-002 |
+
+---
+
+## 12. BRD Requirement Mapping
+
+| BRD ID | Description | Techspec IDs | Ver |
+|--------|-------------|--------------|-----|
+| BRD-AUTO-020 | Tool selection | INT-TS-001...006 | 1.0 |
+| BRD-AUTO-021 | Agent selection | INT-AS-001...004 | 1.0 |
+| BRD-AUTO-022 | Gap identification | INT-GF-001...004 | 1.0 |
+| BRD-AUTO-023 | Result summarization | INT-SUM-001...004 | 1.0 |
+| BRD-AUTO-024 | Risk explanation | INT-RE-001...006 | 1.0 |
+| BRD-AUTO-030 | Structured reasoning | INT-RL-001...004 | 1.0 |
+| BRD-AUTO-031 | Critic evaluation | INT-CRIT-001...005 | 1.0 |
+| BRD-AUTO-032 | Context enrichment | INT-CP-001...007 | 1.0 |
+| BRD-AUTO-033 | Reasoning escalation | INT-RL-BUD-005, INT-CRIT-BUD-004 | 1.0 |
+| BRD-GOV-CONF-001 | Default confidence threshold | INT-SEM-CONF-003 | 1.1 |
+| BRD-GOV-CONF-002 | Per-product threshold | INT-SEM-CONF-004 | 1.1 |
+| BRD-GOV-CONF-004 | Low confidence triggers | INT-EXIT-001...005 | 1.1 |
+| BRD-AUTO-STOP-001 | ASK_USER pause | INT-EXIT-001, INT-EXIT-ART-001 | 1.1 |
+| BRD-AUTO-STOP-004 | ABORT failure | INT-EXIT-003, INT-EXIT-ART-003 | 1.1 |

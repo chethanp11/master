@@ -1,9 +1,16 @@
 # Memory and Observability Technical Specification
 
 > **Document ID**: MEM / OBS  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial V1 specification |
+| 1.1.0 | 2026-01-13 | Added: §12 Semantic Trace Events, §13 Reasoning Observability, §14 Explicit Non-Goals, §17 BRD Requirement Mapping |
 
 ---
 
@@ -543,9 +550,152 @@ observability/<product>/<run_id>/
 
 ---
 
-## 12. Future Considerations
+## 12. Semantic Trace Events (Added: 2026-01-13)
 
-### 12.1 V1.1 Enhancements
+> **Source**: BRD-OPS-SEM-001...010, INV-7
+
+### 12.1 Required Semantic Events
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **MEM-SEM-001** | [V1] `semantic_phase_started` MUST be emitted when semantic interpretation begins | MUST | 1.1 |
+| **MEM-SEM-002** | [V1] `semantic_envelope_created` MUST be emitted with full `SemanticEnvelope` in payload | MUST | 1.1 |
+| **MEM-SEM-003** | [V1] `semantic_validation_completed` MUST be emitted with `ValidationResult` in payload | MUST | 1.1 |
+| **MEM-SEM-004** | [V1] `semantic_confidence_checked` MUST be emitted with confidence value and threshold | MUST | 1.1 |
+| **MEM-SEM-005** | [V1] `semantic_phase_completed` MUST be emitted with final `proposed_next_action` | MUST | 1.1 |
+| **MEM-SEM-006** | [V1] `semantic_abort_triggered` MUST be emitted if next_action is ABORT | MUST | 1.1 |
+| **MEM-SEM-007** | [V1] `semantic_ask_user_triggered` MUST be emitted if next_action is ASK_USER | MUST | 1.1 |
+| **MEM-SEM-008** | [V1] All semantic events MUST include `envelope_hash` for correlation | MUST | 1.1 |
+| **MEM-SEM-009** | [V1] Semantic events MUST NOT be redacted (confidences are not secrets) | MUST | 1.1 |
+| **MEM-SEM-010** | [V1] Semantic events MUST include `product` and `flow` in payload | MUST | 1.1 |
+
+**Implementation**: `core/memory/tracing.py`
+
+### 12.2 Semantic Event Payload Schemas
+
+**semantic_envelope_created**:
+```python
+{
+    "envelope_hash": str,  # SHA256 of normalized_input
+    "product": str,
+    "flow": str,
+    "intent_type": str,
+    "confidence": float,
+    "entity_count": int,
+    "ambiguity_count": int,
+    "proposed_next_action": str  # CONTINUE|ASK_USER|ABORT|NEEDS_APPROVAL
+}
+```
+
+**semantic_validation_completed**:
+```python
+{
+    "envelope_hash": str,
+    "valid": bool,
+    "revised_confidence": Optional[float],
+    "correction_count": int,
+    "clarification_requested": bool
+}
+```
+
+**semantic_confidence_checked**:
+```python
+{
+    "envelope_hash": str,
+    "effective_confidence": float,
+    "threshold": float,
+    "passed": bool,
+    "source": str  # "platform_default" | "product_override"
+}
+```
+
+**Implementation**: `core/memory/tracing.py`
+
+---
+
+## 13. Reasoning Observability (Added: 2026-01-13)
+
+> **Source**: BRD-OPS-REASON-001...007, INV-7
+
+### 13.1 Reasoning Trace Events
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **MEM-REASON-001** | [V1] `reasoning_pass_started` MUST be emitted at start of each reasoning pass | MUST | 1.1 |
+| **MEM-REASON-002** | [V1] `reasoning_pass_completed` MUST be emitted with pass result and exit reason | MUST | 1.1 |
+| **MEM-REASON-003** | [V1] `critic_evaluation_started` MUST be emitted when critic is invoked | MUST | 1.1 |
+| **MEM-REASON-004** | [V1] `critic_evaluation_completed` MUST be emitted with recommendation and rationale | MUST | 1.1 |
+| **MEM-REASON-005** | [V1] `reasoning_ladder_step` MUST be emitted for each ladder rung with level and output | MUST | 1.1 |
+| **MEM-REASON-006** | [V1] All reasoning events MUST include `pass_number` and `reasoning_budget` | MUST | 1.1 |
+| **MEM-REASON-007** | [V1] Reasoning events MUST NOT include raw LLM prompts (use `prompt_hash` instead) | MUST | 1.1 |
+
+**Implementation**: `core/memory/tracing.py`
+
+### 13.2 Reasoning Event Payload Schemas
+
+**reasoning_pass_started**:
+```python
+{
+    "pass_number": int,
+    "max_passes": int,
+    "agent": str,
+    "tool_budget_remaining": int
+}
+```
+
+**reasoning_pass_completed**:
+```python
+{
+    "pass_number": int,
+    "exit_reason": str,  # DONE|NEED_MORE|ESCALATE
+    "tools_used": int,
+    "confidence_achieved": float
+}
+```
+
+**critic_evaluation_completed**:
+```python
+{
+    "recommendation": str,  # NONE|USER_INPUT|HITL|FETCH_MORE_EVIDENCE
+    "rationale_hash": str,  # SHA256 of rationale text
+    "strengths_count": int,
+    "gaps_count": int,
+    "confidence": float
+}
+```
+
+**Implementation**: `core/memory/tracing.py`
+
+### 13.3 Decision Artifact Trace Events
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **MEM-DEC-001** | [V1] `decision_artifact_created` MUST be emitted when DecisionArtifact is persisted | MUST | 1.1 |
+| **MEM-DEC-002** | [V1] Event payload MUST include: `decision_id`, `options_count`, `confidence`, `justification_hash` | MUST | 1.1 |
+| **MEM-DEC-003** | [V1] Event MUST NOT include full `options_considered` (use artifact storage for full data) | MUST | 1.1 |
+
+**Implementation**: `core/memory/tracing.py`
+
+---
+
+## 14. Explicit Non-Goals (Added: 2026-01-13)
+
+> **Memory/Observability MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Mutable trace events | Traces are immutable audit records | Event updated after creation |
+| Hidden events | All significant events must be traced | Decision made without trace |
+| Raw LLM content in events | Privacy and size concerns | Full prompt in payload |
+| Cross-product queries without isolation | Product isolation must be enforced | Query returns other products' data |
+| Synchronous event blocking | Events must not slow execution | Event persistence blocks run |
+| Agent-controlled event filtering | Agents cannot hide their traces | Agent deletes own events |
+
+---
+
+## 15. Future Considerations
+
+### 15.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -553,7 +703,7 @@ observability/<product>/<run_id>/
 | **MEM-FUTURE-002** | Event streaming | Real-time event push via WebSocket |
 | **MEM-FUTURE-003** | Metrics aggregation | Roll up trace events into metrics |
 
-### 12.2 V2 Features
+### 15.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -563,13 +713,41 @@ observability/<product>/<run_id>/
 
 ---
 
-## 13. Traceability Matrix
+## 16. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| MEM-SCHEMA-001 | `core/contracts/run_schema.py` | `tests/unit/core/contracts/test_run_schema.py` |
-| MEM-API-001 | `core/memory/base.py` | `tests/unit/core/memory/test_base.py` |
-| MEM-SQLITE-002 | `core/memory/sqlite_backend.py` | `tests/unit/core/memory/test_sqlite_backend.py` |
-| MEM-INMEM-001 | `core/memory/in_memory.py` | `tests/unit/core/memory/test_in_memory.py` |
-| OBS-DIR-001 | `core/memory/observability_store.py` | `tests/unit/core/memory/test_observability_store.py` |
-| OBS-TRACE-001 | `core/memory/tracing.py` | `tests/unit/core/memory/test_tracing.py` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| MEM-SCHEMA-001 | `core/contracts/run_schema.py` | `tests/unit/core/contracts/test_run_schema.py` | BRD-OPS-010 |
+| MEM-API-001 | `core/memory/base.py` | `tests/unit/core/memory/test_base.py` | BRD-OPS-020 |
+| MEM-SQLITE-002 | `core/memory/sqlite_backend.py` | `tests/unit/core/memory/test_sqlite_backend.py` | BRD-OPS-030 |
+| MEM-INMEM-001 | `core/memory/in_memory.py` | `tests/unit/core/memory/test_in_memory.py` | BRD-OPS-030 |
+| OBS-DIR-001 | `core/memory/observability_store.py` | `tests/unit/core/memory/test_observability_store.py` | BRD-OPS-040 |
+| OBS-TRACE-001 | `core/memory/tracing.py` | `tests/unit/core/memory/test_tracing.py` | BRD-OPS-040 |
+| MEM-SEM-001...010 | `core/memory/tracing.py` | `tests/unit/core/memory/test_semantic_events.py` | BRD-OPS-SEM-001...010 |
+| MEM-REASON-001...007 | `core/memory/tracing.py` | `tests/unit/core/memory/test_reasoning_events.py` | BRD-OPS-REASON-001...007 |
+| MEM-DEC-001...003 | `core/memory/tracing.py` | `tests/unit/core/memory/test_decision_events.py` | BRD-GOV-045...047 |
+
+---
+
+## 17. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD Requirement | Techspec Requirement(s) | Status |
+|-----------------|-------------------------|--------|
+| BRD-OPS-SEM-001 | MEM-SEM-001 | Mapped |
+| BRD-OPS-SEM-002 | MEM-SEM-002 | Mapped |
+| BRD-OPS-SEM-003 | MEM-SEM-003 | Mapped |
+| BRD-OPS-SEM-004 | MEM-SEM-004 | Mapped |
+| BRD-OPS-SEM-005 | MEM-SEM-005 | Mapped |
+| BRD-OPS-SEM-006 | MEM-SEM-006, MEM-SEM-007 | Mapped |
+| BRD-OPS-SEM-007 | MEM-SEM-008 | Mapped |
+| BRD-OPS-SEM-008 | MEM-SEM-009 | Mapped |
+| BRD-OPS-SEM-009 | MEM-SEM-010 | Mapped |
+| BRD-OPS-SEM-010 | MEM-SEM-002 (entity_count) | Mapped |
+| BRD-OPS-REASON-001 | MEM-REASON-001 | Mapped |
+| BRD-OPS-REASON-002 | MEM-REASON-002 | Mapped |
+| BRD-OPS-REASON-003 | MEM-REASON-003, MEM-REASON-004 | Mapped |
+| BRD-OPS-REASON-004 | MEM-REASON-005 | Mapped |
+| BRD-OPS-REASON-005 | MEM-REASON-006 | Mapped |
+| BRD-OPS-REASON-006 | MEM-REASON-007 | Mapped |
+| BRD-OPS-REASON-007 | MEM-DEC-001...003 | Mapped |
+| BRD-OPS-010...049 | MEM-SCHEMA-001...MEM-CONFIG-003 | Existing |

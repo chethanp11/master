@@ -1,9 +1,18 @@
 # Orchestration Engine Technical Specification
 
 > **Document ID**: ORC  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial release |
+| 1.1.0 | 2026-01-13 | Added §3.7 Versioning & Reproducibility, §3.8 Explicit Non-Goals, updated BRD mappings |
 
 ---
 
@@ -583,3 +592,78 @@ run lifecycle management, step execution, pause/resume mechanics, and control fl
 | ORC-SEM-001 | `core/orchestrator/semantic_phase.py` | `tests/architecture/test_semantic_isolation.py` |
 | ORC-SEM-010 | `core/contracts/semantic_schema.py` | `tests/unit/core/contracts/test_semantic_schema.py` |
 | ORC-SEM-STOP-001 | `core/orchestrator/engine.py` | `tests/architecture/test_semantic_isolation.py` |
+
+---
+
+## 17. Versioning & Reproducibility (Added: 2026-01-13)
+
+> **Source**: BRD-AUTO-005, BRD-AUTO-SEM-007, INV-5
+
+### 17.1 Determinism Requirements
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **ORC-DET-001** | [V1] Same flow + payload + config MUST produce identical execution path | MUST | 1.1 |
+| **ORC-DET-002** | [V1] Semantic envelope MUST be content-hashed for reproducibility | MUST | 1.1 |
+| **ORC-DET-003** | [V1] Run record MUST capture flow version and config snapshot | MUST | 1.1 |
+| **ORC-DET-004** | [V1] State transitions MUST be deterministic given same inputs | MUST | 1.1 |
+| **ORC-DET-005** | [V1] Branch/loop conditions MUST evaluate deterministically | MUST | 1.1 |
+
+**Implementation**: `core/orchestrator/engine.py`, `core/orchestrator/semantic_phase.py`
+
+### 17.2 Version Capture
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **ORC-VER-001** | [V1] `RunRecord` MUST include `flow_version` field | MUST | 1.1 |
+| **ORC-VER-002** | [V1] `RunRecord` MUST include `config_hash` for reproducibility | MUST | 1.1 |
+| **ORC-VER-003** | [V1] `SemanticEnvelope` MUST include `envelope_hash` (SHA-256) | MUST | 1.1 |
+| **ORC-VER-004** | [V1] Model versions used MUST be captured in step metadata | SHOULD | 1.1 |
+
+**Hash Computation**:
+```python
+def compute_envelope_hash(envelope: SemanticEnvelope) -> str:
+    """Compute deterministic hash of semantic envelope."""
+    payload = envelope.model_dump(exclude={"envelope_hash"})
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+```
+
+**Implementation**: `core/orchestrator/semantic_phase.py`, `core/contracts/run_schema.py`
+
+---
+
+## 18. Explicit Non-Goals (Added: 2026-01-13)
+
+> **The Orchestrator MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Agent-controlled execution | Violates INV-5, INV-6 | Agent decides next step |
+| Implicit state changes | Violates auditability | State changes without trace event |
+| Self-modifying flows | Violates determinism | Flow modifies itself at runtime |
+| Unbounded iteration | Violates INV-5 | Loop without max_iters |
+| Hidden branching logic | Violates explicit flows | Undocumented conditional paths |
+| Autonomous tool invocation | Violates governance | Tool runs without before_tool hook |
+
+---
+
+## 19. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD ID | Description | Techspec IDs | Ver |
+|--------|-------------|--------------|-----|
+| BRD-AUTO-SEM-001 | Mandatory semantic phase | ORC-SEM-001...004 | 1.1 |
+| BRD-AUTO-SEM-002 | Structured envelope | ORC-SEM-010...019 | 1.1 |
+| BRD-AUTO-SEM-004 | NextAction determination | ORC-SEM-020...022 | 1.1 |
+| BRD-AUTO-SEM-006 | Domain-agnostic normalization | ORC-SEM-030...035 | 1.1 |
+| BRD-AUTO-SEM-007 | Deterministic normalization | ORC-DET-001...005 | 1.1 |
+| BRD-AUTO-STOP-001 | ASK_USER pause | ORC-SEM-STOP-001...003 | 1.1 |
+| BRD-AUTO-STOP-004 | ABORT failure | ORC-SEM-STOP-004...005 | 1.1 |
+| BRD-AUTO-STOP-007 | Stop blocks steps | ORC-SEM-STOP-007 | 1.1 |
+| BRD-AUTO-040 | Workflow patterns | ORC-STEP-001, ORC-BRANCH-*, ORC-LOOP-* | 1.0 |
+| BRD-AUTO-044 | Governed iteration | ORC-LOOP-010...016 | 1.0 |
+| BRD-AUTO-045 | Stop conditions | ORC-LOOP-020...025 | 1.0 |
+| BRD-AUTO-046 | Durable iteration | ORC-LOOP-022, ORC-CTX-007 | 1.0 |
+| BRD-OPS-001 | State persistence | ORC-RUN-010...015 | 1.0 |
+| BRD-OPS-002 | Resumable workflows | ORC-RESUME-001...028 | 1.0 |
+| BRD-OPS-SEM-001 | Semantic trace events | ORC-SEM-040...043 | 1.1 |

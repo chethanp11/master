@@ -1,9 +1,16 @@
 # Gateway Technical Specification
 
 > **Document ID**: GW  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-12 | Initial V1 specification |
+| 1.1.0 | 2026-01-13 | Added: §6.1 Semantic Error Codes, §6.2 Semantic Exit Handling, §8 Explicit Non-Goals, §11 BRD Requirement Mapping |
 
 ---
 
@@ -363,6 +370,52 @@ consistent patterns for session isolation and error handling.
 
 **Implementation**: `gateway/api/routes_run.py`, `gateway/cli/main.py`
 
+### 6.1 Semantic Error Codes (Added: 2026-01-13)
+
+> **Source**: BRD-EXP-ERR-001...007, INV-4
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **GW-SEM-ERR-001** | [V1] `semantic_interpretation_failed` MUST be returned (500) when semantic phase fails to produce envelope | MUST | 1.1 |
+| **GW-SEM-ERR-002** | [V1] `semantic_confidence_too_low` MUST be returned (422) when confidence < threshold | MUST | 1.1 |
+| **GW-SEM-ERR-003** | [V1] `semantic_abort_requested` MUST be returned (422) when orchestrator exits with ABORT | MUST | 1.1 |
+| **GW-SEM-ERR-004** | [V1] `semantic_clarification_required` MUST be returned (202) when ASK_USER exit | MUST | 1.1 |
+| **GW-SEM-ERR-005** | [V1] All semantic errors MUST include `envelope_hash` in response details | MUST | 1.1 |
+| **GW-SEM-ERR-006** | [V1] `semantic_abort_requested` MUST include `AbortArtifact` in response body | MUST | 1.1 |
+| **GW-SEM-ERR-007** | [V1] `semantic_clarification_required` MUST include `ClarificationRequest` in response body | MUST | 1.1 |
+
+**Implementation**: `gateway/api/routes_run.py`
+
+### 6.2 Semantic Exit Handling (Added: 2026-01-13)
+
+> **Source**: BRD-EXP-EXIT-001...005, BRD-EXP-ASK-001...004
+
+| ID | Requirement | Level | Ver |
+|----|-------------|-------|-----|
+| **GW-SEM-EXIT-001** | [V1] ASK_USER exit MUST return HTTP 202 (Accepted) with pending input URL | MUST | 1.1 |
+| **GW-SEM-EXIT-002** | [V1] ABORT exit MUST return HTTP 422 (Unprocessable Entity) with reason | MUST | 1.1 |
+| **GW-SEM-EXIT-003** | [V1] PARTIAL_SUCCESS exit MUST return HTTP 200 with `status=partial_success` | MUST | 1.1 |
+| **GW-SEM-EXIT-004** | [V1] BUDGET_EXCEEDED exit MUST return HTTP 429 (Too Many Requests) | MUST | 1.1 |
+| **GW-SEM-EXIT-005** | [V1] All semantic exits MUST include `exit_state` field in response | MUST | 1.1 |
+
+**Semantic Exit Response Schema**:
+```json
+{
+    "run_id": "uuid",
+    "status": "running|paused|completed|failed|partial_success",
+    "exit_state": "SUCCESS|PARTIAL_SUCCESS|ASK_USER|ABORT|BUDGET_EXCEEDED",
+    "semantic": {
+        "envelope_hash": "sha256",
+        "confidence": 0.85,
+        "proposed_next_action": "CONTINUE|ASK_USER|ABORT"
+    },
+    "clarification_request": { ... },  // if ASK_USER
+    "abort_artifact": { ... }           // if ABORT
+}
+```
+
+**Implementation**: `gateway/api/routes_run.py`
+
 ---
 
 ## 7. File Handling Requirements
@@ -380,9 +433,24 @@ consistent patterns for session isolation and error handling.
 
 ---
 
-## 8. Future Considerations
+## 8. Explicit Non-Goals (Added: 2026-01-13)
 
-### 8.1 V1.1 Enhancements
+> **Gateway MUST NOT**:
+
+| Non-Goal | Rationale | Violation Example |
+|----------|-----------|-------------------|
+| Silent error suppression | All errors must be surfaced | API catches exception, returns 200 |
+| Direct orchestrator state mutation | Gateway is read-only for state | API endpoint modifies run_context |
+| Exposing raw LLM responses | Privacy and security | API returns full prompt/completion |
+| Cross-product data exposure | Product isolation enforced | List runs shows all products |
+| Bypassing governance | Gateway respects all policies | API endpoint skips approval check |
+| Client-controlled confidence | Confidence is server-determined | API accepts confidence in request |
+
+---
+
+## 9. Future Considerations
+
+### 9.1 V1.1 Enhancements
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -390,7 +458,7 @@ consistent patterns for session isolation and error handling.
 | **GW-FUTURE-002** | API versioning | `/api/v1/` prefix |
 | **GW-FUTURE-003** | Rate limiting | Per-client rate limits |
 
-### 8.2 V2 Features
+### 9.2 V2 Features
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -400,12 +468,38 @@ consistent patterns for session isolation and error handling.
 
 ---
 
-## 9. Traceability Matrix
+## 10. Traceability Matrix
 
-| Requirement | Implementation | Test |
-|-------------|----------------|------|
-| GW-API-001 | `gateway/api/http_app.py` | `tests/integration/test_http_app.py` |
-| GW-API-020 | `gateway/api/routes_run.py` | `tests/integration/test_routes_run.py` |
-| GW-CLI-001 | `gateway/cli/main.py` | `tests/integration/test_cli.py` |
-| GW-UI-001 | `gateway/ui/platform_app.py` | `tests/integration/test_ui.py` |
-| GW-ISO-001 | `gateway/api/deps.py` | `tests/unit/gateway/test_deps.py` |
+| Requirement | Implementation | Test | BRD Source |
+|-------------|----------------|------|------------|
+| GW-API-001 | `gateway/api/http_app.py` | `tests/integration/test_http_app.py` | BRD-EXP-010 |
+| GW-API-020 | `gateway/api/routes_run.py` | `tests/integration/test_routes_run.py` | BRD-EXP-020 |
+| GW-CLI-001 | `gateway/cli/main.py` | `tests/integration/test_cli.py` | BRD-EXP-030 |
+| GW-UI-001 | `gateway/ui/platform_app.py` | `tests/integration/test_ui.py` | BRD-EXP-040 |
+| GW-ISO-001 | `gateway/api/deps.py` | `tests/unit/gateway/test_deps.py` | BRD-EXP-050 |
+| GW-SEM-ERR-001...007 | `gateway/api/routes_run.py` | `tests/integration/test_semantic_errors.py` | BRD-EXP-ERR-001...007 |
+| GW-SEM-EXIT-001...005 | `gateway/api/routes_run.py` | `tests/integration/test_semantic_exits.py` | BRD-EXP-EXIT-001...005 |
+
+---
+
+## 11. BRD Requirement Mapping (Added: 2026-01-13)
+
+| BRD Requirement | Techspec Requirement(s) | Status |
+|-----------------|-------------------------|--------|
+| BRD-EXP-ERR-001 | GW-SEM-ERR-001 | Mapped |
+| BRD-EXP-ERR-002 | GW-SEM-ERR-002 | Mapped |
+| BRD-EXP-ERR-003 | GW-SEM-ERR-003 | Mapped |
+| BRD-EXP-ERR-004 | GW-SEM-ERR-004 | Mapped |
+| BRD-EXP-ERR-005 | GW-SEM-ERR-005 | Mapped |
+| BRD-EXP-ERR-006 | GW-SEM-ERR-006 | Mapped |
+| BRD-EXP-ERR-007 | GW-SEM-ERR-007 | Mapped |
+| BRD-EXP-EXIT-001 | GW-SEM-EXIT-001 | Mapped |
+| BRD-EXP-EXIT-002 | GW-SEM-EXIT-002 | Mapped |
+| BRD-EXP-EXIT-003 | GW-SEM-EXIT-003 | Mapped |
+| BRD-EXP-EXIT-004 | GW-SEM-EXIT-004 | Mapped |
+| BRD-EXP-EXIT-005 | GW-SEM-EXIT-005 | Mapped |
+| BRD-EXP-ASK-001 | GW-SEM-EXIT-001, GW-API-030 | Mapped |
+| BRD-EXP-ASK-002 | GW-SEM-ERR-007 | Mapped |
+| BRD-EXP-ASK-003 | GW-API-031 | Existing |
+| BRD-EXP-ASK-004 | GW-API-032, GW-API-033 | Existing |
+| BRD-EXP-010...050 | GW-API-*, GW-CLI-*, GW-UI-* | Existing |

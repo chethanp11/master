@@ -1,10 +1,20 @@
 # BRD: Governance & Compliance
 
 > **Document ID**: BRD-GOV  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-12 | Initial release |
+| 1.1 | 2026-01-13 | Added §3.8 Semantic Confidence Governance with INT-GOV-CONF-* requirements |
 
 ---
 
@@ -145,12 +155,51 @@ A governance framework that provides:
 
 ### 3.7 Semantic Interpretation Governance
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-GOV-060** | All semantic interpretations must be treated as hypotheses with confidence, not facts | P0 | INV-3 | Added: 2026-01-13 |
-| **BRD-GOV-061** | System must represent interpretation as multiple competing candidates where ambiguity exists | P1 | INV-3 | Added: 2026-01-13 |
-| **BRD-GOV-062** | Confidence and ambiguity must propagate into downstream artifacts, decisions, and outputs | P0 | INV-3 | Added: 2026-01-13 |
-| **BRD-GOV-063** | When ambiguity exceeds policy thresholds, execution must require HITL or halt safely | P0 | INV-3 | Added: 2026-01-13 |
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-GOV-060** | All semantic interpretations must be treated as hypotheses with confidence, not facts | P0 | INV-3 | 1.0 | Added: 2026-01-13 |
+| **BRD-GOV-061** | System must represent interpretation as multiple competing candidates where ambiguity exists | P1 | INV-3 | 1.0 | Added: 2026-01-13 |
+| **BRD-GOV-062** | Confidence and ambiguity must propagate into downstream artifacts, decisions, and outputs | P0 | INV-3 | 1.0 | Added: 2026-01-13 |
+| **BRD-GOV-063** | When ambiguity exceeds policy thresholds, execution must require HITL or halt safely | P0 | INV-3 | 1.0 | Added: 2026-01-13 |
+
+### 3.8 Semantic Confidence Governance (Added: 2026-01-13)
+
+> **Source**: [INT-GOV-CONF](../00_developer_intent/intent.md#24-semantic-confidence-governance-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-GOV-CONF-001** | Default confidence threshold must be configurable in `configs/app.yaml` | P0 | INT-GOV-CONF-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-002** | Per-product confidence threshold override must be supported in `configs/products.yaml` | P0 | INT-GOV-CONF-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-003** | Default threshold must be 0.7 (adjustable) | P1 | INT-GOV-CONF-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-004** | Confidence below threshold must trigger ASK_USER (not silent failure) | P0 | INT-GOV-CONF-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-005** | Governance hook `check_semantic_confidence` must enforce thresholds | P0 | INT-GOV-CONF-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-006** | Effective confidence is minimum of (envelope.confidence, validation.revised_confidence) | P0 | INT-GOV-CONF-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-007** | Threshold enforcement must be logged with confidence values | P1 | INT-GOV-CONF-007 | 1.1 | Added: 2026-01-13 |
+
+**Configuration (New: 2026-01-13)**:
+
+Platform Default (`configs/app.yaml`):
+```yaml
+semantic:
+  default_confidence_threshold: 0.7
+  require_semantic_phase: true
+```
+
+Per-Product Override (`configs/products.yaml`):
+```yaml
+by_product:
+  ade:
+    semantic_confidence_threshold: 0.8  # Stricter for production
+  hello_world:
+    semantic_confidence_threshold: 0.5  # More lenient for demo
+```
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Threshold is enforced | Low confidence proceeds without check |
+| Override requires explicit config | Implicit threshold changes |
+| Confidence check is governance hook | Check embedded in business logic |
 
 ---
 
@@ -190,35 +239,36 @@ A governance framework that provides:
 
 ## 6. Techspec Mapping
 
-| BRD ID | Description | Derived Techspec |
-|--------|-------------|------------------|
-| BRD-GOV-001 | Human approval | ORC-PAUSE-010...015, GOV-GATE-PLAN-* |
-| BRD-GOV-002 | Approval context | ORC-PAUSE-012 (summary, instructions) |
-| BRD-GOV-025 | Confidence-based pause | ORC-SEM-STOP-*, INT-SEM-CONF-* |
-| BRD-GOV-026 | Confidence thresholds | INT-SEM-CONF-010...020 |
-| BRD-GOV-027 | Semantic validation blocking | PROD-SEM-VAL-* |
-| BRD-GOV-003 | Approval decisions | ORC-RESUME-001...010 |
-| BRD-GOV-004 | Approval audit | ORC-RESUME-004 (resolved_by, decision) |
-| BRD-GOV-005 | Graceful pause | ORC-RUN-015...018 (PAUSED states) |
-| BRD-GOV-010 | PII redaction | GOV-SEC-030...035 |
-| BRD-GOV-011 | Credential redaction | GOV-SEC-030 (keys, tokens) |
-| BRD-GOV-012 | Automatic redaction | GOV-HOOK-010...015 |
-| BRD-GOV-020 | Tool prohibition | GOV-POL-020...022 |
-| BRD-GOV-021 | Model prohibition | GOV-POL-030...032 |
-| BRD-GOV-022 | Policy blocking | GOV-HOOK-001 (non-bypassable) |
-| BRD-GOV-030 | Budget limits | GOV-BUD-010...014 |
-| BRD-GOV-031 | Budget types | GOV-BUD-011 (tokens, calls, time) |
-| BRD-GOV-032 | Budget enforcement | GOV-HOOK-022...024 |
-| BRD-GOV-040 | Action traceability | MEM-TRACE-001...010 |
-| BRD-GOV-041 | Immutable state | ORC-RUN-004 (traced transitions) |
-| BRD-GOV-045 | Decision artifacts | GOV-DEC-ARTIFACT-* |
-| BRD-GOV-046 | Decision artifact content | GOV-DEC-CONTENT-* |
-| BRD-GOV-047 | Artifact immutability | GOV-DEC-IMMUT-* |
-| BRD-GOV-050 | Governance hooks | GOV-HOOK-001...005 |
-| BRD-GOV-060 | Semantic hypothesis | INT-SEM-PROB-* |
-| BRD-GOV-061 | Multiple candidates | INT-SEM-CAND-* |
-| BRD-GOV-062 | Confidence propagation | INT-SEM-PROP-* |
-| BRD-GOV-063 | Ambiguity escalation | INT-SEM-ESC-* |
+| BRD ID | Description | Derived Techspec | Ver |
+|--------|-------------|------------------|-----|
+| BRD-GOV-001 | Human approval | ORC-PAUSE-010...015, GOV-GATE-PLAN-* | 1.0 |
+| BRD-GOV-002 | Approval context | ORC-PAUSE-012 (summary, instructions) | 1.0 |
+| BRD-GOV-025 | Confidence-based pause | ORC-SEM-STOP-*, INT-SEM-CONF-* | 1.0 |
+| BRD-GOV-026 | Confidence thresholds | INT-SEM-CONF-010...020 | 1.0 |
+| BRD-GOV-027 | Semantic validation blocking | PROD-SEM-VAL-* | 1.0 |
+| BRD-GOV-003 | Approval decisions | ORC-RESUME-001...010 | 1.0 |
+| BRD-GOV-004 | Approval audit | ORC-RESUME-004 (resolved_by, decision) | 1.0 |
+| BRD-GOV-005 | Graceful pause | ORC-RUN-015...018 (PAUSED states) | 1.0 |
+| BRD-GOV-010 | PII redaction | GOV-SEC-030...035 | 1.0 |
+| BRD-GOV-011 | Credential redaction | GOV-SEC-030 (keys, tokens) | 1.0 |
+| BRD-GOV-012 | Automatic redaction | GOV-HOOK-010...015 | 1.0 |
+| BRD-GOV-020 | Tool prohibition | GOV-POL-020...022 | 1.0 |
+| BRD-GOV-021 | Model prohibition | GOV-POL-030...032 | 1.0 |
+| BRD-GOV-022 | Policy blocking | GOV-HOOK-001 (non-bypassable) | 1.0 |
+| BRD-GOV-030 | Budget limits | GOV-BUD-010...014 | 1.0 |
+| BRD-GOV-031 | Budget types | GOV-BUD-011 (tokens, calls, time) | 1.0 |
+| BRD-GOV-032 | Budget enforcement | GOV-HOOK-022...024 | 1.0 |
+| BRD-GOV-040 | Action traceability | MEM-TRACE-001...010 | 1.0 |
+| BRD-GOV-041 | Immutable state | ORC-RUN-004 (traced transitions) | 1.0 |
+| BRD-GOV-045 | Decision artifacts | GOV-DEC-ARTIFACT-* | 1.0 |
+| BRD-GOV-046 | Decision artifact content | GOV-DEC-CONTENT-* | 1.0 |
+| BRD-GOV-047 | Artifact immutability | GOV-DEC-IMMUT-* | 1.0 |
+| BRD-GOV-050 | Governance hooks | GOV-HOOK-001...005 | 1.0 |
+| BRD-GOV-060 | Semantic hypothesis | INT-SEM-PROB-* | 1.0 |
+| BRD-GOV-061 | Multiple candidates | INT-SEM-CAND-* | 1.0 |
+| BRD-GOV-062 | Confidence propagation | INT-SEM-PROP-* | 1.0 |
+| BRD-GOV-063 | Ambiguity escalation | INT-SEM-ESC-* | 1.0 |
+| BRD-GOV-CONF-* | Semantic confidence governance | GOV-SEM-CONF-*, GOV-HOOK-SEM-* | 1.1 |
 
 ---
 

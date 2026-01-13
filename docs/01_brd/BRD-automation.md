@@ -1,10 +1,20 @@
 # BRD: Intelligent Automation
 
 > **Document ID**: BRD-AUTO  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-12 | Initial release |
+| 1.1 | 2026-01-13 | Added §3.6 Semantic Interpretation Phase, §3.7 Product Semantic Adapter, §3.8 Stop/Pause Mechanism |
 
 ---
 
@@ -128,9 +138,91 @@ A platform that provides structured, composable, and governed AI agents that can
 | **BRD-AUTO-041** | Workflows must support iteration over collections | P0 | INT-AUTO-041 | 2026-01-12 |
 | **BRD-AUTO-042** | Workflow steps must be independently restartable | P1 | INT-AUTO-042 | 2026-01-12 |
 | **BRD-AUTO-043** | Workflows must support nested sub-workflows | P2 | INT-AUTO-043 | 2026-01-12 |
-| **BRD-AUTO-044** | Iteration must follow governed cycle (propose→gate→execute→evaluate) | P0 | INV-5 | Added: 2026-01-13 |
-| **BRD-AUTO-045** | Iteration must have explicit deterministic stop conditions | P0 | INV-5 | Added: 2026-01-13 |
-| **BRD-AUTO-046** | Iterative state must be durable and resumable across restarts | P1 | INV-5 | Added: 2026-01-13 |
+| **BRD-AUTO-044** | Iteration must follow governed cycle (propose→gate→execute→evaluate) | P0 | INV-5 | 1.0 | Added: 2026-01-13 |
+| **BRD-AUTO-045** | Iteration must have explicit deterministic stop conditions | P0 | INV-5 | 1.0 | Added: 2026-01-13 |
+| **BRD-AUTO-046** | Iterative state must be durable and resumable across restarts | P1 | INV-5 | 1.0 | Added: 2026-01-13 |
+
+### 3.6 Semantic Interpretation Phase (Added: 2026-01-13)
+
+> **Source**: [INT-AUTO-SEM](../00_developer_intent/intent.md#11-semantic-interpretation-phase-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-SEM-001** | Every orchestrator run must execute a semantic interpretation phase before step execution | P0 | INT-AUTO-SEM-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-002** | Semantic phase must interpret user intent and produce a structured envelope | P0 | INT-AUTO-SEM-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-003** | Semantic envelope must capture: intent_type, entities, constraints, confidence, ambiguities | P0 | INT-AUTO-SEM-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-004** | Semantic phase must determine next action: CONTINUE, ASK_USER, ABORT, or NEEDS_APPROVAL | P0 | INT-AUTO-SEM-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-005** | Semantic envelope must be attached to run record for traceability | P0 | INT-AUTO-SEM-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-006** | Core must provide domain-agnostic normalization rules (whitespace, deduplication, ordering) | P0 | INT-AUTO-SEM-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-007** | Normalization must be deterministic and reproducible | P0 | INT-AUTO-SEM-007 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-008** | Entities must be deduplicated (same type+value → single entity with highest confidence) | P1 | INT-AUTO-SEM-008 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-009** | Constraints must be merged deterministically with stable key ordering | P1 | INT-AUTO-SEM-009 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-010** | Type coercion must be supported for schema-declared types (string→int, string→date) | P1 | INT-AUTO-SEM-010 | 1.1 | Added: 2026-01-13 |
+
+**Contracts (New: 2026-01-13)**:
+| Contract | Purpose | Fields |
+|----------|---------|--------|
+| `SemanticEnvelope` | Structured interpretation result | raw_input, normalized_input, product_id, intent_type, entities, constraints, confidence, ambiguities, proposed_next_action |
+| `NextAction` enum | Flow control decision | CONTINUE, ASK_USER, ABORT, NEEDS_APPROVAL |
+| `ValidationResult` | Domain validation outcome | is_valid, missing_fields, violations, revised_confidence, clarifying_question |
+| `SemanticContext` | Input to adapters | raw_input, payload, product_config |
+| `Entity` | Extracted entity | type, value, confidence, start_pos, end_pos |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Semantic phase is mandatory | Steps execute without interpretation |
+| Normalization is domain-agnostic | Core normalization includes business rules |
+| Envelope is immutable once created | Envelope modified after semantic phase |
+| Confidence is bounded 0.0-1.0 | Confidence value outside range |
+
+### 3.7 Product Semantic Adapter (Added: 2026-01-13)
+
+> **Source**: [INT-AUTO-ADAPT](../00_developer_intent/intent.md#12-product-semantic-adapter-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-ADAPT-001** | Products must be able to provide custom semantic interpretation via adapter interface | P0 | INT-AUTO-ADAPT-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-002** | Adapter interface must define `interpret(context) → SemanticEnvelope` method | P0 | INT-AUTO-ADAPT-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-003** | Adapter interface must define `validate(envelope, context) → ValidationResult` method | P0 | INT-AUTO-ADAPT-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-004** | Default adapter must be provided for products without custom implementation | P0 | INT-AUTO-ADAPT-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-005** | Default adapter must return passthrough envelope with confidence=1.0 | P1 | INT-AUTO-ADAPT-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-006** | Adapters must be discovered from `products/<name>/semantic.py` | P1 | INT-AUTO-ADAPT-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-007** | Adapters must be resolved via ProductRouter, not direct import | P0 | INT-AUTO-ADAPT-007 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-008** | Product adapters must NOT import from `core/orchestrator/*` | P0 | INT-AUTO-ADAPT-008 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-009** | Core orchestrator must NOT import from `products/*` | P0 | INT-AUTO-ADAPT-009 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-ADAPT-010** | Adapter execution must have timeout with fallback to default | P1 | INT-AUTO-ADAPT-010 | 1.1 | Added: 2026-01-13 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Adapters are pure functions | Adapter calls external API |
+| Adapters don't execute tools | Adapter triggers tool execution |
+| Adapters don't access other products | Adapter reads another product's config |
+| Isolation is bidirectional | Core imports product, or product imports core orchestrator |
+
+### 3.8 Stop/Pause Mechanism (Added: 2026-01-13)
+
+> **Source**: [INT-AUTO-STOP](../00_developer_intent/intent.md#13-stoppause-mechanism-added-2026-01-13)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-STOP-001** | ASK_USER must pause the run and return a structured clarification response | P0 | INT-AUTO-STOP-001 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-002** | Clarification response must include: question, ambiguities, original confidence, context | P0 | INT-AUTO-STOP-002 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-003** | Run status must be PAUSED_WAITING_FOR_USER during clarification | P0 | INT-AUTO-STOP-003 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-004** | ABORT must fail the run with structured error response | P0 | INT-AUTO-STOP-004 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-005** | Abort error must include: error_code=semantic_abort, reason, violations, ambiguities | P0 | INT-AUTO-STOP-005 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-006** | Run status must be FAILED after ABORT | P0 | INT-AUTO-STOP-006 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-007** | ASK_USER and ABORT must prevent any step execution | P0 | INT-AUTO-STOP-007 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-008** | Trace event `semantic_stop_issued` must be emitted on stop | P0 | INT-AUTO-STOP-008 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-STOP-009** | Paused runs must be resumable with user-provided clarification | P0 | INT-AUTO-STOP-009 | 1.1 | Added: 2026-01-13 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Stop blocks all steps | Step executes after ASK_USER |
+| Abort is terminal | Run continues after ABORT |
+| Clarification is structured | Free-form error message only |
 
 ---
 
@@ -166,28 +258,31 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ## 6. Techspec Mapping
 
-| BRD ID | Description | Derived Techspec |
-|--------|-------------|------------------|
-| BRD-AUTO-001 | Multi-step reasoning | AGT-BASE-001...005, INT-RL-001...010 |
-| BRD-AUTO-002 | Evidence-backed decisions | AGT-BASE-020...022, TOOL-EXEC-010...012 |
-| BRD-AUTO-003 | Agent composition | AGT-BASE-010, REG-001...005 |
-| BRD-AUTO-010 | Tool discoverability | TOOL-BASE-010...015, TOOL-DESC-001...005 |
-| BRD-AUTO-011 | Typed tool interfaces | TOOL-BASE-001...005 |
-| BRD-AUTO-020 | Automatic tool selection | INT-ADV-001...005 (ToolSelector) |
-| BRD-AUTO-021 | Automatic agent selection | INT-ADV-010...015 (AgentSelector) |
-| BRD-AUTO-022 | Gap identification | INT-ADV-020...025 (GapFinder) |
-| BRD-AUTO-025 | Semantic interpretation | ORC-SEM-*, INT-SEM-* |
-| BRD-AUTO-026 | Input normalization | ORC-SEM-030...040 |
-| BRD-AUTO-027 | Confidence propagation | INT-SEM-CONF-* |
-| BRD-AUTO-030 | Structured reasoning | INT-RL-010...030 |
-| BRD-AUTO-031 | Critic evaluation | INT-CRIT-001...015 |
-| BRD-AUTO-034 | Reasoning observability | MEM-TRACE-REASON-* |
-| BRD-AUTO-035 | Reasoning traces | MEM-TRACE-020...025 |
-| BRD-AUTO-036 | Reasoning artifacts | INT-RL-ARTIFACT-* |
-| BRD-AUTO-040 | Workflow patterns | ORC-STEP-001...010, ORC-BRANCH-*, ORC-LOOP-* |
-| BRD-AUTO-044 | Governed iteration | ORC-LOOP-GOV-* |
-| BRD-AUTO-045 | Stop conditions | ORC-LOOP-STOP-* |
-| BRD-AUTO-046 | Durable iteration | ORC-LOOP-STATE-* |
+| BRD ID | Description | Derived Techspec | Ver |
+|--------|-------------|------------------|-----|
+| BRD-AUTO-001 | Multi-step reasoning | AGT-BASE-001...005, INT-RL-001...010 | 1.0 |
+| BRD-AUTO-002 | Evidence-backed decisions | AGT-BASE-020...022, TOOL-EXEC-010...012 | 1.0 |
+| BRD-AUTO-003 | Agent composition | AGT-BASE-010, REG-001...005 | 1.0 |
+| BRD-AUTO-010 | Tool discoverability | TOOL-BASE-010...015, TOOL-DESC-001...005 | 1.0 |
+| BRD-AUTO-011 | Typed tool interfaces | TOOL-BASE-001...005 | 1.0 |
+| BRD-AUTO-020 | Automatic tool selection | INT-ADV-001...005 (ToolSelector) | 1.0 |
+| BRD-AUTO-021 | Automatic agent selection | INT-ADV-010...015 (AgentSelector) | 1.0 |
+| BRD-AUTO-022 | Gap identification | INT-ADV-020...025 (GapFinder) | 1.0 |
+| BRD-AUTO-025 | Semantic interpretation | ORC-SEM-*, INT-SEM-* | 1.0 |
+| BRD-AUTO-026 | Input normalization | ORC-SEM-030...040 | 1.0 |
+| BRD-AUTO-027 | Confidence propagation | INT-SEM-CONF-* | 1.0 |
+| BRD-AUTO-030 | Structured reasoning | INT-RL-010...030 | 1.0 |
+| BRD-AUTO-031 | Critic evaluation | INT-CRIT-001...015 | 1.0 |
+| BRD-AUTO-034 | Reasoning observability | MEM-TRACE-REASON-* | 1.0 |
+| BRD-AUTO-035 | Reasoning traces | MEM-TRACE-020...025 | 1.0 |
+| BRD-AUTO-036 | Reasoning artifacts | INT-RL-ARTIFACT-* | 1.0 |
+| BRD-AUTO-040 | Workflow patterns | ORC-STEP-001...010, ORC-BRANCH-*, ORC-LOOP-* | 1.0 |
+| BRD-AUTO-044 | Governed iteration | ORC-LOOP-GOV-* | 1.0 |
+| BRD-AUTO-045 | Stop conditions | ORC-LOOP-STOP-* | 1.0 |
+| BRD-AUTO-046 | Durable iteration | ORC-LOOP-STATE-* | 1.0 |
+| BRD-AUTO-SEM-* | Semantic interpretation phase | ORC-SEM-001...010, SEM-ENV-* | 1.1 |
+| BRD-AUTO-ADAPT-* | Product semantic adapter | PROD-SEM-ADAPT-*, ORC-SEM-ADAPTER-* | 1.1 |
+| BRD-AUTO-STOP-* | Stop/pause mechanism | ORC-SEM-STOP-*, ORC-PAUSE-SEM-* | 1.1 |
 
 ---
 
@@ -240,12 +335,15 @@ A platform that provides structured, composable, and governed AI agents that can
 
 > **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
 
-| Law | Implication |
-|-----|-------------|
-| Agents never execute tools | All tool execution via ToolExecutor only |
-| Tools never call models | Tools are deterministic, no LLM calls |
-| Governance hooks are mandatory | Every agent action passes through governance |
-| Flows are explicit | No implicit execution paths; YAML-defined |
+| Law | Implication | Ver |
+|-----|-------------|-----|
+| Agents never execute tools | All tool execution via ToolExecutor only | 1.0 |
+| Tools never call models | Tools are deterministic, no LLM calls | 1.0 |
+| Governance hooks are mandatory | Every agent action passes through governance | 1.0 |
+| Flows are explicit | No implicit execution paths; YAML-defined | 1.0 |
+| Semantic phase is mandatory | Steps execute only after interpretation | 1.1 |
+| Stop blocks all steps | ASK_USER/ABORT prevent any step execution | 1.1 |
+| Product adapters are isolated | No cross-layer imports between core and products | 1.1 |
 
 ---
 
