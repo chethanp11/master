@@ -10,15 +10,13 @@
 
 ## Purpose
 
-This document captures the original developer intent behind MASTER. It is the seed from which the Vision, BRDs, and all downstream specifications were derived.
+This document captures the requirements that drive MASTER's Business Requirement Documents (BRDs). Each intent point (INT-*) and invariant (INV-*) maps directly to BRD requirements.
 
-**Developer Intent is the only required manual input. Everything else flows from here.**
+For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ---
 
 ## Document Structure
-
-This intent document is organized to map directly to Business Requirement Documents:
 
 | Intent Section | Maps To | Theme |
 |----------------|---------|-------|
@@ -27,49 +25,14 @@ This intent document is organized to map directly to Business Requirement Docume
 | [§2 INT-GOV](#2-governance--compliance-int-gov) | [BRD-governance.md](../01_brd/BRD-governance.md) | Approval, security, audit, budget |
 | [§3 INT-EXP](#3-developer--user-experience-int-exp) | [BRD-experience.md](../01_brd/BRD-experience.md) | API, CLI, UI, products |
 | [§4 INT-OPS](#4-operational-excellence-int-ops) | [BRD-operations.md](../01_brd/BRD-operations.md) | Persistence, observability, quality |
-| [§5 INT-LIFECYCLE](#5-developer-intent-lifecycle-int-lifecycle) | — | Ownership, evolution, feedback |
-| [§6 INT-FACTORY](#6-product-factory-model-int-factory) | — | Intent-driven product creation |
-
----
-
-## The Problem We're Solving
-
-### Industry Pain Points
-
-We observed organizations struggling with AI automation because:
-
-1. **AI agents are unpredictable** — Autonomous agents take actions with serious, sometimes irreversible consequences. No one knows what they'll do next.
-
-2. **Building from scratch is expensive** — Every team reinvents orchestration, governance, and observability. Senior engineers spend months on plumbing instead of domain problems.
-
-3. **Governance is an afterthought** — Security, compliance, and audit requirements are bolted on late, creating friction and gaps.
-
-4. **Intelligence is shallow or unsafe** — LLMs either have too little control (prompt-only) or too much (autonomous execution).
-
-5. **Products drift apart** — Without shared infrastructure, each product develops its own patterns. Knowledge doesn't transfer. Maintenance multiplies.
-
-### What Doesn't Exist Today
-
-There is no framework that:
-- Provides **governed AI execution** where LLMs advise but never control
-- Enables **rapid product creation** without rebuilding infrastructure
-- Enforces **determinism at runtime** for reproducibility and audit
-- Supports **enterprise governance** (approval flows, PII redaction, budgets) by default
-- Generates **complete audit trails** automatically
-
-### Core Intent Statement
-
-> **Build a thick, governed, deterministic execution core so that thin domain products can be created, evolved, and operated primarily from Developer Intent.**
-
-### The One-Liner
-
-> MASTER is an enterprise-grade, AI-native framework that keeps runtime control in software while letting LLMs provide advisory intelligence.
+| [§5 INT-LIFECYCLE](#5-developer-intent-lifecycle-int-lifecycle) | All BRDs | Ownership, evolution, feedback |
+| [§6 INT-FACTORY](#6-product-factory-model-int-factory) | All BRDs | Intent-driven product creation |
 
 ---
 
 # Architecture Invariants
 
-> **These are non-negotiable principles that force all BRDs, specs, and code to align. They are architecture laws stated in human language.**
+> **Non-negotiable principles that force all BRDs, specs, and code to align.**
 
 ---
 
@@ -196,9 +159,6 @@ There is no framework that:
 
 ## 1.1 Agent Capabilities
 
-### Problem
-AI agents in most systems are unpredictable—they decide what to do, when to do it, and can take irreversible actions without oversight.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -222,9 +182,6 @@ AI agents in most systems are unpredictable—they decide what to do, when to do
 
 ## 1.2 Tool Ecosystem
 
-### Problem
-Tools in most systems are opaque—unclear capabilities, untyped interfaces, no evidence of execution.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -247,9 +204,6 @@ Tools in most systems are opaque—unclear capabilities, untyped interfaces, no 
 
 ## 1.3 Intelligence Layer
 
-### Problem
-LLMs are either given too little control (prompt-only) or too much (autonomous execution).
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -263,21 +217,9 @@ LLMs are either given too little control (prompt-only) or too much (autonomous e
 | **INT-AUTO-026** | System must normalize and validate input before acting | Garbage in, garbage out must be prevented |
 | **INT-AUTO-027** | System must express interpretation confidence and request clarification when uncertain | Low confidence should trigger human involvement |
 
-### Design Decision
-
-**Intelligence lives in models, control lives in software.**
-
-- Agents are advisory only — they propose, never execute
-- Orchestrator owns all execution decisions
-- Tools cannot call LLMs
-- Model calls are centralized and policy-checked
-
 ---
 
 ## 1.4 Reasoning Quality
-
-### Problem
-LLM reasoning is often opaque, single-pass, and unchecked.
 
 ### Intent
 
@@ -292,9 +234,6 @@ LLM reasoning is often opaque, single-pass, and unchecked.
 
 ## 1.5 Workflow Execution
 
-### Problem
-Workflow engines are either too rigid (can't handle AI) or too flexible (unpredictable).
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -304,15 +243,6 @@ Workflow engines are either too rigid (can't handle AI) or too flexible (unpredi
 | **INT-AUTO-042** | Workflow steps must be independently restartable | Failure recovery without full reruns |
 | **INT-AUTO-043** | Workflows must support nested sub-workflows | Complex composition from simple flows |
 
-### Design Decision
-
-**Determinism is mandatory at runtime.**
-
-- Flows define explicit execution paths
-- No dynamic flow mutation
-- Same inputs produce same execution
-- Budgets enforced before execution
-
 ---
 
 # 2. Governance & Compliance (INT-GOV)
@@ -320,9 +250,6 @@ Workflow engines are either too rigid (can't handle AI) or too flexible (unpredi
 > **Maps to**: [BRD-governance.md](../01_brd/BRD-governance.md)
 
 ## 2.1 Human Oversight
-
-### Problem
-AI systems take actions with serious consequences without human verification.
 
 ### Intent
 
@@ -338,9 +265,6 @@ AI systems take actions with serious consequences without human verification.
 ---
 
 ## 2.2 Security & Privacy
-
-### Problem
-Sensitive data leaks into logs, traces, and outputs without detection.
 
 ### Intent
 
@@ -364,9 +288,6 @@ Sensitive data leaks into logs, traces, and outputs without detection.
 
 ## 2.3 Policy Enforcement
 
-### Problem
-Governance is advisory—policies warn but don't block.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -380,15 +301,6 @@ Governance is advisory—policies warn but don't block.
 | **INT-GOV-026** | Confidence thresholds must be configurable per product | Domain-appropriate sensitivity |
 | **INT-GOV-027** | Semantic validation failures must block execution | Fail-safe behavior |
 
-### Design Decision
-
-**Governance is built-in, not bolted on.**
-
-- Hooks at every lifecycle point
-- No bypass mechanism exists
-- Fail-closed on policy violations
-- Automatic PII redaction
-
 ### Constraints (Non-Negotiable)
 
 | Constraint | Violation Example |
@@ -400,9 +312,6 @@ Governance is advisory—policies warn but don't block.
 ---
 
 ## 2.4 Cost Controls
-
-### Problem
-AI systems can consume unbounded resources without warning.
 
 ### Intent
 
@@ -417,9 +326,6 @@ AI systems can consume unbounded resources without warning.
 ---
 
 ## 2.5 Audit & Traceability
-
-### Problem
-AI decisions are opaque—no one knows why they happened.
 
 ### Intent
 
@@ -439,9 +345,6 @@ AI decisions are opaque—no one knows why they happened.
 
 ## 3.1 API Experience
 
-### Problem
-AI platforms have inconsistent, undocumented APIs.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -458,9 +361,6 @@ AI platforms have inconsistent, undocumented APIs.
 
 ## 3.2 CLI Experience
 
-### Problem
-Operators need scriptable interfaces, not just GUIs.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -474,9 +374,6 @@ Operators need scriptable interfaces, not just GUIs.
 ---
 
 ## 3.3 UI Experience
-
-### Problem
-Non-technical users need visual interfaces.
 
 ### Intent
 
@@ -494,9 +391,6 @@ Non-technical users need visual interfaces.
 
 ## 3.4 Product System
 
-### Problem
-Building new products takes weeks of infrastructure work.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -510,9 +404,6 @@ Building new products takes weeks of infrastructure work.
 ---
 
 ## 3.5 Product Isolation
-
-### Problem
-Multi-product deployments have security and reliability risks.
 
 ### Intent
 
@@ -539,9 +430,6 @@ Multi-product deployments have security and reliability risks.
 
 ## 4.1 State Persistence
 
-### Problem
-AI workflows lose state on restart, causing lost work.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -564,9 +452,6 @@ AI workflows lose state on restart, causing lost work.
 
 ## 4.2 Observability
 
-### Problem
-AI systems fail with opaque errors that are impossible to debug.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -582,9 +467,6 @@ AI systems fail with opaque errors that are impossible to debug.
 
 ## 4.3 Performance
 
-### Problem
-AI systems are slow and unpredictable.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -597,9 +479,6 @@ AI systems are slow and unpredictable.
 ---
 
 ## 4.4 Quality Assurance
-
-### Problem
-AI systems are hard to test and regressions are common.
 
 ### Intent
 
@@ -615,9 +494,6 @@ AI systems are hard to test and regressions are common.
 
 ## 4.5 Debugging Support
 
-### Problem
-When things fail, no one knows why.
-
 ### Intent
 
 | ID | Intent | Rationale |
@@ -632,12 +508,7 @@ When things fail, no one knows why.
 
 # 5. Developer Intent Lifecycle (INT-LIFECYCLE)
 
-> **This section addresses ownership, evolution, and feedback governance**
-
 ## 5.1 Intent Ownership & Evolution
-
-### Problem
-Without clear ownership, intent documents drift, become stale, or get bypassed.
 
 ### Intent
 
@@ -649,29 +520,9 @@ Without clear ownership, intent documents drift, become stale, or get bypassed.
 | **INT-LIFECYCLE-004** | Intent updates must be versioned and reviewed | Change control |
 | **INT-LIFECYCLE-005** | Intent conflicts must have explicit resolution rules | Prevent deadlock |
 
-### Ownership Model
-
-| Actor | Owns | Cannot Modify |
-|-------|------|---------------|
-| Framework Developer | Framework Intent, Vision, Framework BRDs | Product Intent |
-| Product Developer | Product Intent, Product BRDs | Framework Intent |
-| End User | Feedback submissions only | Any Intent |
-
-### Evolution Rules
-
-| Change Type | Process |
-|-------------|---------|
-| Typo / clarification | Direct commit with review |
-| New intent point | PR with rationale |
-| Constraint change | RFC with stakeholder approval |
-| Constraint removal | Requires Framework Developer approval |
-
 ---
 
 ## 5.2 User Feedback Handling
-
-### Problem
-User feedback often bypasses the intent→BRD→spec pipeline, causing governance gaps.
 
 ### Intent
 
@@ -683,30 +534,9 @@ User feedback often bypasses the intent→BRD→spec pipeline, causing governanc
 | **INT-LIFECYCLE-013** | Bugs and enhancements have different promotion rules | Different urgency levels |
 | **INT-LIFECYCLE-014** | Framework gaps must escalate to Framework Developer | Clear escalation path |
 
-### Feedback vs Intent
-
-| Type | Storage | Promotion Path | Owner |
-|------|---------|----------------|-------|
-| User Feedback | `developer_intent/feedback/` | Review → Intent → BRD | Product Developer |
-| Bug Report | Issue tracker | Fast-track if critical | Product Developer |
-| Enhancement Request | `developer_intent/feedback/` | Prioritize → Intent → BRD | Product Developer |
-| Framework Gap | `developer_intent/feedback/` | Escalate → Framework Intent | Framework Developer |
-
-### Promotion Rules
-
-| Feedback Type | Fast-Track? | Requires |
-|---------------|-------------|----------|
-| Critical bug | Yes | Root cause analysis |
-| Non-critical bug | No | Normal sprint planning |
-| Enhancement | No | Business case |
-| Framework gap | No | Framework Developer approval |
-
 ---
 
 ## 5.3 Intent-to-BRD Mapping
-
-### Problem
-Without explicit mapping, intent points get lost in translation.
 
 ### Intent
 
@@ -717,25 +547,11 @@ Without explicit mapping, intent points get lost in translation.
 | **INT-LIFECYCLE-022** | Unmapped intent points are gaps | Coverage validation |
 | **INT-LIFECYCLE-023** | BRD requirements without intent are suspect | Prevent scope creep |
 
-### Mapping Table
-
-| Intent Section | BRD Document | Coverage |
-|----------------|--------------|----------|
-| INT-AUTO-* | BRD-automation.md | Agents, tools, reasoning |
-| INT-GOV-* | BRD-governance.md | Approval, security, audit |
-| INT-EXP-* | BRD-experience.md | API, CLI, UI, products |
-| INT-OPS-* | BRD-operations.md | Persistence, observability |
-
 ---
 
 # 6. Product Factory Model (INT-FACTORY)
 
-> **This section addresses intent-driven product creation, framework asymmetry, and intelligence strategy**
-
 ## 6.1 MASTER as Product Factory
-
-### Problem
-Organizations build AI products from scratch, duplicating infrastructure and patterns.
 
 ### Intent
 
@@ -747,32 +563,9 @@ Organizations build AI products from scratch, duplicating infrastructure and pat
 | **INT-FACTORY-004** | Products must focus on domain logic only | No infrastructure burden |
 | **INT-FACTORY-005** | Products must be evolvable via intent updates | Safe evolution |
 
-### The Factory Model
-
-```
-Developer Intent (input)
-    ↓ [AI-assisted]
-Business Requirements (BRD)
-    ↓ [AI-assisted]
-Technical Specifications
-    ↓ [AI-assisted]
-Implementation Plan + Prompts
-    ↓ [AI-assisted]
-Code Generation
-    ↓ [AI-assisted]
-System Design Docs
-    ↓
-Deployment
-```
-
-**Key Insight**: Developer Intent is the only manual input. Everything else is AI-assisted but human-reviewed.
-
 ---
 
 ## 6.2 Framework vs Product Asymmetry
-
-### Problem
-Without clear boundaries, products duplicate framework responsibilities.
 
 ### Intent
 
@@ -784,36 +577,9 @@ Without clear boundaries, products duplicate framework responsibilities.
 | **INT-FACTORY-013** | Products define what, framework defines how | Clear separation |
 | **INT-FACTORY-014** | Framework provides 90% of functionality, products add 10% | Thick core, thin products |
 
-### Boundary Definition
-
-| Responsibility | Owner | Products Can... |
-|----------------|-------|-----------------|
-| Orchestration engine | Framework | Use, not modify |
-| Memory & persistence | Framework | Use, not modify |
-| Governance hooks | Framework | Configure, not bypass |
-| Model routing | Framework | Use, not bypass |
-| Observability | Framework | Use, not modify |
-| Domain flows | Product | Define |
-| Domain agents | Product | Define |
-| Domain tools | Product | Define |
-| Domain schemas | Product | Define |
-
-### Framework vs Product
-
-| Aspect | Framework | Product |
-|--------|-----------|---------|
-| Evolution frequency | Rare (quarterly) | Frequent (weekly) |
-| Review rigor | High (RFC) | Normal (PR) |
-| Blast radius | All products | Single product |
-| Owner | Framework Developer | Product Developer |
-| Test coverage | 100% critical paths | ≥80% |
-
 ---
 
 ## 6.3 Success and Failure Smells
-
-### Problem
-Metrics can look green while the system drifts from its intent.
 
 ### Intent
 
@@ -823,49 +589,9 @@ Metrics can look green while the system drifts from its intent.
 | **INT-FACTORY-021** | Smells must be checked during architecture reviews | Early detection |
 | **INT-FACTORY-022** | Smell detection must trigger design review | Corrective action |
 
-### Success Smells ✅
-
-These indicate MASTER is working as intended:
-
-| Smell | Indicates |
-|-------|-----------|
-| New product ships in < 1 day | Factory model working |
-| Product code contains zero orchestration logic | Thick/thin boundary maintained |
-| All agent outputs have evidence_refs | Evidence-first culture |
-| Governance hooks never bypassed | Security posture intact |
-| Product failures don't cascade | Isolation working |
-| Intent→BRD→Spec traceability is complete | Lifecycle discipline maintained |
-| End users trust AI outputs | Transparency working |
-
-### Failure Smells 🚨
-
-These indicate MASTER has failed or is failing:
-
-| Smell | Indicates |
-|-------|-----------|
-| Products duplicating orchestration logic | Framework is missing capability |
-| Runtime autonomy increasing | Governance discipline eroding |
-| PII found in logs | Security regression |
-| Agent outputs missing evidence | Quality regression |
-| Products accessing each other's data | Isolation breach |
-| BRD requirements without intent source | Scope creep |
-| "We need to bypass governance for this" | Culture problem |
-| > 1 week to ship new product | Framework is too thin |
-
-### Response to Failure Smells
-
-| Smell Severity | Response |
-|----------------|----------|
-| Isolated incident | Root cause analysis, fix |
-| Pattern emerging | Design review, framework update |
-| Systemic | Architecture review, intent update |
-
 ---
 
 ## 6.4 Design-Time vs Runtime Intelligence
-
-### Problem
-Without explicit strategy, AI usage becomes inconsistent and unsafe.
 
 ### Intent
 
@@ -878,83 +604,28 @@ Without explicit strategy, AI usage becomes inconsistent and unsafe.
 | **INT-FACTORY-034** | AI can generate system design from code | Keep docs current |
 | **INT-FACTORY-035** | Runtime AI is advisory only, never autonomous | Human control preserved |
 
-### Intelligence Allocation
-
-| Phase | AI Role | Human Role |
-|-------|---------|------------|
-| Intent → BRD | Generate draft | Review, approve |
-| BRD → Spec | Derive requirements | Review, approve |
-| Spec → Code | Generate implementation | Review, test, approve |
-| Code → Docs | Generate documentation | Review, approve |
-| Runtime | Advise, propose | Decide, execute |
-
-### The Safety Argument
-
-**Design-time intelligence** is safe because:
-- Human reviews all outputs
-- Iteration is cheap (change docs, regenerate)
-- No production impact until deployment
-- Full traceability from intent to code
-
-**Runtime autonomy** is dangerous because:
-- Actions may be irreversible
-- Speed prevents human review
-- Failures affect production
-- Traceability is harder
-
-**Therefore**: Maximize design-time intelligence, minimize runtime autonomy.
-
 ---
 
-# 7. Target Users
+# 7. Framework Laws
 
-## 7.1 Primary: Product Builders
+> **What can never happen in MASTER.**
 
-Engineers who build AI-powered products on MASTER.
-
-**They need:**
-- Clear contracts for agents, tools, flows
-- Fast scaffolding and patterns
-- Isolation from other products
-
-**They get:**
-- Ship products in days, not months
-- Focus on domain, not infrastructure
-- Confidence in governance
-
-## 7.2 Secondary: Compliance & Security
-
-Risk officers, auditors, security engineers.
-
-**They need:**
-- Proof that AI operates within boundaries
-- Complete audit trails
-- PII protection
-
-**They get:**
-- Automatic compliance
-- Zero manual intervention
-- Full traceability
-
-## 7.3 Tertiary: Platform Operators
-
-SRE teams, platform administrators.
-
-**They need:**
-- Visibility into system behavior
-- Reliable operation
-- Debuggability
-
-**They get:**
-- Complete observability
-- State persistence
-- Self-service debugging
+| Law | Violation Example |
+|-----|-------------------|
+| Agents never execute tools | Agent calls tool directly |
+| Tools never call models | Tool makes LLM API call |
+| Governance hooks are mandatory | Hook is bypassed or disabled |
+| State transitions are traced | State changes without event |
+| Budgets are enforced | Limits exceeded without halt |
+| Products are isolated | Product accesses another's data |
+| PII is never logged | Sensitive data in traces |
+| Flows are explicit | Implicit execution path |
+| Intent precedes BRD | BRD created without intent source |
+| Feedback is not intent | User request treated as requirement |
 
 ---
 
 # 8. Acceptance Criteria
-
-MASTER is successful when:
 
 | Criterion | Target | Measurement |
 |-----------|--------|-------------|
@@ -969,50 +640,12 @@ MASTER is successful when:
 
 ---
 
-# 9. What We're NOT Building
-
-| Non-Goal | Why |
-|----------|-----|
-| AI agent playground | We want control, not chaos |
-| Low-code builder | Developers write code within constraints |
-| Model hosting | Use external providers (OpenAI, Anthropic) |
-| General workflow engine | Optimized for agentic AI specifically |
-| Autonomous runtime | Human oversight is always possible |
-| Product-specific platform | Framework is domain-agnostic |
-
----
-
-# 10. Framework Laws (What Can Never Happen)
-
-| Law | Violation |
-|-----|-----------|
-| Agents never execute tools | Agent calls tool directly |
-| Tools never call models | Tool makes LLM API call |
-| Governance hooks are mandatory | Hook is bypassed or disabled |
-| State transitions are traced | State changes without event |
-| Budgets are enforced | Limits exceeded without halt |
-| Products are isolated | Product accesses another's data |
-| PII is never logged | Sensitive data in traces |
-| Flows are explicit | Implicit execution path |
-| Intent precedes BRD | BRD created without intent source |
-| Feedback is not intent | User request treated as requirement |
-
----
-
-# 11. Derived Documents
-
-This intent document drives:
+# 9. Derived Documents
 
 | Document | Derivation |
 |----------|------------|
-| [Vision.md](Vision.md) | Expands intent into framework philosophy |
+| [Vision.md](Vision.md) | Framework philosophy and architecture |
 | [BRD-automation.md](../01_brd/BRD-automation.md) | INT-AUTO-* → BRD-AUTO-* |
 | [BRD-governance.md](../01_brd/BRD-governance.md) | INT-GOV-* → BRD-GOV-* |
 | [BRD-experience.md](../01_brd/BRD-experience.md) | INT-EXP-* → BRD-EXP-* |
 | [BRD-operations.md](../01_brd/BRD-operations.md) | INT-OPS-* → BRD-OPS-* |
-
----
-
-# 12. Summary Statement
-
-> **We are building MASTER because enterprises need a way to deploy AI automation that is governed, deterministic, and auditable—without sacrificing the intelligence that LLMs provide. Products should be thin and domain-focused. The framework should be thick and handle everything else. Developer Intent should drive the entire lifecycle. Code is a generated artifact, not the source of truth. Design-time intelligence is preferred over runtime autonomy.**

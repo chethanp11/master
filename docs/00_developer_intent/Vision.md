@@ -1,9 +1,46 @@
-# MASTER Framework — Developer Intent
+# MASTER Framework — Vision
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
 
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
+
+---
+
+## Purpose
+
+This document describes the MASTER framework philosophy, architecture, actors, and lifecycle process. For specific requirements that drive BRDs, see [intent.md](intent.md).
+
+---
+
+## The Problem We're Solving
+
+### Industry Pain Points
+
+Organizations struggle with AI automation because:
+
+1. **AI agents are unpredictable** — Autonomous agents take actions with serious, sometimes irreversible consequences. No one knows what they'll do next.
+
+2. **Building from scratch is expensive** — Every team reinvents orchestration, governance, and observability. Senior engineers spend months on plumbing instead of domain problems.
+
+3. **Governance is an afterthought** — Security, compliance, and audit requirements are bolted on late, creating friction and gaps.
+
+4. **Intelligence is shallow or unsafe** — LLMs either have too little control (prompt-only) or too much (autonomous execution).
+
+5. **Products drift apart** — Without shared infrastructure, each product develops its own patterns. Knowledge doesn't transfer. Maintenance multiplies.
+
+### What Doesn't Exist Today
+
+There is no framework that:
+- Provides **governed AI execution** where LLMs advise but never control
+- Enables **rapid product creation** without rebuilding infrastructure
+- Enforces **determinism at runtime** for reproducibility and audit
+- Supports **enterprise governance** (approval flows, PII redaction, budgets) by default
+- Generates **complete audit trails** automatically
+
+### The One-Liner
+
+> MASTER is an enterprise-grade, AI-native framework that keeps runtime control in software while letting LLMs provide advisory intelligence.
 
 ---
 
@@ -444,13 +481,92 @@ Intent → BRD → Specs → Implementation Plan → Code → System Design
 
 ---
 
-## 11. One-Sentence Summary
+## 11. Target Users
+
+### Primary: Product Builders
+
+Engineers who build AI-powered products on MASTER.
+
+**They need:**
+- Clear contracts for agents, tools, flows
+- Fast scaffolding and patterns
+- Isolation from other products
+
+**They get:**
+- Ship products in days, not months
+- Focus on domain, not infrastructure
+- Confidence in governance
+
+### Secondary: Compliance & Security
+
+Risk officers, auditors, security engineers.
+
+**They need:**
+- Proof that AI operates within boundaries
+- Complete audit trails
+- PII protection
+
+**They get:**
+- Automatic compliance
+- Zero manual intervention
+- Full traceability
+
+### Tertiary: Platform Operators
+
+SRE teams, platform administrators.
+
+**They need:**
+- Visibility into system behavior
+- Reliable operation
+- Debuggability
+
+**They get:**
+- Complete observability
+- State persistence
+- Self-service debugging
+
+---
+
+## 12. Success and Failure Indicators
+
+### Success Smells ✅
+
+These indicate MASTER is working as intended:
+
+| Smell | Indicates |
+|-------|-----------|
+| New product ships in < 1 day | Factory model working |
+| Product code contains zero orchestration logic | Thick/thin boundary maintained |
+| All agent outputs have evidence_refs | Evidence-first culture |
+| Governance hooks never bypassed | Security posture intact |
+| Product failures don't cascade | Isolation working |
+| Intent→BRD→Spec traceability is complete | Lifecycle discipline maintained |
+| End users trust AI outputs | Transparency working |
+
+### Failure Smells 🚨
+
+These indicate MASTER has failed or is failing:
+
+| Smell | Indicates |
+|-------|-----------|
+| Products duplicating orchestration logic | Framework is missing capability |
+| Runtime autonomy increasing | Governance discipline eroding |
+| PII found in logs | Security regression |
+| Agent outputs missing evidence | Quality regression |
+| Products accessing each other's data | Isolation breach |
+| BRD requirements without intent source | Scope creep |
+| "We need to bypass governance for this" | Culture problem |
+| > 1 week to ship new product | Framework is too thin |
+
+---
+
+## 13. One-Sentence Summary
 
 > **MASTER is an enterprise-grade, AI-native framework that provides a thick, governed, deterministic execution core, enabling thin domain products to be created and evolved from Developer Intent through a fully traceable, reviewable, and intelligent lifecycle—while keeping runtime control firmly in software.**
 
 ---
 
-## 12. Framework Laws (What Can Never Happen)
+## 14. Framework Laws (What Can Never Happen)
 
 | Law | Violation |
 |-----|-----------|
@@ -467,6 +583,7 @@ Intent → BRD → Specs → Implementation Plan → Code → System Design
 
 ## Related Documents
 
+- [intent.md](intent.md) — Framework Developer Intent (requirements for BRDs)
 - [BRD-automation.md](../01_brd/BRD-automation.md) — Intelligent automation requirements
 - [BRD-governance.md](../01_brd/BRD-governance.md) — Governance & compliance requirements
 - [BRD-experience.md](../01_brd/BRD-experience.md) — Developer & user experience
