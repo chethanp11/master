@@ -1,6 +1,7 @@
 # ADE Technical Specification
 
 > **Product**: Analytical Decision Engine (ADE)  
+> **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
 > **Version**: 1.0.0  
 > **Last Updated**: 2026-01-12  
 > **Total Requirements**: ~150

@@ -1,5 +1,7 @@
 # MASTER Framework — Developer Intent
 
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
 > **Document**: Framework Developer Intent  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release

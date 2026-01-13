@@ -1,4 +1,6 @@
-# master — Platform Overview
+# MASTER — Platform Overview
+
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
 
 `master/` is a product-agnostic platform that provides a shared orchestrator, governance, memory, and UI while keeping product logic isolated under `products/`.  
 Products supply manifests, flows, agents, and tools; the platform executes flows, applies governance, handles HITL/user-input pauses, and persists run state.

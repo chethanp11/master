@@ -1,5 +1,7 @@
 # Business Requirements Documents
 
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
 > **Last Updated**: 2026-01-12  
 > **Status**: V1 Release
 
@@ -7,7 +9,7 @@
 
 ## Overview
 
-This folder contains Business Requirement Documents (BRDs) that define **what** the platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../techspec/) are derived.
+This folder contains Business Requirement Documents (BRDs) that define **what** the MASTER platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../techspec/) are derived.
 
 ### Document Hierarchy
 

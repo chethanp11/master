@@ -1,5 +1,7 @@
 # System Design Documents
 
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
 > **Last Updated**: 2026-01-12  
 > **Status**: V1 Release
 
@@ -7,7 +9,7 @@
 
 ## Overview
 
-This folder contains **implementation reference documentation** that describes how the master platform works. These documents are the "HOW" layer — written after implementation to serve as reference for engineers working with the codebase.
+This folder contains **implementation reference documentation** that describes how the MASTER platform works. These documents are the "HOW" layer — written after implementation to serve as reference for engineers working with the codebase.
 
 ### Document Hierarchy
 

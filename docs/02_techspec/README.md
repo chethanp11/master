@@ -1,12 +1,14 @@
 # Technical Specifications Index
 
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
 > **Document Status**: V1 Release  
 > **Last Updated**: 2026-01-12  
 > **Specification Version**: 1.0.0
 
 ## Purpose
 
-This directory contains the formal technical requirements for the master agentic platform.
+This directory contains the formal technical requirements for the MASTER agentic platform.
 Requirements use RFC 2119 language (MUST, SHALL, SHOULD, MAY) to indicate obligation levels.
 
 Each specification document includes:
