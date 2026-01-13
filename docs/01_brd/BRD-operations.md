@@ -1,8 +1,21 @@
 # BRD: Operational Excellence
 
 > **Document ID**: BRD-OPS  
-> **Last Updated**: 2026-01-12  
+> **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
+
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Governing Architecture Invariants
+
+The following architecture invariants from [Developer Intent](../00_developer_intent/intent.md) govern this BRD:
+
+| INV | Invariant | Implication for Operations |
+|-----|-----------|---------------------------|
+| **INV-7** | Reasoning Observability Is as Important as Execution | Traces expose options, confidence, rejections |
+| **INV-5** | Iteration Is Orchestrator-Controlled | Iterative state is durable and resumable |
 
 ---
 
@@ -45,64 +58,76 @@ An operational foundation that provides:
 
 ## 3. Business Requirements
 
+> **Source**: [INT-OPS](../00_developer_intent/intent.md#4-operational-excellence-int-ops)
+
 ### 3.1 State Persistence
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-001** | Run state must survive process restarts | P0 | Reliability |
-| **BRD-OPS-002** | In-flight workflows must be resumable after restart | P0 | No lost work |
-| **BRD-OPS-003** | State must be persisted durably (not just in-memory) | P0 | Data safety |
-| **BRD-OPS-004** | State storage must support concurrent access | P1 | Scalability |
-| **BRD-OPS-005** | Historical runs must be queryable | P0 | Audit, debugging |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-001** | Run state must survive process restarts | P0 | INT-OPS-001 | 2026-01-12 |
+| **BRD-OPS-002** | In-flight workflows must be resumable after restart | P0 | INT-OPS-002 | 2026-01-12 |
+| **BRD-OPS-003** | State must be persisted durably (not just in-memory) | P0 | INT-OPS-003 | 2026-01-12 |
+| **BRD-OPS-004** | State storage must support concurrent access | P1 | INT-OPS-004 | 2026-01-12 |
+| **BRD-OPS-005** | Historical runs must be queryable | P0 | INT-OPS-005 | 2026-01-12 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| State survives restarts | Run lost after process restart |
+| State transitions are traced | State changes without event |
+| Everything is traced | Action taken without trace record |
 
 ### 3.2 Observability
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-010** | Every execution step must be traced | P0 | Debugging |
-| **BRD-OPS-011** | Traces must include: timestamp, event type, data | P0 | Complete picture |
-| **BRD-OPS-012** | Traces must be queryable by run, step, timeframe | P0 | Investigation |
-| **BRD-OPS-013** | Large outputs must be stored to files, not inline | P1 | Storage efficiency |
-| **BRD-OPS-014** | Observability data must be organized by product/run | P0 | Multi-tenancy |
-| **BRD-OPS-015** | Dashboards must visualize run status and trends | P2 | Operations monitoring |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-010** | Every execution step must be traced | P0 | INT-OPS-010 | 2026-01-12 |
+| **BRD-OPS-011** | Traces must include: timestamp, event type, data | P0 | INT-OPS-011 | 2026-01-12 |
+| **BRD-OPS-012** | Traces must be queryable by run, step, timeframe | P0 | INT-OPS-012 | 2026-01-12 |
+| **BRD-OPS-013** | Large outputs must be stored to files, not inline | P1 | INT-OPS-013 | 2026-01-12 |
+| **BRD-OPS-014** | Observability data must be organized by product/run | P0 | INT-OPS-014 | 2026-01-12 |
+| **BRD-OPS-015** | Dashboards must visualize run status and trends | P2 | INT-OPS-015 | 2026-01-12 |
+| **BRD-OPS-016** | Reasoning behavior must be observable, not just execution steps | P0 | INV-7 | Added: 2026-01-13 |
+| **BRD-OPS-017** | Traces must expose options considered, confidence evolution, rejection reasons | P0 | INV-7 | Added: 2026-01-13 |
+| **BRD-OPS-018** | Reasoning traces must be queryable for audit, debugging, and improvement analysis | P1 | INV-7 | Added: 2026-01-13 |
 
 ### 3.3 Performance
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-020** | API responses must complete within 500ms (p95) | P1 | User experience |
-| **BRD-OPS-021** | Run startup must complete within 2 seconds | P1 | Responsiveness |
-| **BRD-OPS-022** | Memory backend operations must complete within 100ms | P1 | System responsiveness |
-| **BRD-OPS-023** | Performance metrics must be measurable | P1 | SLA monitoring |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-020** | API responses must complete within 500ms (p95) | P1 | INT-OPS-020 | 2026-01-12 |
+| **BRD-OPS-021** | Run startup must complete within 2 seconds | P1 | INT-OPS-021 | 2026-01-12 |
+| **BRD-OPS-022** | Memory backend operations must complete within 100ms | P1 | INT-OPS-022 | 2026-01-12 |
+| **BRD-OPS-023** | Performance metrics must be measurable | P1 | INT-OPS-023 | 2026-01-12 |
 
 ### 3.4 Quality Assurance
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-030** | Core modules must have ≥80% test coverage | P1 | Quality baseline |
-| **BRD-OPS-031** | Critical paths (run lifecycle) must have 100% coverage | P0 | Risk mitigation |
-| **BRD-OPS-032** | All tests must pass before deployment | P0 | Quality gate |
-| **BRD-OPS-033** | Tests must complete within 10 minutes | P1 | Developer velocity |
-| **BRD-OPS-034** | Contracts (Pydantic models) must have validation tests | P0 | Interface stability |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-030** | Core modules must have ≥80% test coverage | P1 | INT-OPS-030 | 2026-01-12 |
+| **BRD-OPS-031** | Critical paths (run lifecycle) must have 100% coverage | P0 | INT-OPS-031 | 2026-01-12 |
+| **BRD-OPS-032** | All tests must pass before deployment | P0 | INT-OPS-032 | 2026-01-12 |
+| **BRD-OPS-033** | Tests must complete within 10 minutes | P1 | INT-OPS-033 | 2026-01-12 |
+| **BRD-OPS-034** | Contracts (Pydantic models) must have validation tests | P0 | INT-OPS-034 | 2026-01-12 |
 
 ### 3.5 Debugging Support
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-040** | Failed runs must include error details and stack traces | P0 | Root cause analysis |
-| **BRD-OPS-041** | Event timeline must be viewable for any run | P0 | Execution understanding |
-| **BRD-OPS-042** | Input/output data must be inspectable | P0 | Data debugging |
-| **BRD-OPS-043** | LLM calls and responses must be logged | P1 | AI debugging |
-| **BRD-OPS-044** | Tool calls and results must be logged | P1 | Integration debugging |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-040** | Failed runs must include error details and stack traces | P0 | INT-OPS-040 | 2026-01-12 |
+| **BRD-OPS-041** | Event timeline must be viewable for any run | P0 | INT-OPS-041 | 2026-01-12 |
+| **BRD-OPS-042** | Input/output data must be inspectable | P0 | INT-OPS-042 | 2026-01-12 |
+| **BRD-OPS-043** | LLM calls and responses must be logged | P1 | INT-OPS-043 | 2026-01-12 |
+| **BRD-OPS-044** | Tool calls and results must be logged | P1 | INT-OPS-044 | 2026-01-12 |
 
 ### 3.6 Operational Tooling
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-OPS-050** | Operators must be able to list all runs | P0 | Operations management |
-| **BRD-OPS-051** | Operators must be able to cancel stuck runs | P1 | Incident response |
-| **BRD-OPS-052** | Operators must be able to view run details | P0 | Investigation |
-| **BRD-OPS-053** | Operators must be able to export run data | P1 | External analysis |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-050** | Operators must be able to list all runs | P0 | — | 2026-01-12 |
+| **BRD-OPS-051** | Operators must be able to cancel stuck runs | P1 | — | 2026-01-12 |
+| **BRD-OPS-052** | Operators must be able to view run details | P0 | — | 2026-01-12 |
+| **BRD-OPS-053** | Operators must be able to export run data | P1 | — | 2026-01-12 |
 
 ---
 
@@ -154,6 +179,9 @@ An operational foundation that provides:
 | BRD-OPS-012 | Trace queries | OBS-STORE-010...015 |
 | BRD-OPS-013 | File storage | OBS-STORE-020...025 |
 | BRD-OPS-014 | Organized storage | OBS-STORE-001...005 |
+| BRD-OPS-016 | Reasoning observability | MEM-TRACE-REASON-* |
+| BRD-OPS-017 | Reasoning trace content | MEM-TRACE-REASON-010...020 |
+| BRD-OPS-018 | Reasoning trace queries | OBS-REASON-QUERY-* |
 | BRD-OPS-030 | Test coverage | ACC-COV-001...023 |
 | BRD-OPS-031 | Critical path coverage | ACC-COV-020...023 |
 | BRD-OPS-032 | CI/CD | ACC-CI-001...005 |
@@ -164,7 +192,27 @@ An operational foundation that provides:
 
 ---
 
-## 7. Dependencies
+## 7. Cross-Cutting Requirements
+
+> **Source**: [INT-LIFECYCLE](../00_developer_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../00_developer_intent/intent.md#6-product-factory-model-int-factory)
+
+### 7.1 Intent-to-BRD Traceability
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-LIFE-001** | Every operations intent point must map to at least one BRD requirement | P0 | INT-LIFECYCLE-020 | Added: 2026-01-13 |
+| **BRD-OPS-LIFE-002** | BRD requirements must reference source intent | P0 | INT-LIFECYCLE-021 | Added: 2026-01-13 |
+
+### 7.2 Product Factory Model
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-OPS-FAC-001** | Framework owns memory, observability; products use them | P0 | INT-FACTORY-010 | Added: 2026-01-13 |
+| **BRD-OPS-FAC-002** | Products are forbidden from re-implementing operational services | P0 | INT-FACTORY-011 | Added: 2026-01-13 |
+
+---
+
+## 8. Dependencies
 
 | Dependency | Type | Notes |
 |------------|------|-------|
@@ -174,7 +222,7 @@ An operational foundation that provides:
 
 ---
 
-## 8. Risks & Mitigations
+## 9. Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
@@ -200,7 +248,7 @@ observability/
 
 ---
 
-## 10. Key Metrics to Monitor
+## 11. Key Metrics to Monitor
 
 | Metric | Description | Alert Threshold |
 |--------|-------------|-----------------|
@@ -213,9 +261,22 @@ observability/
 
 ---
 
+## 12. Framework Laws Governing Operations
+
+> **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
+
+| Law | Implication |
+|-----|-------------|
+| State transitions are traced | Every state change recorded |
+| Governance hooks are mandatory | Operational hooks cannot be bypassed |
+| Everything is traced | No action without trace record |
+
+---
+
 ## Related Documents
 
-- [Vision.md](Vision.md) — Platform vision and principles
+- [Intent.md](../00_developer_intent/intent.md) — Source developer intent
+- [Vision.md](../00_developer_intent/Vision.md) — Platform vision and principles
 - [BRD-governance.md](BRD-governance.md) — Audit requirements
 - [MEM-memory.md](../techspec/MEM-memory.md) — Technical memory specs
 - [ACC-acceptance.md](../techspec/ACC-acceptance.md) — Technical acceptance specs

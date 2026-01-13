@@ -1,8 +1,22 @@
 # BRD: Developer & User Experience
 
 > **Document ID**: BRD-EXP  
-> **Last Updated**: 2026-01-12  
+> **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
+
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Governing Architecture Invariants
+
+The following architecture invariants from [Developer Intent](../00_developer_intent/intent.md) govern this BRD:
+
+| INV | Invariant | Implication for Experience |
+|-----|-----------|---------------------------|
+| **INV-6** | Platform Laws Are Non-Negotiable | Products are isolated; cannot access other products' resources |
+| **INV-8** | Design-Time Intelligence Preferred | Product creation uses AI to derive artifacts from intent |
+| **INV-10** | Minimize Product Complexity | Products should be thin, declarative, domain-focused |
 
 ---
 
@@ -46,67 +60,90 @@ An experience layer that provides:
 
 ## 3. Business Requirements
 
+> **Source**: [INT-EXP](../00_developer_intent/intent.md#3-developer--user-experience-int-exp)
+
 ### 3.1 API Experience
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-001** | Platform must be accessible via HTTP REST API | P0 | Integration standard |
-| **BRD-EXP-002** | API responses must follow consistent envelope format | P0 | Predictable parsing |
-| **BRD-EXP-003** | API errors must include machine-readable codes | P0 | Automated error handling |
-| **BRD-EXP-004** | API errors must include human-readable messages | P0 | Developer debugging |
-| **BRD-EXP-005** | API must support listing products and flows | P0 | Discovery |
-| **BRD-EXP-006** | API must support starting, monitoring, and resuming runs | P0 | Core functionality |
-| **BRD-EXP-007** | API must enforce payload size limits | P1 | Resource protection |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-001** | Platform must be accessible via HTTP REST API | P0 | INT-EXP-001 | 2026-01-12 |
+| **BRD-EXP-002** | API responses must follow consistent envelope format | P0 | INT-EXP-002 | 2026-01-12 |
+| **BRD-EXP-003** | API errors must include machine-readable codes | P0 | INT-EXP-003 | 2026-01-12 |
+| **BRD-EXP-004** | API errors must include human-readable messages | P0 | INT-EXP-004 | 2026-01-12 |
+| **BRD-EXP-005** | API must support listing products and flows | P0 | INT-EXP-005 | 2026-01-12 |
+| **BRD-EXP-006** | API must support starting, monitoring, and resuming runs | P0 | INT-EXP-006 | 2026-01-12 |
+| **BRD-EXP-007** | API must enforce payload size limits | P1 | INT-EXP-007 | 2026-01-12 |
 
 ### 3.2 CLI Experience
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-010** | Platform must be accessible via command-line interface | P0 | Operator standard |
-| **BRD-EXP-011** | CLI output must be valid JSON for scripting | P0 | Automation support |
-| **BRD-EXP-012** | CLI must provide commands for all core operations | P0 | Feature parity |
-| **BRD-EXP-013** | CLI errors must exit with appropriate status codes | P0 | Script integration |
-| **BRD-EXP-014** | CLI must provide helpful guidance on errors | P1 | User experience |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-010** | Platform must be accessible via command-line interface | P0 | INT-EXP-010 | 2026-01-12 |
+| **BRD-EXP-011** | CLI output must be valid JSON for scripting | P0 | INT-EXP-011 | 2026-01-12 |
+| **BRD-EXP-012** | CLI must provide commands for all core operations | P0 | INT-EXP-012 | 2026-01-12 |
+| **BRD-EXP-013** | CLI errors must exit with appropriate status codes | P0 | INT-EXP-013 | 2026-01-12 |
+| **BRD-EXP-014** | CLI must provide helpful guidance on errors | P1 | INT-EXP-014 | 2026-01-12 |
 
 ### 3.3 UI Experience
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-020** | Platform must be accessible via web interface | P0 | Non-technical users |
-| **BRD-EXP-021** | UI must display available products and flows | P0 | Discovery |
-| **BRD-EXP-022** | UI must allow running flows with input | P0 | Core functionality |
-| **BRD-EXP-023** | UI must display run status and history | P0 | Monitoring |
-| **BRD-EXP-024** | UI must support approval workflows | P0 | Human-in-the-loop |
-| **BRD-EXP-025** | UI must support user input collection | P0 | Interactive workflows |
-| **BRD-EXP-026** | UI must display execution timeline with events | P1 | Debugging support |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-020** | Platform must be accessible via web interface | P0 | INT-EXP-020 | 2026-01-12 |
+| **BRD-EXP-021** | UI must display available products and flows | P0 | INT-EXP-021 | 2026-01-12 |
+| **BRD-EXP-022** | UI must allow running flows with input | P0 | INT-EXP-022 | 2026-01-12 |
+| **BRD-EXP-023** | UI must display run status and history | P0 | INT-EXP-023 | 2026-01-12 |
+| **BRD-EXP-024** | UI must support approval workflows | P0 | INT-EXP-024 | 2026-01-12 |
+| **BRD-EXP-025** | UI must support user input collection | P0 | INT-EXP-025 | 2026-01-12 |
+| **BRD-EXP-026** | UI must display execution timeline with events | P1 | INT-EXP-026 | 2026-01-12 |
 
 ### 3.4 Product System
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-030** | New products must be creatable from standard structure | P0 | Fast onboarding |
-| **BRD-EXP-031** | Products must declare capabilities via manifest | P0 | Self-documenting |
-| **BRD-EXP-032** | Products must be auto-discovered without restart | P1 | Developer velocity |
-| **BRD-EXP-033** | Products must be independently enableable/disableable | P0 | Operational control |
-| **BRD-EXP-034** | Product load errors must not crash the platform | P0 | Fault isolation |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-030** | New products must be creatable from standard structure | P0 | INT-EXP-030 | 2026-01-12 |
+| **BRD-EXP-031** | Products must declare capabilities via manifest | P0 | INT-EXP-031 | 2026-01-12 |
+| **BRD-EXP-032** | Products must be auto-discovered without restart | P1 | INT-EXP-032 | 2026-01-12 |
+| **BRD-EXP-033** | Products must be independently enableable/disableable | P0 | INT-EXP-033 | 2026-01-12 |
+| **BRD-EXP-034** | Product load errors must not crash the platform | P0 | INT-EXP-034 | 2026-01-12 |
+| **BRD-EXP-035** | Products must be shippable in < 1 day | P1 | INT-FACTORY-003 | Added: 2026-01-13 |
+| **BRD-EXP-036** | Products must focus on domain logic only, no infrastructure burden | P0 | INT-FACTORY-004 | Added: 2026-01-13 |
+| **BRD-EXP-037** | Products must be evolvable via intent updates | P1 | INT-FACTORY-005 | Added: 2026-01-13 |
 
 ### 3.5 Product Isolation
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-040** | Products must not access other products' agents or tools | P0 | Security boundary |
-| **BRD-EXP-041** | Products must not access other products' data | P0 | Data isolation |
-| **BRD-EXP-042** | Product failures must not affect other products | P0 | Fault isolation |
-| **BRD-EXP-043** | Products must have isolated observability directories | P0 | Clean separation |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-040** | Products must not access other products' agents or tools | P0 | INT-EXP-040, INV-6 | 2026-01-12 |
+| **BRD-EXP-041** | Products must not access other products' data | P0 | INT-EXP-041, INV-6 | 2026-01-12 |
+| **BRD-EXP-042** | Product failures must not affect other products | P0 | INT-EXP-042 | 2026-01-12 |
+| **BRD-EXP-043** | Products must have isolated observability directories | P0 | INT-EXP-043 | 2026-01-12 |
+| **BRD-EXP-044** | Products cannot modify core framework | P0 | INV-6 | Added: 2026-01-13 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Products cannot modify core | Product patches orchestrator |
+| Products are isolated | Product A reads Product B's data |
+| Products are fault-isolated | Product A crash takes down Product B |
 
 ### 3.6 Error Experience
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-EXP-050** | Error messages must identify the problem clearly | P0 | User experience |
-| **BRD-EXP-051** | Error messages must suggest remediation steps | P1 | Self-service |
-| **BRD-EXP-052** | Validation errors must identify the specific field | P0 | Developer productivity |
-| **BRD-EXP-053** | Not-found errors must suggest available alternatives | P1 | Discovery |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-050** | Error messages must identify the problem clearly | P0 | — | 2026-01-12 |
+| **BRD-EXP-051** | Error messages must suggest remediation steps | P1 | — | 2026-01-12 |
+| **BRD-EXP-052** | Validation errors must identify the specific field | P0 | — | 2026-01-12 |
+| **BRD-EXP-053** | Not-found errors must suggest available alternatives | P1 | — | 2026-01-12 |
+
+### 3.7 Product Factory Model
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-060** | Product creation is primarily an intent-driven activity | P0 | INT-FACTORY-001 | Added: 2026-01-13 |
+| **BRD-EXP-061** | Code is a generated artifact, not the source of truth | P0 | INT-FACTORY-002 | Added: 2026-01-13 |
+| **BRD-EXP-062** | Products define what, framework defines how | P0 | INT-FACTORY-013 | Added: 2026-01-13 |
+| **BRD-EXP-063** | Framework provides 90% of functionality, products add 10% | P1 | INT-FACTORY-014 | Added: 2026-01-13 |
+| **BRD-EXP-064** | Products are forbidden from re-implementing framework services | P0 | INT-FACTORY-011, INV-10 | Added: 2026-01-13 |
 
 ---
 
@@ -164,12 +201,51 @@ An experience layer that provides:
 | BRD-EXP-030 | Product structure | PROD-DIR-001...007 |
 | BRD-EXP-031 | Product manifest | PROD-MAN-001...042 |
 | BRD-EXP-033 | Product enablement | PROD-YAML-001...004 |
+| BRD-EXP-035 | Product scaffolding | PROD-SCAFFOLD-* |
+| BRD-EXP-036 | Thin products | PROD-THIN-* |
+| BRD-EXP-037 | Intent-driven evolution | PROD-INTENT-* |
 | BRD-EXP-040 | Agent/tool isolation | PROD-REG-020...024, PROD-RUN-001...005 |
 | BRD-EXP-041 | Data isolation | PROD-RUN-010...012 |
+| BRD-EXP-044 | Core protection | PROD-CORE-PROTECT-* |
+| BRD-EXP-060 | Intent-driven creation | PROD-FACTORY-001...005 |
+| BRD-EXP-061 | Generated artifacts | PROD-FACTORY-010...015 |
+| BRD-EXP-062 | What/how separation | PROD-FACTORY-020...025 |
+| BRD-EXP-064 | No re-implementation | PROD-FACTORY-030...035 |
 
 ---
 
-## 7. Dependencies
+## 7. Cross-Cutting Requirements
+
+> **Source**: [INT-LIFECYCLE](../00_developer_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../00_developer_intent/intent.md#6-product-factory-model-int-factory)
+
+### 7.1 Intent Ownership
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-LIFE-001** | Framework Developer owns Framework Developer Intent | P0 | INT-LIFECYCLE-001 | Added: 2026-01-13 |
+| **BRD-EXP-LIFE-002** | Product Developer owns Product Developer Intent | P0 | INT-LIFECYCLE-002 | Added: 2026-01-13 |
+| **BRD-EXP-LIFE-003** | End Users never modify intent directly | P0 | INT-LIFECYCLE-003 | Added: 2026-01-13 |
+
+### 7.2 Design-Time Intelligence
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-FAC-001** | AI can derive BRDs from intent | P1 | INT-FACTORY-031, INV-8 | Added: 2026-01-13 |
+| **BRD-EXP-FAC-002** | AI can derive specs from BRDs | P1 | INT-FACTORY-032, INV-8 | Added: 2026-01-13 |
+| **BRD-EXP-FAC-003** | AI can generate code from specs | P1 | INT-FACTORY-033, INV-8 | Added: 2026-01-13 |
+| **BRD-EXP-FAC-004** | AI can generate system design from code | P2 | INT-FACTORY-034 | Added: 2026-01-13 |
+
+### 7.3 Success and Failure Smells
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-EXP-FAC-010** | Success/failure smells must be defined qualitatively | P1 | INT-FACTORY-020 | Added: 2026-01-13 |
+| **BRD-EXP-FAC-011** | Smells must be checked during architecture reviews | P1 | INT-FACTORY-021 | Added: 2026-01-13 |
+| **BRD-EXP-FAC-012** | Smell detection must trigger design review | P1 | INT-FACTORY-022 | Added: 2026-01-13 |
+
+---
+
+## 8. Dependencies
 
 | Dependency | Type | Notes |
 |------------|------|-------|
@@ -179,7 +255,7 @@ An experience layer that provides:
 
 ---
 
-## 8. Risks & Mitigations
+## 9. Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
@@ -190,7 +266,7 @@ An experience layer that provides:
 
 ---
 
-## 9. Product Creation Checklist
+## 10. Product Creation Checklist
 
 For product builders, a new product requires:
 
@@ -219,9 +295,22 @@ flows:
 
 ---
 
+## 11. Framework Laws Governing Experience
+
+> **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
+
+| Law | Implication |
+|-----|-------------|
+| Products are isolated | No cross-product resource access |
+| Flows are explicit | YAML-defined, no implicit paths |
+| Intent precedes BRD | Product requirements derive from intent |
+
+---
+
 ## Related Documents
 
-- [Vision.md](Vision.md) — Platform vision and principles
+- [Intent.md](../00_developer_intent/intent.md) — Source developer intent
+- [Vision.md](../00_developer_intent/Vision.md) — Platform vision and principles
 - [BRD-operations.md](BRD-operations.md) — Observability requirements
 - [GW-gateway.md](../techspec/GW-gateway.md) — Technical gateway specs
 - [PROD-products.md](../techspec/PROD-products.md) — Technical product specs

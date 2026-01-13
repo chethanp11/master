@@ -1,8 +1,23 @@
 # BRD: Governance & Compliance
 
 > **Document ID**: BRD-GOV  
-> **Last Updated**: 2026-01-12  
+> **Last Updated**: 2026-01-13  
 > **Status**: V1 Release
+
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+
+---
+
+## Governing Architecture Invariants
+
+The following architecture invariants from [Developer Intent](../00_developer_intent/intent.md) govern this BRD:
+
+| INV | Invariant | Implication for Governance |
+|-----|-----------|---------------------------|
+| **INV-3** | Semantic Interpretation Is Probabilistic | Ambiguity is first-class state; HITL required when uncertain |
+| **INV-4** | Decisions Must Be Explainable and Auditable | Decision artifacts with evidence, immutable once recorded |
+| **INV-6** | Platform Laws Are Explicit and Non-Negotiable | Governance hooks non-bypassable at all lifecycle points |
+| **INV-9** | Feedback Feeds Intent, Not Direct Code Changes | Governance lifecycle preserved even for urgent fixes |
 
 ---
 
@@ -46,66 +61,96 @@ A governance framework that provides:
 
 ## 3. Business Requirements
 
+> **Source**: [INT-GOV](../00_developer_intent/intent.md#2-governance--compliance-int-gov)
+
 ### 3.1 Human Oversight
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-001** | High-risk actions must require human approval before execution | P0 | Regulatory compliance, risk mitigation |
-| **BRD-GOV-002** | Approval requests must include context: what, why, impact | P0 | Informed decision-making |
-| **BRD-GOV-003** | Approvers must be able to approve, reject, or request changes | P0 | Flexibility in oversight |
-| **BRD-GOV-004** | Approval decisions must be recorded with approver identity and timestamp | P0 | Audit trail |
-| **BRD-GOV-005** | Workflows must pause gracefully while awaiting approval | P0 | No orphaned processes |
-| **BRD-GOV-006** | Workflows must resume correctly after approval/rejection | P0 | Operational continuity |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-001** | High-risk actions must require human approval before execution | P0 | INT-GOV-001 | 2026-01-12 |
+| **BRD-GOV-002** | Approval requests must include context: what, why, impact | P0 | INT-GOV-002 | 2026-01-12 |
+| **BRD-GOV-003** | Approvers must be able to approve, reject, or request changes | P0 | INT-GOV-003 | 2026-01-12 |
+| **BRD-GOV-004** | Approval decisions must be recorded with approver identity and timestamp | P0 | INT-GOV-004 | 2026-01-12 |
+| **BRD-GOV-005** | Workflows must pause gracefully while awaiting approval | P0 | INT-GOV-005 | 2026-01-12 |
+| **BRD-GOV-006** | Workflows must resume correctly after approval/rejection | P0 | INT-GOV-006 | 2026-01-12 |
 
 ### 3.2 Security & Privacy
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-010** | PII must never appear in logs, traces, or persisted data | P0 | Privacy regulations (GDPR, etc.) |
-| **BRD-GOV-011** | Credentials and secrets must be redacted from all outputs | P0 | Security best practice |
-| **BRD-GOV-012** | Redaction must be automatic—not dependent on developer action | P0 | Defense in depth |
-| **BRD-GOV-013** | Custom redaction patterns must be configurable per product | P1 | Domain-specific sensitivity |
-| **BRD-GOV-014** | Redaction failures must halt execution rather than leak data | P0 | Fail-safe behavior |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-010** | PII must never appear in logs, traces, or persisted data | P0 | INT-GOV-010 | 2026-01-12 |
+| **BRD-GOV-011** | Credentials and secrets must be redacted from all outputs | P0 | INT-GOV-011 | 2026-01-12 |
+| **BRD-GOV-012** | Redaction must be automatic—not dependent on developer action | P0 | INT-GOV-012 | 2026-01-12 |
+| **BRD-GOV-013** | Custom redaction patterns must be configurable per product | P1 | INT-GOV-013 | 2026-01-12 |
+| **BRD-GOV-014** | Redaction failures must halt execution rather than leak data | P0 | INT-GOV-014 | 2026-01-12 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| PII never in logs | SSN appears in trace event |
+| Credentials never exposed | API key in error message |
+| Redaction is automatic | Developer must call redact() |
 
 ### 3.3 Policy Enforcement
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-020** | Certain tools must be prohibitable by policy | P0 | Risk control |
-| **BRD-GOV-021** | Certain models must be prohibitable by policy | P0 | Compliance with model usage agreements |
-| **BRD-GOV-022** | Policy violations must block execution—not just warn | P0 | Enforceable governance |
-| **BRD-GOV-023** | Policies must be configurable per product | P1 | Product-specific governance |
-| **BRD-GOV-024** | Policy decisions must be logged for audit | P0 | Traceability || **BRD-GOV-025** | Low-confidence interpretations must pause for user clarification | P0 | Prevents misguided execution |
-| **BRD-GOV-026** | Confidence thresholds must be configurable per product | P1 | Domain-appropriate sensitivity |
-| **BRD-GOV-027** | Semantic validation failures must block execution | P0 | Fail-safe behavior |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-020** | Certain tools must be prohibitable by policy | P0 | INT-GOV-020 | 2026-01-12 |
+| **BRD-GOV-021** | Certain models must be prohibitable by policy | P0 | INT-GOV-021 | 2026-01-12 |
+| **BRD-GOV-022** | Policy violations must block execution—not just warn | P0 | INT-GOV-022 | 2026-01-12 |
+| **BRD-GOV-023** | Policies must be configurable per product | P1 | INT-GOV-023 | 2026-01-12 |
+| **BRD-GOV-024** | Policy decisions must be logged for audit | P0 | INT-GOV-024 | 2026-01-12 |
+| **BRD-GOV-025** | Low-confidence interpretations must pause for user clarification | P0 | INT-GOV-025, INV-3 | 2026-01-12 |
+| **BRD-GOV-026** | Confidence thresholds must be configurable per product | P1 | INT-GOV-026 | 2026-01-12 |
+| **BRD-GOV-027** | Semantic validation failures must block execution | P0 | INT-GOV-027 | 2026-01-12 |
+
+**Constraints (Non-Negotiable from Intent)**:
+| Constraint | Violation Example |
+|------------|-------------------|
+| Hooks cannot be bypassed | Developer disables governance |
+| Policy violations block | Warning logged but execution continues |
+| Budgets are hard limits | Limit exceeded but run continues |
+
 ### 3.4 Cost Controls
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-030** | Each workflow run must have enforceable budget limits | P0 | Cost predictability |
-| **BRD-GOV-031** | Budget limits must cover: LLM tokens, tool calls, time | P0 | Comprehensive control |
-| **BRD-GOV-032** | Budget exhaustion must pause/terminate the workflow | P0 | Prevent runaway costs |
-| **BRD-GOV-033** | Current budget consumption must be trackable in real-time | P1 | Operational awareness |
-| **BRD-GOV-034** | Budget alerts must trigger before limits are reached | P1 | Proactive management |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-030** | Each workflow run must have enforceable budget limits | P0 | INT-GOV-030 | 2026-01-12 |
+| **BRD-GOV-031** | Budget limits must cover: LLM tokens, tool calls, time | P0 | INT-GOV-031 | 2026-01-12 |
+| **BRD-GOV-032** | Budget exhaustion must pause/terminate the workflow | P0 | INT-GOV-032 | 2026-01-12 |
+| **BRD-GOV-033** | Current budget consumption must be trackable in real-time | P1 | INT-GOV-033 | 2026-01-12 |
+| **BRD-GOV-034** | Budget alerts must trigger before limits are reached | P1 | INT-GOV-034 | 2026-01-12 |
 
 ### 3.5 Audit & Traceability
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-040** | Every action must be traceable to: who, what, when, why | P0 | Compliance requirement |
-| **BRD-GOV-041** | State transitions must be immutable once recorded | P0 | Non-repudiation |
-| **BRD-GOV-042** | Audit logs must be queryable by run, user, timeframe | P0 | Investigation support |
-| **BRD-GOV-043** | Audit data must be exportable in standard formats | P1 | External audit tools |
-| **BRD-GOV-044** | Audit retention period must be configurable | P1 | Compliance with data policies |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-040** | Every action must be traceable to: who, what, when, why | P0 | INT-GOV-040 | 2026-01-12 |
+| **BRD-GOV-041** | State transitions must be immutable once recorded | P0 | INT-GOV-041 | 2026-01-12 |
+| **BRD-GOV-042** | Audit logs must be queryable by run, user, timeframe | P0 | INT-GOV-042 | 2026-01-12 |
+| **BRD-GOV-043** | Audit data must be exportable in standard formats | P1 | INT-GOV-043 | 2026-01-12 |
+| **BRD-GOV-044** | Audit retention period must be configurable | P1 | INT-GOV-044 | 2026-01-12 |
+| **BRD-GOV-045** | Gated/consequential decisions must be recorded as decision artifacts | P0 | INV-4 | Added: 2026-01-13 |
+| **BRD-GOV-046** | Decision artifacts must capture: options considered, evidence, critique input, choice, justification, confidence | P0 | INV-4 | Added: 2026-01-13 |
+| **BRD-GOV-047** | Decision artifacts must be immutable once recorded | P0 | INV-4 | Added: 2026-01-13 |
 
 ### 3.6 Governance Hooks
 
-| ID | Requirement | Priority | Rationale |
-|----|-------------|----------|-----------|
-| **BRD-GOV-050** | Governance hooks must execute at defined lifecycle points | P0 | Consistent enforcement |
-| **BRD-GOV-051** | Hooks must not be bypassable by agents or tools | P0 | Security |
-| **BRD-GOV-052** | Hook failures must halt execution (fail-closed) | P0 | Safety |
-| **BRD-GOV-053** | Hooks must not perform logging (separation of concerns) | P0 | Clean architecture |
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-050** | Governance hooks must execute at defined lifecycle points | P0 | INV-6 | 2026-01-12 |
+| **BRD-GOV-051** | Hooks must not be bypassable by agents or tools | P0 | INV-6 | 2026-01-12 |
+| **BRD-GOV-052** | Hook failures must halt execution (fail-closed) | P0 | INV-6 | 2026-01-12 |
+| **BRD-GOV-053** | Hooks must not perform logging (separation of concerns) | P0 | INV-6 | 2026-01-12 |
+
+### 3.7 Semantic Interpretation Governance
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-060** | All semantic interpretations must be treated as hypotheses with confidence, not facts | P0 | INV-3 | Added: 2026-01-13 |
+| **BRD-GOV-061** | System must represent interpretation as multiple competing candidates where ambiguity exists | P1 | INV-3 | Added: 2026-01-13 |
+| **BRD-GOV-062** | Confidence and ambiguity must propagate into downstream artifacts, decisions, and outputs | P0 | INV-3 | Added: 2026-01-13 |
+| **BRD-GOV-063** | When ambiguity exceeds policy thresholds, execution must require HITL or halt safely | P0 | INV-3 | Added: 2026-01-13 |
 
 ---
 
@@ -166,11 +211,48 @@ A governance framework that provides:
 | BRD-GOV-032 | Budget enforcement | GOV-HOOK-022...024 |
 | BRD-GOV-040 | Action traceability | MEM-TRACE-001...010 |
 | BRD-GOV-041 | Immutable state | ORC-RUN-004 (traced transitions) |
+| BRD-GOV-045 | Decision artifacts | GOV-DEC-ARTIFACT-* |
+| BRD-GOV-046 | Decision artifact content | GOV-DEC-CONTENT-* |
+| BRD-GOV-047 | Artifact immutability | GOV-DEC-IMMUT-* |
 | BRD-GOV-050 | Governance hooks | GOV-HOOK-001...005 |
+| BRD-GOV-060 | Semantic hypothesis | INT-SEM-PROB-* |
+| BRD-GOV-061 | Multiple candidates | INT-SEM-CAND-* |
+| BRD-GOV-062 | Confidence propagation | INT-SEM-PROP-* |
+| BRD-GOV-063 | Ambiguity escalation | INT-SEM-ESC-* |
 
 ---
 
-## 7. Dependencies
+## 7. Cross-Cutting Requirements
+
+> **Source**: [INT-LIFECYCLE](../00_developer_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../00_developer_intent/intent.md#6-product-factory-model-int-factory)
+
+### 7.1 Intent-to-BRD Traceability
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-LIFE-001** | Every governance intent point must map to at least one BRD requirement | P0 | INT-LIFECYCLE-020 | Added: 2026-01-13 |
+| **BRD-GOV-LIFE-002** | BRD requirements must reference source intent | P0 | INT-LIFECYCLE-021 | Added: 2026-01-13 |
+| **BRD-GOV-LIFE-003** | Intent updates must be versioned and reviewed | P0 | INT-LIFECYCLE-004 | Added: 2026-01-13 |
+
+### 7.2 User Feedback Handling
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-LIFE-010** | User feedback is not Developer Intent | P0 | INT-LIFECYCLE-010 | Added: 2026-01-13 |
+| **BRD-GOV-LIFE-011** | Feedback must be captured in structured format | P1 | INT-LIFECYCLE-011 | Added: 2026-01-13 |
+| **BRD-GOV-LIFE-012** | Feedback must be reviewed before promotion to intent | P0 | INT-LIFECYCLE-012, INV-9 | Added: 2026-01-13 |
+| **BRD-GOV-LIFE-013** | Bugs and enhancements follow governed lifecycle even when urgent | P0 | INV-9 | Added: 2026-01-13 |
+
+### 7.3 Product Factory Model
+
+| ID | Requirement | Priority | Source | Date |
+|----|-------------|----------|--------|------|
+| **BRD-GOV-FAC-001** | Products are forbidden from re-implementing governance services | P0 | INT-FACTORY-011 | Added: 2026-01-13 |
+| **BRD-GOV-FAC-002** | Framework owns governance; products define what, framework defines how | P0 | INT-FACTORY-010, INT-FACTORY-013 | Added: 2026-01-13 |
+
+---
+
+## 8. Dependencies
 
 | Dependency | Type | Notes |
 |------------|------|-------|
@@ -181,7 +263,7 @@ A governance framework that provides:
 
 ---
 
-## 8. Risks & Mitigations
+## 9. Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
@@ -192,7 +274,7 @@ A governance framework that provides:
 
 ---
 
-## 9. Compliance Mapping
+## 10. Compliance Mapping
 
 | Regulation | Relevant BRD Requirements |
 |------------|--------------------------|
@@ -203,9 +285,24 @@ A governance framework that provides:
 
 ---
 
+## 11. Framework Laws Governing Governance
+
+> **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
+
+| Law | Implication |
+|-----|-------------|
+| Governance hooks are mandatory | Every lifecycle point has mandatory hooks |
+| Budgets are enforced | Hard limits, no soft caps |
+| PII is never logged | Automatic redaction, fail-closed |
+| Intent precedes BRD | Governance requirements derive from intent |
+| Feedback is not intent | User feedback goes through review before promotion |
+
+---
+
 ## Related Documents
 
-- [Vision.md](Vision.md) — Platform vision and principles
+- [Intent.md](../00_developer_intent/intent.md) — Source developer intent
+- [Vision.md](../00_developer_intent/Vision.md) — Platform vision and principles
 - [BRD-automation.md](BRD-automation.md) — Agent capabilities requiring governance
 - [GOV-governance.md](../techspec/GOV-governance.md) — Technical governance specs
 - [ORC-orchestration.md](../techspec/ORC-orchestration.md) — Pause/resume specs
