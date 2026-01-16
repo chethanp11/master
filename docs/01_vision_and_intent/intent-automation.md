@@ -7,6 +7,37 @@
 
 ---
 
+## Purpose
+
+This document captures the requirements that drive MASTER's Business Requirement Documents (BRDs). Each intent point (INT-*) and invariant (INV-*) maps directly to BRD requirements.
+
+For framework philosophy, actors, and process, see [Vision.md](Vision.md).
+
+---
+
+## Document Structure
+
+> **Note**: For easier reconciliation with BRD documents, domain-specific intents are also available as separate files:  
+> 
+> | Standalone Document | Maps to BRD |  
+> |--------------------|-------------|  
+> | [intent-automation.md](intent-automation.md) | [BRD-automation.md](../02_brd/BRD-automation.md) |  
+> | [intent-governance.md](intent-governance.md) | [BRD-governance.md](../02_brd/BRD-governance.md) |  
+> | [intent-experience.md](intent-experience.md) | [BRD-experience.md](../02_brd/BRD-experience.md) |  
+> | [intent-operations.md](intent-operations.md) | [BRD-operations.md](../02_brd/BRD-operations.md) |  
+
+| Intent Section | Maps To | Theme |
+|----------------|---------|-------|
+| [Architecture Invariants](intent-operations.md#architecture-invariants) | All BRDs | Non-negotiable platform laws |
+| [§1 INT-AUTO](#1-intelligent-automation-int-auto) | [BRD-automation.md](../02_brd/BRD-automation.md) | Agents, tools, reasoning, semantic interpretation |
+| [§2 INT-GOV](intent-governance.md) | [BRD-governance.md](../02_brd/BRD-governance.md) | Approval, security, audit, budget, confidence thresholds |
+| [§3 INT-EXP](intent-experience.md) | [BRD-experience.md](../02_brd/BRD-experience.md) | API, CLI, UI, products |
+| [§4 INT-OPS](intent-operations.md#4-operational-excellence-int-ops) | [BRD-operations.md](../02_brd/BRD-operations.md) | Persistence, observability, semantic traces, architecture tests |
+| [§5 INT-LIFECYCLE](intent-operations.md#5-developer-intent-lifecycle-int-lifecycle) | All BRDs | Ownership, evolution, feedback |
+| [§6 INT-FACTORY](intent-operations.md#6-product-factory-model-int-factory) | All BRDs | Intent-driven product creation |
+
+---
+
 ## Version Control
 
 | Version | Date | Changes |

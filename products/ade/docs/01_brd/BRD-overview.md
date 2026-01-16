@@ -123,6 +123,36 @@ Optional hypothesis tests evaluate alternative explanations:
 
 ---
 
+## 8. Framework Alignment and Runtime Constraints
+
+### 8.1 Framework Alignment
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-ALIGN-001 | Product reasoning MUST rely on framework primitives | P0 |
+| BRD-ALIGN-002 | Product requirements that bypass framework primitives MUST be treated as framework gaps | P0 |
+
+### 8.2 Framework Reliance Invariant
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-FRI-001 | Product MUST NOT re-implement orchestrator logic | P0 |
+| BRD-FRI-002 | Product MUST NOT re-implement iteration control | P0 |
+| BRD-FRI-003 | Product MUST NOT re-implement reasoning ladder semantics | P0 |
+| BRD-FRI-004 | Product MUST NOT bypass framework governance hooks | P0 |
+| BRD-FRI-005 | Framework gaps MUST be escalated, not worked around | P0 |
+
+### 8.3 No Runtime Learning
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-NRL-001 | Product MUST NOT modify behavior at runtime based on prior runs | P0 |
+| BRD-NRL-002 | Product MUST NOT persist learned patterns across runs | P0 |
+| BRD-NRL-003 | Product evolution MUST happen through intent → BRD → implementation | P0 |
+| BRD-NRL-004 | Identical inputs MUST produce identical outputs across runs | P0 |
+
+---
+
 ## Cross-References
 
 - **Techspec**: [README.md](../02_techspec/README.md)

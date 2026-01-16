@@ -20,6 +20,52 @@ Agents provide reasoning roles in ADE workflows:
 
 ---
 
+## 1.1 Advisory Boundary Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-AGT-001 | Agents MUST be advisory only (no direct execution) | P0 |
+| BRD-AGT-002 | Agents MUST propose, never execute tools or change state | P0 |
+| BRD-AGT-003 | Agents MUST produce structured outputs | P0 |
+| BRD-AGT-004 | Agent reasoning MUST be auditable and traceable | P0 |
+
+---
+
+## 1.2 Reasoning Ladder Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-INTEL-001 | System MUST use multi-stage reasoning (interpret → propose → critique → finalize) | P0 |
+| BRD-INTEL-002 | Each reasoning stage MUST be explicit and observable | P0 |
+| BRD-INTEL-003 | Reasoning cycles MUST be bounded by limits (iterations/tools/time) | P0 |
+| BRD-INTEL-004 | Reasoning MUST track sufficiency state across cycles | P1 |
+| BRD-INTEL-005 | Final outputs MUST state why reasoning stopped | P1 |
+
+---
+
+## 1.3 Critique Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-CRIT-001 | System MUST run critique before finalizing outputs | P0 |
+| BRD-CRIT-002 | Critique MUST identify missing or weak evidence | P0 |
+| BRD-CRIT-003 | Critique MUST be able to downgrade confidence with reasons | P1 |
+| BRD-CRIT-004 | Critique MUST remain advisory (no execution or routing) | P0 |
+| BRD-CRIT-005 | Blocking critique findings MUST trigger clarification or safe abort | P0 |
+
+---
+
+## 1.4 Advisory Tool Selection
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-TOOLSEL-001 | Tool selection MUST be surfaced as advisory recommendations | P1 |
+| BRD-TOOLSEL-002 | Tool recommendations MAY be ranked with rationales | P2 |
+| BRD-TOOLSEL-003 | Orchestrator MUST remain the sole authority for tool execution | P0 |
+| BRD-TOOLSEL-004 | Advisory tool suggestions MUST NOT force execution | P0 |
+
+---
+
 ## 2. Intent Interpretation Requirements
 
 ### 2.1 intent_agent

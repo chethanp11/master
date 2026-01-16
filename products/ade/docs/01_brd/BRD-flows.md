@@ -129,6 +129,9 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 | BRD-PLAN-004 | User MUST be able to approve plan | P0 |
 | BRD-PLAN-005 | User MUST be able to reject plan | P0 |
 | BRD-PLAN-006 | Rejection SHOULD trigger replanning | P1 |
+| BRD-PLAN-007 | Plan summary MUST include objective and expected evidence | P1 |
+| BRD-PLAN-008 | Plan summary MUST include assumptions and risks | P1 |
+| BRD-PLAN-009 | Replan output MUST highlight what changed and why | P1 |
 
 ---
 
@@ -140,6 +143,7 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 | BRD-DET-002 | No random variations in analysis | P0 |
 | BRD-DET-003 | Timestamps are the only allowed variation | P0 |
 | BRD-DET-004 | No LLM calls from tools | P0 |
+| BRD-DET-005 | Flows MUST NOT mutate dynamically at runtime | P0 |
 
 ---
 
@@ -150,6 +154,19 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 | BRD-CFG-001 | Flows MUST use suggest_only autonomy level | P0 |
 | BRD-CFG-002 | Data reading SHOULD have retry configuration | P1 |
 | BRD-CFG-003 | Chart building SHOULD have fallback type | P1 |
+
+---
+
+## 7. Terminal Outcomes and Safe Exits
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-TERM-001 | System MUST support explicit outcomes: SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT | P0 |
+| BRD-TERM-002 | PARTIAL_SUCCESS outputs MUST include limitations and unresolved gaps | P1 |
+| BRD-TERM-003 | ABORT outcomes MUST include reason codes and recommended next actions | P0 |
+| BRD-TERM-004 | ASK_USER MUST be used when missing inputs are resolvable via clarification | P0 |
+| BRD-STOP-001 | System MUST prefer safe exits over forced outputs | P0 |
+| BRD-STOP-002 | Low signal or conflicting evidence MUST result in safe exit | P0 |
 
 ---
 

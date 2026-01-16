@@ -164,6 +164,282 @@
 
 ---
 
+---
+
+# Architecture Invariants
+
+> **Non-negotiable principles that force all BRDs, specs, and code to align.**
+
+---
+
+## INV-1: Reasoning as a Framework Primitive (Not Product Logic)
+
+- MASTER SHALL provide standard reasoning middleware primitives that products can invoke without custom orchestration.
+- Reasoning SHALL follow a structured, multi-phase pattern (interpret → propose → critique → recommend), executed within a single controlled step.
+- Reasoning primitives SHALL be bounded, repeatable, and auditable, never open-ended.
+- Reasoning outputs SHALL be first-class artifacts, not ephemeral prompt responses.
+
+> **Intent signal**: Reasoning depth is a platform capability, not something each product reinvents.
+
+---
+
+## INV-2: Critique Is Mandatory, Bounded, and Non-Controlling
+
+- MASTER SHALL support explicit critique passes as part of intelligent execution.
+- Critique SHALL be advisory only: it may lower confidence, surface gaps, or recommend escalation.
+- Critique SHALL NEVER execute tools, route flows, override policies, or force decisions.
+- Control authority SHALL always remain with the orchestrator and governance layer.
+
+> **Intent signal**: Self-reflection is allowed; self-control is not.
+
+---
+
+## INV-3: Semantic Interpretation Is Probabilistic, Not Truth
+
+- All semantic interpretations SHALL be treated as hypotheses with confidence, not facts.
+- MASTER SHALL represent interpretation as multiple competing candidates where ambiguity exists.
+- Confidence and ambiguity SHALL propagate into downstream artifacts, decisions, and outputs.
+- When ambiguity exceeds policy thresholds, execution SHALL require HITL or halt safely.
+
+> **Intent signal**: Ambiguity is a first-class state, not an error condition.
+
+---
+
+## INV-4: Decisions Must Be Explainable and Auditable by Construction
+
+- Any gated or consequential decision SHALL be recorded as a decision artifact, not just a log entry.
+- Decision artifacts SHALL capture:
+  - options considered
+  - evidence used
+  - critique input
+  - final choice and justification
+  - resulting confidence
+- Decision artifacts SHALL be immutable once recorded.
+
+> **Intent signal**: Explainability is structural, not narrative.
+
+---
+
+## INV-5: Iteration Is Orchestrator-Controlled, Not Agent-Driven
+
+- MASTER SHALL provide standard iteration patterns for intelligent workflows.
+- Iteration SHALL always follow a governed cycle (propose → gate → execute → evaluate).
+- Iteration SHALL have explicit deterministic stop conditions (budgets, sufficiency, escalation).
+- Iterative state SHALL be durable and resumable across restarts.
+
+> **Intent signal**: Investigation is allowed; autonomy is not.
+
+---
+
+## INV-6: Platform Laws Are Explicit and Non-Negotiable
+
+- Agents SHALL be advisory only and MUST NOT control execution, routing, or side effects.
+- Only the orchestrator SHALL:
+  - execute tools
+  - change flow state
+  - pause/resume runs
+  - escalate to HITL
+- Governance hooks SHALL be non-bypassable at all lifecycle points.
+- Products SHALL be isolated and MUST NOT access other products' resources directly.
+
+> **Intent signal**: Safety is enforced by structure, not convention.
+
+---
+
+## INV-7: Reasoning Observability Is as Important as Execution Observability
+
+- MASTER SHALL make reasoning behavior observable, not just execution steps.
+- Traces SHALL expose:
+  - options considered
+  - confidence evolution
+  - rejection and escalation reasons
+- Reasoning traces SHALL be queryable for audit, debugging, and improvement analysis.
+
+> **Intent signal**: "Why" matters as much as "what happened".
+
+---
+
+## INV-8: Design-Time Intelligence Is Preferred Over Runtime Autonomy
+
+- MASTER SHALL favor design-time use of LLMs (intent → BRD → specs → plans → code) over runtime autonomy.
+- Runtime intelligence SHALL remain bounded, supervised, and deterministic.
+- Product creation and evolution SHALL be intent-driven, with code as a generated artifact.
+
+> **Intent signal**: Intelligence compounds safely before production, not unpredictably during it.
+
+---
+
+## INV-9: Feedback Feeds Intent, Not Direct Code Changes
+
+- End-user feedback SHALL be captured as input to Developer Intent, not direct requirements.
+- Bug fixes and enhancements SHALL still follow the governed lifecycle (intent → BRD → plan → implementation).
+- Framework-level feedback SHALL be promoted separately and reviewed by Framework Developers.
+
+> **Intent signal**: Speed does not justify bypassing governance.
+
+---
+
+## INV-10: MASTER Exists to Minimize Product Complexity, Not Maximize Flexibility
+
+- If products need to re-implement reasoning patterns, orchestration, or governance, the framework has failed.
+- MASTER SHALL continuously absorb common intelligence patterns into the core.
+- Products SHOULD remain thin, declarative, and domain-focused.
+
+> **Intent signal**: Complexity belongs in one place only — the framework.
+
+---
+
+# 5. Developer Intent Lifecycle (INT-LIFECYCLE)
+
+## 5.1 Intent Ownership & Evolution
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-LIFECYCLE-001** | Framework Developer owns Framework Developer Intent | Clear accountability |
+| **INT-LIFECYCLE-002** | Product Developer owns Product Developer Intent | Domain expertise at product level |
+| **INT-LIFECYCLE-003** | End Users never modify intent directly | Preserve integrity of intent documents |
+| **INT-LIFECYCLE-004** | Intent updates must be versioned and reviewed | Change control |
+| **INT-LIFECYCLE-005** | Intent conflicts must have explicit resolution rules | Prevent deadlock |
+
+---
+
+## 5.2 User Feedback Handling
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-LIFECYCLE-010** | User feedback is not Developer Intent | Maintain separation of concerns |
+| **INT-LIFECYCLE-011** | Feedback must be captured in structured format | Enable analysis and prioritization |
+| **INT-LIFECYCLE-012** | Feedback must be reviewed before promotion to intent | Quality gate |
+| **INT-LIFECYCLE-013** | Bugs and enhancements have different promotion rules | Different urgency levels |
+| **INT-LIFECYCLE-014** | Framework gaps must escalate to Framework Developer | Clear escalation path |
+
+---
+
+## 5.3 Intent-to-BRD Mapping
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-LIFECYCLE-020** | Every intent point must map to at least one BRD requirement | Traceability |
+| **INT-LIFECYCLE-021** | BRD requirements must reference source intent | Bidirectional traceability |
+| **INT-LIFECYCLE-022** | Unmapped intent points are gaps | Coverage validation |
+| **INT-LIFECYCLE-023** | BRD requirements without intent are suspect | Prevent scope creep |
+
+---
+
+# 6. Product Factory Model (INT-FACTORY)
+
+## 6.1 MASTER as Product Factory
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-FACTORY-001** | Product creation is primarily an intent-driven activity | Capture intent, not code |
+| **INT-FACTORY-002** | Code is a generated artifact, not the source of truth | Intent is the source |
+| **INT-FACTORY-003** | Products must be shippable in < 1 day | Rapid value delivery |
+| **INT-FACTORY-004** | Products must focus on domain logic only | No infrastructure burden |
+| **INT-FACTORY-005** | Products must be evolvable via intent updates | Safe evolution |
+
+---
+
+## 6.2 Framework vs Product Asymmetry
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-FACTORY-010** | Framework owns orchestration, memory, governance, model routing | Single source of truth |
+| **INT-FACTORY-011** | Products are forbidden from re-implementing framework services | Prevent duplication |
+| **INT-FACTORY-012** | Framework evolution is rarer, heavier, more reviewed | Stability requirement |
+| **INT-FACTORY-013** | Products define what, framework defines how | Clear separation |
+| **INT-FACTORY-014** | Framework provides 90% of functionality, products add 10% | Thick core, thin products |
+
+---
+
+## 6.3 Success and Failure Smells
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-FACTORY-020** | Success/failure smells must be defined qualitatively | Guide future decisions |
+| **INT-FACTORY-021** | Smells must be checked during architecture reviews | Early detection |
+| **INT-FACTORY-022** | Smell detection must trigger design review | Corrective action |
+
+---
+
+## 6.4 Design-Time vs Runtime Intelligence
+
+### Intent
+
+| ID | Intent | Rationale |
+|----|--------|-----------|
+| **INT-FACTORY-030** | Design-time intelligence is preferred over runtime autonomy | Safety through structure |
+| **INT-FACTORY-031** | AI can derive BRDs from intent | Accelerate documentation |
+| **INT-FACTORY-032** | AI can derive specs from BRDs | Consistent translation |
+| **INT-FACTORY-033** | AI can generate code from specs | Reduce manual coding |
+| **INT-FACTORY-034** | AI can generate system design from code | Keep docs current |
+| **INT-FACTORY-035** | Runtime AI is advisory only, never autonomous | Human control preserved |
+
+---
+
+# 7. Framework Laws
+
+> **What can never happen in MASTER.**
+
+| Law | Violation Example |
+|-----|-------------------|
+| Agents never execute tools | Agent calls tool directly |
+| Tools never call models | Tool makes LLM API call |
+| Governance hooks are mandatory | Hook is bypassed or disabled |
+| State transitions are traced | State changes without event |
+| Budgets are enforced | Limits exceeded without halt |
+| Products are isolated | Product accesses another's data |
+| PII is never logged | Sensitive data in traces |
+| Flows are explicit | Implicit execution path |
+| Intent precedes BRD | BRD created without intent source |
+| Feedback is not intent | User request treated as requirement |
+| Semantic phase is mandatory | Steps execute without interpretation |
+| Stop blocks all steps | Step executes after ASK_USER |
+| Product adapters are isolated | Adapter imports core orchestrator |
+
+---
+
+# 8. Acceptance Criteria
+
+| Criterion | Target | Measurement |
+|-----------|--------|-------------|
+| Time-to-first-product | < 1 day | Scaffolding to running |
+| Compliance audit pass rate | 100% | External audit |
+| PII leakage incidents | 0 | Security scans |
+| Agent task success rate | > 85% | Production metrics |
+| Test coverage (core) | > 80% | Coverage tools |
+| Platform availability | > 99.5% | Uptime monitoring |
+| Intent→BRD traceability | 100% | Document review |
+| Failure smell occurrences | 0 | Architecture reviews |
+| Semantic misunderstanding rate | < 5% | User reports after clarification |
+| Clarification acceptance rate | > 80% | Users proceed after ASK_USER |
+| Semantic phase latency | < 100ms | P99 execution time |
+| Architecture tests passing | 100% | CI pipeline |
+
+---
+
+# 9. Derived Documents
+
+| Document | Derivation |
+|----------|------------|
+| [Vision.md](Vision.md) | Framework philosophy and architecture |
+| [BRD-automation.md](../02_brd/BRD-automation.md) | INT-AUTO-*, INT-AUTO-SEM-*, INT-AUTO-ADAPT-*, INT-AUTO-STOP-* → BRD-AUTO-* |
+| [BRD-governance.md](../02_brd/BRD-governance.md) | INT-GOV-*, INT-GOV-CONF-* → BRD-GOV-* |
+| [BRD-experience.md](../02_brd/BRD-experience.md) | INT-EXP-* → BRD-EXP-* |
+| [BRD-operations.md](../02_brd/BRD-operations.md) | INT-OPS-*, INT-OPS-SEM-*, INT-OPS-ARCH-* → BRD-OPS-* |
+
 ## BRD Derivation
 
 This document derives the following in [BRD-operations.md](../02_brd/BRD-operations.md):

@@ -145,6 +145,28 @@
 
 ---
 
+## 8. Version Transparency Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-VER-001 | Outputs MUST include product version, flow version, and schema version | P0 |
+| BRD-VER-002 | Outputs MUST record dataset hash and input parameter hash | P1 |
+| BRD-VER-003 | Non-deterministic dependencies MUST be version-pinned or disallowed | P0 |
+
+---
+
+## 9. Decision Authority Boundary
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-DAB-001 | Outputs MUST be labeled as recommendations/findings, not decisions | P0 |
+| BRD-DAB-002 | Decision packets MUST clarify human authority for final decisions | P0 |
+| BRD-DAB-003 | Outputs MUST NOT trigger downstream actions without explicit approval | P0 |
+| BRD-DAB-004 | Confidence language MUST avoid implying autonomous decisions | P1 |
+| BRD-DAB-005 | Recommendations MUST be presented as advisory | P0 |
+
+---
+
 ## Cross-References
 
 - **Techspec**: [IO-inputs-outputs.md](../02_techspec/IO-inputs-outputs.md)

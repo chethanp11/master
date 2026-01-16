@@ -80,6 +80,7 @@
 | BRD-IF-003 | IntentFrame MUST include blocking_required | P0 |
 | BRD-IF-004 | IntentFrame SHOULD include inferred_entities | P1 |
 | BRD-IF-005 | IntentFrame SHOULD include inferred_metrics | P1 |
+| BRD-IF-006 | IntentFrame MUST include blocking_questions | P0 |
 
 ---
 
@@ -131,6 +132,17 @@
 | BRD-VAL-001 | All outputs MUST pass Pydantic validation | P0 |
 | BRD-VAL-002 | Invalid outputs MUST produce clear errors | P0 |
 | BRD-VAL-003 | Validation MUST happen before rendering | P0 |
+
+---
+
+## 6. Context Pack Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| BRD-CTX-001 | System MUST construct a Context Pack after ingestion and before planning | P0 |
+| BRD-CTX-002 | Context Packs MUST include dataset profile and coverage metrics | P0 |
+| BRD-CTX-003 | Context Pack statistics MUST be backed by evidence items | P0 |
+| BRD-CTX-004 | Advisory reasoning MUST reference Context Pack artifacts | P1 |
 
 ---
 
