@@ -149,6 +149,20 @@ class PoliciesConfig(BaseModel):
         description="Optional hard ceiling for run payload size in bytes.",
     )
 
+    # Semantic interpretation thresholds
+    semantic_confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score for semantic interpretation to proceed.",
+    )
+    semantic_entity_confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score for individual entities.",
+    )
+
     # Retrieval source access control
     retrieval_policy: Optional[RetrievalPolicyConfig] = Field(
         default=None,

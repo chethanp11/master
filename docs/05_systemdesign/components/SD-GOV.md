@@ -79,6 +79,7 @@ core/governance/
 | `GovernanceHooks.validate_agent_output()` | `core/governance/hooks.py` | Agent output validation |
 | `GovernanceHooks.validate_branch_conditions()` | `core/governance/hooks.py` | Branch condition validation |
 | `GovernanceHooks.validate_loop_conditions()` | `core/governance/hooks.py` | Loop condition validation |
+| `GovernanceHooks.check_semantic_confidence()` | `core/governance/hooks.py` | Semantic envelope confidence gate (ORC-SEM-050) |
 | `GovernanceHooks.before_complete()` | `core/governance/hooks.py` | Run completion governance |
 | `PolicyEngine.evaluate_tool_call()` | `core/governance/policies.py` | Tool policy evaluation |
 | `PolicyEngine.evaluate_model_use()` | `core/governance/policies.py` | Model policy evaluation |
@@ -175,6 +176,7 @@ Governance hooks are mandatory enforcement points executed by the runtime.
 | Hook Name | Trigger |
 |-----------|---------|
 | `check_autonomy` | Run initialization (autonomy policy enforcement) |
+| `check_semantic_confidence` | Semantic interpretation phase (confidence threshold gate) |
 | `validate_branch_conditions` | Flow validation (branch condition policy) |
 | `validate_loop_conditions` | Flow validation (loop condition policy) |
 | `before_step` | Step execution |
@@ -199,6 +201,42 @@ Hooks must NOT:
 - Call external systems
 
 Agent output validation rejects control fields (next-step directives) and invalid payload shapes.
+
+### Semantic Confidence Gate
+
+The `check_semantic_confidence()` hook is a critical governance check during the semantic interpretation phase. It enforces confidence thresholds before allowing flow execution to proceed.
+
+```python
+def check_semantic_confidence(
+    envelope: SemanticEnvelope,
+    threshold: Optional[float] = None,       # default: 0.7
+    entity_threshold: Optional[float] = None, # default: 0.5
+    settings: Optional[Settings] = None,
+) -> Tuple[bool, Optional[str]]
+```
+
+#### Behavior
+
+| Check | Threshold | Action on Failure |
+|-------|-----------|-------------------|
+| `envelope.confidence >= threshold` | 0.7 (configurable) | Return `(False, reason)` |
+| All `entity.confidence >= entity_threshold` | 0.5 (configurable) | Return `(False, reason)` |
+
+#### Configuration
+
+Thresholds can be configured in settings:
+
+```yaml
+semantic:
+  confidence_threshold: 0.7
+  entity_confidence_threshold: 0.5
+```
+
+#### Trace Events
+
+| Event | When |
+|-------|------|
+| `SEMANTIC_VALIDATION_COMPLETED` | Check completes (pass or fail) |
 
 ---
 

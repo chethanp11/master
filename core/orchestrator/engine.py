@@ -27,6 +27,10 @@ from core.contracts.run_schema import (
     StepStatus,
     TraceEvent,
 )
+from core.contracts.semantic_schema import (
+    NextAction,
+    SemanticEnvelope,
+)
 from core.contracts.user_input_schema import (
     UserInputAnswer,
     UserInputModes,
@@ -299,6 +303,107 @@ class OrchestratorEngine:
                 payload={"autonomy_level": flow_def.autonomy_level.value},
             )
 
+            # ORC-SEM-001: Execute semantic interpretation phase before step execution
+            should_continue, envelope, error_code = self._run_semantic_interpretation(
+                run_ctx=run_ctx,
+                flow_def=flow_def,
+            )
+            
+            # Store semantic envelope in run record if produced
+            if envelope is not None:
+                self.memory.update_run(
+                    run_id,
+                    {"semantic_envelope": envelope.model_dump(mode="json")},
+                )
+            
+            if not should_continue:
+                # Handle semantic phase stop/abort
+                if error_code == "semantic_abort":
+                    # ORC-SEM-STOP-004: Transition to FAILED
+                    self._transition_run_status(
+                        run_id=run_id,
+                        product=product,
+                        flow=flow,
+                        current_status=RunStatus.RUNNING,
+                        target_status=RunStatus.FAILED,
+                        step_id=None,
+                        summary={
+                            "error": error_code,
+                            "ambiguities": envelope.ambiguities if envelope else [],
+                        },
+                        reason="semantic_abort",
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunOperationResult.failure(
+                        code="semantic_abort",
+                        message="Semantic interpretation aborted the run.",
+                        details={
+                            "run_id": run_id,
+                            "ambiguities": envelope.ambiguities if envelope else [],
+                        },
+                    )
+                
+                if error_code == "semantic_ask_user":
+                    # ORC-SEM-STOP-002: Transition to PAUSED_WAITING_FOR_USER
+                    self._transition_run_status(
+                        run_id=run_id,
+                        product=product,
+                        flow=flow,
+                        current_status=RunStatus.RUNNING,
+                        target_status=RunStatus.PAUSED_WAITING_FOR_USER,
+                        step_id=None,
+                        summary={
+                            "semantic_pause": True,
+                            "ambiguities": envelope.ambiguities if envelope else [],
+                        },
+                        reason="semantic_ask_user",
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunOperationResult.success({
+                        "run_id": run_id,
+                        "status": RunStatus.PAUSED_WAITING_FOR_USER.value,
+                        "clarification_needed": True,
+                        "ambiguities": envelope.ambiguities if envelope else [],
+                    })
+                
+                if error_code == "semantic_needs_approval":
+                    # ORC-SEM-STOP-006: Transition to PENDING_HUMAN
+                    self._transition_run_status(
+                        run_id=run_id,
+                        product=product,
+                        flow=flow,
+                        current_status=RunStatus.RUNNING,
+                        target_status=RunStatus.PENDING_HUMAN,
+                        step_id=None,
+                        summary={"semantic_approval": True},
+                        reason="semantic_needs_approval",
+                    )
+                    self._persist_run_output(run_ctx)
+                    return RunOperationResult.success({
+                        "run_id": run_id,
+                        "status": RunStatus.PENDING_HUMAN.value,
+                        "approval_needed": True,
+                    })
+                
+                # ORC-SEM-004: General semantic failure
+                self._transition_run_status(
+                    run_id=run_id,
+                    product=product,
+                    flow=flow,
+                    current_status=RunStatus.RUNNING,
+                    target_status=RunStatus.FAILED,
+                    step_id=None,
+                    summary={"error": error_code or "semantic_interpretation_failed"},
+                    reason=error_code or "semantic_interpretation_failed",
+                )
+                self._persist_run_output(run_ctx)
+                return RunOperationResult.failure(
+                    code=error_code or "semantic_interpretation_failed",
+                    message="Semantic interpretation phase failed.",
+                    details={"run_id": run_id},
+                )
+
+            # ORC-SEM-STOP-007: CONTINUE permits step execution
             status = self._execute_from_index(
                 flow_def=flow_def,
                 run_ctx=run_ctx,
@@ -2178,6 +2283,142 @@ class OrchestratorEngine:
         if start_index > len(flow_def.steps):
             return len(flow_def.steps)
         return start_index
+
+    # ------------------------------------------------------------------ Semantic Interpretation Phase
+    def _run_semantic_interpretation(
+        self,
+        *,
+        run_ctx: RunContext,
+        flow_def: FlowDef,
+    ) -> tuple[bool, Optional[SemanticEnvelope], Optional[str]]:
+        """
+        Execute semantic interpretation phase before step execution.
+        
+        ORC-SEM-001: Semantic phase runs before planning/execution
+        ORC-SEM-003: Produces SemanticEnvelope result
+        
+        Returns:
+            (should_continue, envelope, error_code)
+            - should_continue: True if execution should proceed to steps
+            - envelope: The semantic envelope if produced
+            - error_code: Error code if failed
+        """
+        # Check for skip flag in payload or flow metadata
+        skip_semantic = (
+            run_ctx.payload.get("skip_semantic_interpretation", False)
+            or (flow_def.metadata or {}).get("skip_semantic_interpretation", False)
+        )
+        
+        if skip_semantic:
+            self._emit_event(
+                kind="semantic_interpretation_skipped",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"reason": "skip_semantic_interpretation flag set"},
+            )
+            return (True, None, None)
+        
+        start_time = time.time()
+        self._emit_event(
+            kind="semantic_interpretation_started",
+            run_id=run_ctx.run_id,
+            step_id=None,
+            product=run_ctx.product,
+            flow=run_ctx.flow,
+            payload={"raw_input": str(run_ctx.payload.get("user_input", ""))[:200]},
+        )
+        
+        try:
+            # Build semantic envelope from payload
+            # TODO: Replace with product-specific semantic adapter (GAP-006)
+            user_input = run_ctx.payload.get("user_input", "")
+            if not isinstance(user_input, str):
+                user_input = str(user_input) if user_input else ""
+            
+            envelope = SemanticEnvelope(
+                raw_input=user_input,
+                normalized_input=user_input.strip().lower() if user_input else "",
+                product_id=run_ctx.product,
+                intent_type=run_ctx.payload.get("intent_type", "unknown"),
+                confidence=run_ctx.payload.get("confidence", 1.0),
+                proposed_next_action=NextAction.CONTINUE,
+            )
+            
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._emit_event(
+                kind="semantic_interpretation_completed",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={
+                    "duration_ms": duration_ms,
+                    "confidence": envelope.confidence,
+                    "next_action": envelope.proposed_next_action.value,
+                },
+            )
+            
+            # Handle NextAction outcomes (ORC-SEM-STOP-001...007)
+            if envelope.proposed_next_action == NextAction.ABORT:
+                # ORC-SEM-STOP-004: Transition to FAILED with code semantic_abort
+                self._emit_event(
+                    kind="semantic_stop_issued",
+                    run_id=run_ctx.run_id,
+                    step_id=None,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "next_action": "ABORT",
+                        "ambiguities": envelope.ambiguities,
+                    },
+                )
+                return (False, envelope, "semantic_abort")
+            
+            if envelope.proposed_next_action == NextAction.ASK_USER:
+                # ORC-SEM-STOP-001/002: Pause for user clarification
+                self._emit_event(
+                    kind="semantic_stop_issued",
+                    run_id=run_ctx.run_id,
+                    step_id=None,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "next_action": "ASK_USER",
+                        "ambiguities": envelope.ambiguities,
+                    },
+                )
+                return (False, envelope, "semantic_ask_user")
+            
+            if envelope.proposed_next_action == NextAction.NEEDS_APPROVAL:
+                # ORC-SEM-STOP-006: Pause for HITL approval
+                self._emit_event(
+                    kind="semantic_stop_issued",
+                    run_id=run_ctx.run_id,
+                    step_id=None,
+                    product=run_ctx.product,
+                    flow=run_ctx.flow,
+                    payload={
+                        "next_action": "NEEDS_APPROVAL",
+                    },
+                )
+                return (False, envelope, "semantic_needs_approval")
+            
+            # ORC-SEM-STOP-007: CONTINUE permits step execution
+            return (True, envelope, None)
+            
+        except Exception as exc:
+            # ORC-SEM-004: Semantic phase failure → FAILED with semantic_interpretation_failed
+            self._emit_event(
+                kind="semantic_interpretation_failed",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={"error": str(exc), "type": type(exc).__name__},
+            )
+            return (False, None, "semantic_interpretation_failed")
 
     def _emit_event(
         self,

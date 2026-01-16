@@ -33,13 +33,13 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 | Tech Spec | Total | ✅ | 🟡 | ❌ | Coverage |
 |-----------|-------|-----|-----|-----|----------|
-| [ORC-orchestration.md](#orchestration-orc) | ~85 | 75 | 5 | 5 | 88% |
+| [ORC-orchestration.md](#orchestration-orc) | ~115 | 113 | 0 | 2 | 98% |
 | [AGT-agents-tools.md](#agents--tools-agt-tool) | ~50 | 45 | 3 | 2 | 90% |
-| [GOV-governance.md](#governance-gov) | ~60 | 55 | 3 | 2 | 92% |
-| [MEM-memory.md](#memory-mem) | ~40 | 38 | 2 | 0 | 95% |
+| [GOV-governance.md](#governance-gov) | ~65 | 63 | 0 | 2 | 97% |
+| [MEM-memory.md](#memory-mem) | ~45 | 43 | 2 | 0 | 96% |
 | [INT-intelligence.md](#intelligence-int) | ~55 | 48 | 5 | 2 | 87% |
 | [GW-gateway.md](#gateway-gw) | ~75 | 70 | 3 | 2 | 93% |
-| [PROD-products.md](#products-prod) | ~45 | 40 | 3 | 2 | 89% |
+| [PROD-products.md](#products-prod) | ~50 | 47 | 1 | 2 | 94% |
 | [ACC-acceptance.md](#acceptance-acc) | ~15 | 15 | 0 | 0 | 100% |
 
 ---
@@ -69,11 +69,33 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 | Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
 |--------------|---------------------|--------|----------------|----------------|-------|-------|
-| ORC-SEM-001 | Semantic interpretation phase before planning | 🟡 Partial | `core/orchestrator/engine.py` | `trace: semantic_interpretation_started` | — | In progress |
-| ORC-SEM-002 | Skip with `skip_semantic_interpretation: true` | ✅ Implemented | `core/orchestrator/engine.py` | — | — | Flow config option |
-| ORC-SEM-010 | SemanticEnvelope Pydantic model | 🟡 Partial | `core/contracts/semantic_schema.py` | — | — | Schema defined |
-| ORC-SEM-020 | NextAction enum (CONTINUE, ASK_USER, ABORT) | ✅ Implemented | `core/contracts/semantic_schema.py` | — | — | |
-| ORC-SEM-STOP-002 | ASK_USER → PAUSED_WAITING_FOR_USER | ✅ Implemented | `core/orchestrator/engine.py` | `trace: run_paused` | — | |
+| ORC-SEM-001 | Semantic interpretation phase before planning | ✅ Implemented | `core/orchestrator/engine.py` | `trace: semantic_interpretation_started` | `tests/unit/core/orchestrator/test_semantic_phase.py` | Full lifecycle |
+| ORC-SEM-002 | Skip with `skip_semantic_interpretation: true` | ✅ Implemented | `core/orchestrator/engine.py` | `trace: semantic_interpretation_skipped` | `tests/unit/core/orchestrator/test_semantic_phase.py` | Flow config option |
+| ORC-SEM-010 | SemanticEnvelope Pydantic model | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | Full schema |
+| ORC-SEM-011 | normalized_input field | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-012 | product_id field | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-013 | intent_type field | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-014 | entities list with Entity model | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-015 | constraints dict | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-016 | confidence float 0.0-1.0 | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-017 | ambiguities list | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-018 | proposed_next_action field | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-019 | parameters dict + interpretation_method | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-020 | NextAction enum (CONTINUE, ASK_USER, ABORT, NEEDS_APPROVAL) | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-030 | normalize_whitespace() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-031 | deduplicate_entities() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-032 | merge_constraints() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-033 | apply_stable_ordering() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-034 | coerce_types() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-035 | apply_core_normalization() | ✅ Implemented | `core/orchestrator/normalization.py` | — | `tests/unit/core/orchestrator/test_normalization.py` | |
+| ORC-SEM-040 | SEMANTIC_INTERPRETATION_STARTED trace | ✅ Implemented | `core/memory/tracing.py` | `trace: semantic_interpretation_started` | `tests/unit/core/orchestrator/test_semantic_phase.py` | |
+| ORC-SEM-041 | SEMANTIC_INTERPRETATION_COMPLETED trace | ✅ Implemented | `core/memory/tracing.py` | `trace: semantic_interpretation_completed` | `tests/unit/core/orchestrator/test_semantic_phase.py` | |
+| ORC-SEM-042 | SEMANTIC_VALIDATION_COMPLETED trace | ✅ Implemented | `core/memory/tracing.py` | `trace: semantic_validation_completed` | `tests/unit/core/orchestrator/test_semantic_phase.py` | |
+| ORC-SEM-043 | SEMANTIC_STOP_ISSUED trace | ✅ Implemented | `core/memory/tracing.py` | `trace: semantic_stop_issued` | `tests/unit/core/orchestrator/test_semantic_phase.py` | |
+| ORC-SEM-050 | check_semantic_confidence() hook | ✅ Implemented | `core/governance/hooks.py` | — | `tests/unit/core/governance/test_semantic_hooks.py` | |
+| ORC-SEM-STOP-002 | ASK_USER → PAUSED_WAITING_FOR_USER | ✅ Implemented | `core/orchestrator/engine.py` | `trace: run_paused` | `tests/unit/core/orchestrator/test_semantic_phase.py` | |
+| ORC-SEM-STOP-003 | ClarificationResponse model | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
+| ORC-SEM-STOP-005 | AbortResponse model | ✅ Implemented | `core/contracts/semantic_schema.py` | — | `tests/unit/core/contracts/test_semantic_schema.py` | |
 
 ### Step Execution (ORC-STEP)
 

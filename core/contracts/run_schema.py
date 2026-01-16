@@ -22,10 +22,13 @@ from __future__ import annotations
 
 import time
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from core.contracts.semantic_schema import SemanticEnvelope
 
 # ==============================
 # Enums
@@ -126,6 +129,10 @@ class RunRecord(BaseModel):
     input: Optional[Dict[str, Any]] = Field(default=None, description="Initial payload.")
     output: Optional[Dict[str, Any]] = Field(default=None, description="Final output payload.")
     summary: Dict[str, Any] = Field(default_factory=dict, description="Summary metadata for UI/state.")
+    semantic_envelope: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Semantic interpretation result (SemanticEnvelope serialized).",
+    )
 
 
 class RunOperationError(BaseModel):

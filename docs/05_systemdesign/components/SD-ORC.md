@@ -43,6 +43,7 @@ core/orchestrator/
 ├── loop_executor.py       # repeat_until handling
 ├── user_input_handler.py  # user_input pause/resume/validation
 ├── flow_loader.py         # YAML → FlowDef parsing
+├── normalization.py       # Semantic envelope normalization (ORC-SEM-030+)
 ├── branching.py           # Branch condition evaluation
 ├── looping.py             # Loop condition evaluation
 ├── templating.py          # Param/message rendering
@@ -71,6 +72,10 @@ core/orchestrator/
 
 | Schema | Location | Purpose |
 |--------|----------|---------|
+| `SemanticEnvelope` | `core/contracts/semantic_schema.py` | Semantic interpretation envelope |
+| `Entity` | `core/contracts/semantic_schema.py` | Named entity extraction result |
+| `ClarificationResponse` | `core/contracts/semantic_schema.py` | ASK_USER clarification payload |
+| `AbortResponse` | `core/contracts/semantic_schema.py` | ABORT response payload |
 | `FlowSchema` | `core/contracts/flow_schema.py` | Flow definition validation |
 | `RunSchema` | `core/contracts/run_schema.py` | Run state serialization |
 | `UserInputRequest` | `core/contracts/user_input_schema.py` | User input request structure |
@@ -87,6 +92,7 @@ core/orchestrator/
 | `core/orchestrator/loop_executor.py` | Loop executor | Handles repeat_until step execution. | Budget-aware loop handling. |
 | `core/orchestrator/user_input_handler.py` | User input handler | Handles user_input pause/resume/validation. | Validates against QuestionSet schemas. |
 | `core/orchestrator/flow_loader.py` | Flow loader | Loads FlowDefs/StepDefs from flow YAML. | Validates and normalizes step ids; no execution or persistence. |
+| `core/orchestrator/normalization.py` | Semantic normalizer | Domain-agnostic envelope normalization. | `normalize_whitespace()`, `deduplicate_entities()`, `merge_constraints()`, `apply_stable_ordering()`, `coerce_types()`, `apply_core_normalization()`. |
 | `core/orchestrator/step_executor.py` | Step executor | Executes tool/agent/tool_batch/plan_proposal steps. | Renders params from payload/artifacts, delegates to ToolExecutor/AgentRegistry, enforces agent output governance; tool retries only. |
 | `core/orchestrator/branching.py` | Branch evaluator | Deterministic branch evaluation. | Evaluates safe condition expressions over artifacts and step outputs. |
 | `core/orchestrator/looping.py` | Loop evaluator | Deterministic stop-condition evaluation. | Evaluates bounded repeat-until conditions against artifacts and memory. |
@@ -117,6 +123,88 @@ core/orchestrator/
 
 ### Session Isolation (Gateway)
 The Gateway API constructs an `OrchestratorEngine` per request to avoid cross-user state leakage. Registries, settings, and the memory/tracing backends remain cached, but run context and execution state are request-scoped. Run ids include a timestamp plus a random suffix to avoid collisions under concurrent starts.
+
+---
+
+## 4.1 Semantic Interpretation Phase
+
+The semantic interpretation phase transforms raw user input into a normalized `SemanticEnvelope` before flow execution begins. This is a critical pre-processing step defined by ORC-SEM-001.
+
+### Phase Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant Gateway as Gateway API
+    participant Engine as OrchestratorEngine
+    participant Adapter as ProductSemanticAdapter
+    participant Normalizer as normalization.py
+    participant Governance as Hooks
+    participant Tracer as Tracer
+
+    Gateway->>Engine: run_flow(product, flow, payload)
+    Engine->>Tracer: SEMANTIC_INTERPRETATION_STARTED
+    Engine->>Adapter: interpret(raw_input)
+    Adapter-->>Engine: SemanticEnvelope (draft)
+    Engine->>Normalizer: apply_core_normalization(envelope)
+    Normalizer-->>Engine: SemanticEnvelope (normalized)
+    Engine->>Governance: check_semantic_confidence(envelope)
+    alt confidence >= threshold
+        Engine->>Tracer: SEMANTIC_INTERPRETATION_COMPLETED
+        Engine->>Engine: proceed to flow execution
+    else confidence < threshold
+        Engine->>Tracer: SEMANTIC_STOP_ISSUED
+        Engine->>Engine: return clarification/abort
+    end
+```
+
+### SemanticEnvelope Structure
+
+| Field | Type | Purpose | Tech Spec |
+|-------|------|---------|-----------|
+| `raw_input` | `str` | Original user input | ORC-SEM-010 |
+| `normalized_input` | `str` | Whitespace-normalized input | ORC-SEM-011 |
+| `product_id` | `str` | Target product identifier | ORC-SEM-012 |
+| `intent_type` | `str` | Detected intent (product-specific) | ORC-SEM-013 |
+| `entities` | `List[Entity]` | Extracted named entities | ORC-SEM-014 |
+| `constraints` | `Dict[str, Any]` | User-specified constraints | ORC-SEM-015 |
+| `confidence` | `float` | Overall interpretation confidence (0.0-1.0) | ORC-SEM-016 |
+| `ambiguities` | `List[str]` | Detected ambiguities requiring clarification | ORC-SEM-017 |
+| `proposed_next_action` | `NextAction` | CONTINUE, ASK_USER, ABORT, NEEDS_APPROVAL | ORC-SEM-018 |
+| `parameters` | `Dict[str, Any]` | Flow-ready parameters | ORC-SEM-019 |
+| `interpretation_method` | `str` | How interpretation was performed (e.g., "regex", "llm") | ORC-SEM-019 |
+
+### Core Normalization Functions
+
+The orchestrator applies domain-agnostic normalization via `core/orchestrator/normalization.py`:
+
+| Function | Purpose | Tech Spec |
+|----------|---------|-----------|
+| `normalize_whitespace(text)` | Collapse whitespace, normalize line endings | ORC-SEM-030 |
+| `deduplicate_entities(entities)` | Key by (name, type), keep highest confidence | ORC-SEM-031 |
+| `merge_constraints(constraints)` | Deep merge with override precedence | ORC-SEM-032 |
+| `apply_stable_ordering(envelope)` | Sort entities by name, ambiguities alphabetically | ORC-SEM-033 |
+| `coerce_types(value, target_type)` | str→int, str→float, str→bool, str→date | ORC-SEM-034 |
+| `apply_core_normalization(envelope)` | Orchestrate all normalizations | ORC-SEM-035 |
+
+### NextAction Outcomes
+
+| Action | Run Status Transition | Trace Event |
+|--------|----------------------|-------------|
+| `CONTINUE` | RUNNING | `SEMANTIC_INTERPRETATION_COMPLETED` |
+| `ASK_USER` | PAUSED_WAITING_FOR_USER | `SEMANTIC_STOP_ISSUED` |
+| `ABORT` | FAILED | `SEMANTIC_STOP_ISSUED` |
+| `NEEDS_APPROVAL` | PENDING_HUMAN | `SEMANTIC_STOP_ISSUED` |
+
+### Skip Semantic Interpretation
+
+Flows may opt out via configuration:
+
+```yaml
+# products/{product}/flows/{flow}.yaml
+skip_semantic_interpretation: true
+```
+
+When skipped, `SEMANTIC_INTERPRETATION_SKIPPED` is emitted and the envelope is bypassed.
 
 ---
 
@@ -270,6 +358,12 @@ async def execute_step(step, context):
 | `step.timeout` | Step times out | `{run_id, step_id, timeout_ms}` |
 | `user_input.requested` | User input needed | `{run_id, step_id, question_set}` |
 | `user_input.received` | User input received | `{run_id, step_id}` |
+| `semantic_interpretation.started` | Semantic phase begins | `{run_id, product_id, raw_input}` |
+| `semantic_interpretation.completed` | Semantic phase succeeds | `{run_id, intent_type, confidence, entities_count}` |
+| `semantic_interpretation.failed` | Semantic phase errors | `{run_id, error}` |
+| `semantic_interpretation.skipped` | Semantic phase bypassed | `{run_id, reason}` |
+| `semantic_validation.completed` | Confidence check complete | `{run_id, passed, confidence}` |
+| `semantic_stop.issued` | ASK_USER/ABORT triggered | `{run_id, next_action, reason}` |
 
 ### Artifact Outputs
 
@@ -291,6 +385,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matr
 | Category | Tech Spec IDs | Status |
 |----------|---------------|--------|
 | Run Lifecycle | ORC-RUN-001 to ORC-RUN-005 | ✅ All Implemented |
+| Semantic Interpretation | ORC-SEM-001 to ORC-SEM-043 | ✅ All Implemented |
 | Step Execution | ORC-STEP-001 to ORC-STEP-004 | ✅ All Implemented |
 | Flow Loading | ORC-FLOW-001 to ORC-FLOW-004 | ✅ All Implemented |
 | HITL | ORC-HITL-001 to ORC-HITL-003 | ✅ All Implemented |
@@ -307,6 +402,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matr
 | `core/orchestrator/state.py` | State management |
 | `core/orchestrator/step_executor.py` | Step execution logic |
 | `core/orchestrator/flow_loader.py` | YAML flow loading |
+| `core/orchestrator/normalization.py` | Semantic envelope normalization |
 | `core/orchestrator/branching.py` | Conditional branching |
 | `core/orchestrator/looping.py` | Loop execution |
 | `core/orchestrator/hitl.py` | Human-in-the-loop |

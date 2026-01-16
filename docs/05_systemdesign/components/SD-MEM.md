@@ -248,6 +248,12 @@ sequenceDiagram
 | `step.failed` | Step execution failed |
 | `tool.called` | Tool invocation |
 | `model.called` | LLM invocation |
+| `semantic_interpretation.started` | Semantic phase begins (ORC-SEM-040) |
+| `semantic_interpretation.completed` | Semantic phase succeeds (ORC-SEM-041) |
+| `semantic_interpretation.failed` | Semantic phase errors |
+| `semantic_interpretation.skipped` | Semantic phase bypassed |
+| `semantic_validation.completed` | Confidence check complete (ORC-SEM-042) |
+| `semantic_stop.issued` | ASK_USER/ABORT triggered (ORC-SEM-043) |
 | `gate.evaluated` | Gate evaluation |
 | `hitl.requested` | Human approval requested |
 | `hitl.resolved` | Human approval provided |

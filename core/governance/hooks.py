@@ -18,13 +18,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from core.config.schema import Settings
 from core.contracts.agent_schema import find_control_fields, validate_agent_output_payload
 from core.contracts.reasoning_schema import ReasoningPurpose
 from core.contracts.flow_schema import AutonomyLevel, FlowDef
 from core.contracts.budget_schema import Budget, BudgetState
+from core.contracts.semantic_schema import SemanticEnvelope
 from core.governance.policies import PolicyDecision, PolicyEngine
 from core.governance.gates import validate_branch_conditions, validate_loop_conditions
 from core.governance.security import SecurityRedactor
@@ -36,6 +37,74 @@ _INJECTION_PATTERNS = (
     "dump system prompt",
     "reveal configuration",
 )
+
+
+# ==============================
+# Semantic Confidence Gate
+# ==============================
+def check_semantic_confidence(
+    envelope: SemanticEnvelope,
+    threshold: Optional[float] = None,
+    entity_threshold: Optional[float] = None,
+    settings: Optional[Settings] = None,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Check if semantic interpretation meets confidence threshold.
+    
+    ORC-SEM-GATE: Governance hook for semantic confidence gating.
+    
+    Args:
+        envelope: The SemanticEnvelope to check
+        threshold: Overall confidence threshold (default: 0.7 or from settings)
+        entity_threshold: Per-entity confidence threshold (default: 0.5 or from settings)
+        settings: Optional Settings to read thresholds from policies config
+        
+    Returns:
+        Tuple of (passed, reason):
+        - passed: True if confidence check passed
+        - reason: None if passed, otherwise explanation string
+        
+    Examples:
+        >>> env = SemanticEnvelope(confidence=0.8, ...)
+        >>> passed, reason = check_semantic_confidence(env)
+        >>> assert passed is True
+        
+        >>> env = SemanticEnvelope(confidence=0.5, ...)
+        >>> passed, reason = check_semantic_confidence(env, threshold=0.7)
+        >>> assert passed is False
+        >>> assert "Low confidence" in reason
+    """
+    # Resolve thresholds from settings if provided
+    if settings is not None:
+        if threshold is None:
+            threshold = settings.policies.semantic_confidence_threshold
+        if entity_threshold is None:
+            entity_threshold = settings.policies.semantic_entity_confidence_threshold
+    
+    # Apply defaults
+    if threshold is None:
+        threshold = 0.7
+    if entity_threshold is None:
+        entity_threshold = 0.5
+    
+    # Check 1: Overall envelope confidence
+    if envelope.confidence < threshold:
+        return (
+            False,
+            f"Low confidence: {envelope.confidence:.2f} < {threshold:.2f}",
+        )
+    
+    # Check 2: Per-entity confidence
+    for entity in envelope.entities:
+        if entity.confidence < entity_threshold:
+            return (
+                False,
+                f"Low entity confidence: entity '{entity.name}' has confidence "
+                f"{entity.confidence:.2f} < {entity_threshold:.2f}",
+            )
+    
+    # All checks passed
+    return (True, None)
 
 
 @dataclass(frozen=True)

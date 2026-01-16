@@ -75,6 +75,7 @@ products/{product_name}/
 ├── __init__.py          # Product module exports
 ├── manifest.yaml        # Product metadata (name, version, flows, UI)
 ├── registry.py          # Product registration (register(registries) function)
+├── semantic.py          # Semantic adapter (interpret/validate user input)
 ├── descriptors.py       # Product descriptors (optional)
 ├── config/              # Product-specific configuration
 │   └── product.yaml     # Limits, defaults, flags
@@ -145,7 +146,81 @@ flows:
 | `products/{name}/manifest.yaml` | ProductManifest | Product metadata. | Name, display_name, version, flows, UI config. |
 | `products/{name}/config/product.yaml` | ProductConfig | Per-product settings. | Limits, defaults, flags, metadata. |
 | `products/{name}/registry.py` | ProductRegistry | Registration entry point. | `register(registries)` function. |
+| `products/{name}/semantic.py` | SemanticAdapter | Product-specific semantic interpretation. | `interpret()` and `validate()` methods. |
 | `products/{name}/flows/` | Flows | Product flows. | YAML flow definitions. |
+
+### Semantic Adapter Pattern
+
+Each product may optionally implement a semantic adapter in `products/{name}/semantic.py` to provide domain-specific user input interpretation. The adapter transforms raw user input into a normalized `SemanticEnvelope` that the orchestrator can use for flow execution.
+
+#### Interface
+
+```python
+class ProductSemanticAdapter:
+    """Product-specific semantic interpretation adapter."""
+    
+    def interpret(self, raw_input: str, context: Optional[Dict[str, Any]] = None) -> SemanticEnvelope:
+        """
+        Interpret raw user input into a SemanticEnvelope.
+        
+        Returns a SemanticEnvelope with:
+        - intent_type: Domain-specific intent classification
+        - entities: Extracted named entities with confidence scores
+        - confidence: Overall interpretation confidence (0.0-1.0)
+        - proposed_next_action: CONTINUE, ASK_USER, ABORT, NEEDS_APPROVAL
+        """
+        ...
+    
+    def validate(self, envelope: SemanticEnvelope) -> Tuple[bool, Optional[str]]:
+        """
+        Validate a semantic envelope for domain-specific constraints.
+        
+        Returns (is_valid, error_message).
+        """
+        ...
+```
+
+#### Example: Hello World Semantic Adapter
+
+```python
+# products/hello_world/semantic.py
+class HelloWorldSemanticAdapter:
+    GREETING_PATTERNS = [r"hello", r"hi", r"hey", r"greetings"]
+    LANGUAGE_PATTERNS = {"english": ["en", "english"], "spanish": ["es", "spanish"]}
+    
+    def interpret(self, raw_input: str, context: Optional[Dict[str, Any]] = None) -> SemanticEnvelope:
+        intent = self._detect_greeting_intent(raw_input)
+        name = self._extract_name(raw_input)
+        language = self._detect_language(raw_input)
+        
+        entities = []
+        if name:
+            entities.append(Entity(name="name", type="person", value=name, confidence=0.9))
+        if language:
+            entities.append(Entity(name="language", type="language", value=language, confidence=0.85))
+        
+        return SemanticEnvelope(
+            raw_input=raw_input,
+            normalized_input=normalize_whitespace(raw_input),
+            product_id="hello_world",
+            intent_type=intent,
+            entities=entities,
+            confidence=0.9 if intent else 0.3,
+            proposed_next_action=NextAction.CONTINUE if intent else NextAction.ASK_USER,
+        )
+```
+
+#### Core Normalization
+
+After product-specific interpretation, the orchestrator applies core normalization via `core/orchestrator/normalization.py`:
+
+| Function | Purpose |
+|----------|---------|
+| `normalize_whitespace()` | Collapse whitespace, normalize line endings |
+| `deduplicate_entities()` | Key by (name, type), keep highest confidence |
+| `merge_constraints()` | Deep merge with override precedence |
+| `apply_stable_ordering()` | Sort entities by name, ambiguities alphabetically |
+| `coerce_types()` | str→int, str→float, str→bool, str→date |
 
 ### Key Data Structures
 

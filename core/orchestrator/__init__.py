@@ -5,6 +5,7 @@ This package contains the core orchestration engine and supporting modules.
 
 Public API:
 - OrchestratorEngine: Main entry point for flow execution
+- Normalization functions: Core semantic normalization
 
 Internal modules (not for external use):
 - run_lifecycle: Run lifecycle management
@@ -23,6 +24,7 @@ Internal modules (not for external use):
 
 Usage:
     from core.orchestrator.engine import OrchestratorEngine
+    from core.orchestrator.normalization import apply_core_normalization
 """
 
 # Lazy import to avoid circular imports
@@ -30,6 +32,28 @@ def __getattr__(name: str):
     if name == "OrchestratorEngine":
         from core.orchestrator.engine import OrchestratorEngine
         return OrchestratorEngine
+    
+    # Normalization functions
+    if name in (
+        "normalize_whitespace",
+        "deduplicate_entities", 
+        "merge_constraints",
+        "apply_stable_ordering",
+        "coerce_types",
+        "apply_core_normalization",
+    ):
+        from core.orchestrator import normalization
+        return getattr(normalization, name)
+    
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__all__ = ["OrchestratorEngine"]
+__all__ = [
+    "OrchestratorEngine",
+    # Normalization (ORC-SEM-030...034)
+    "normalize_whitespace",
+    "deduplicate_entities",
+    "merge_constraints",
+    "apply_stable_ordering",
+    "coerce_types",
+    "apply_core_normalization",
+]
