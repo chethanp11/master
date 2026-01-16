@@ -9,16 +9,16 @@
 
 ## Overview
 
-This folder contains Business Requirement Documents (BRDs) that define **what** the MASTER platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../techspec/) are derived.
+This folder contains Business Requirement Documents (BRDs) that define **what** the MASTER platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../03_technical_specifications/) are derived.
 
 ### Document Hierarchy
 
 ```
-Vision.md                    ← Strategic direction
+01_vision_and_intent/        ← Strategic direction
     ↓
-BRD-*.md                     ← Business requirements (this folder)
+02_business_requirements/    ← Business requirements (this folder)
     ↓
-docs/techspec/*.md           ← Technical specifications
+03_technical_specifications/ ← Technical specifications
     ↓
 core/, gateway/, products/   ← Implementation
 ```
@@ -29,7 +29,7 @@ core/, gateway/, products/   ← Implementation
 
 | Document | Theme | Description |
 |----------|-------|-------------|
-| [Vision.md](Vision.md) | Strategy | Mission, audience, value propositions, roadmap |
+| [Vision.md](../01_vision_and_intent/Vision.md) | Strategy | Mission, audience, value propositions, roadmap |
 | [BRD-automation.md](BRD-automation.md) | Intelligent Automation | Agents, tools, reasoning, evidence |
 | [BRD-governance.md](BRD-governance.md) | Governance & Compliance | Approval, security, audit, budget |
 | [BRD-experience.md](BRD-experience.md) | Developer & User Experience | API, CLI, UI, products |

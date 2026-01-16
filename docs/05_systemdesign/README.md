@@ -14,11 +14,13 @@ This folder contains **implementation reference documentation** that describes h
 ### Document Hierarchy
 
 ```
-docs/
-├── brd/                    ← WHY: Business requirements
-├── techspec/               ← WHAT: Technical requirements  
-└── systemdesign/           ← HOW: Implementation reference (this folder)
-    ├── README.md           ← Navigation (you are here)
+docs/Framework_Dev_Steps/
+├── 01_vision_and_intent/       ← WHY: Vision and intent
+├── 02_business_requirements/   ← WHY: Business requirements
+├── 03_technical_specifications/← WHAT: Technical requirements  
+├── 04_implementation_plan/     ← HOW: Implementation planning
+└── 05_system_design/           ← HOW: Implementation reference (this folder)
+    ├── README.md               ← Navigation (you are here)
     ├── architecture-overview.md
     ├── component-reference.md
     ├── flows-and-agents-reference.md
@@ -65,12 +67,12 @@ docs/
 
 | Topic | System Design | BRD | Techspec |
 |-------|---------------|-----|----------|
-| Orchestration | architecture-overview.md | [BRD-automation.md](../brd/BRD-automation.md) | [ORC-orchestration.md](../techspec/ORC-orchestration.md) |
-| Agents/Tools | flows-and-agents-reference.md | [BRD-automation.md](../brd/BRD-automation.md) | [AGT-agents-tools.md](../techspec/AGT-agents-tools.md) |
-| Governance | governance-reference.md | [BRD-governance.md](../brd/BRD-governance.md) | [GOV-governance.md](../techspec/GOV-governance.md) |
-| Products | product-guide.md | [BRD-experience.md](../brd/BRD-experience.md) | [PROD-products.md](../techspec/PROD-products.md) |
-| Gateway | architecture-overview.md | [BRD-experience.md](../brd/BRD-experience.md) | [GW-gateway.md](../techspec/GW-gateway.md) |
-| Memory | component-reference.md | [BRD-operations.md](../brd/BRD-operations.md) | [MEM-memory.md](../techspec/MEM-memory.md) |
+| Orchestration | architecture-overview.md | [BRD-automation.md](../02_business_requirements/BRD-automation.md) | [ORC-orchestration.md](../03_technical_specifications/ORC-orchestration.md) |
+| Agents/Tools | flows-and-agents-reference.md | [BRD-automation.md](../02_business_requirements/BRD-automation.md) | [AGT-agents-tools.md](../03_technical_specifications/AGT-agents-tools.md) |
+| Governance | governance-reference.md | [BRD-governance.md](../02_business_requirements/BRD-governance.md) | [GOV-governance.md](../03_technical_specifications/GOV-governance.md) |
+| Products | product-guide.md | [BRD-experience.md](../02_business_requirements/BRD-experience.md) | [PROD-products.md](../03_technical_specifications/PROD-products.md) |
+| Gateway | architecture-overview.md | [BRD-experience.md](../02_business_requirements/BRD-experience.md) | [GW-gateway.md](../03_technical_specifications/GW-gateway.md) |
+| Memory | component-reference.md | [BRD-operations.md](../02_business_requirements/BRD-operations.md) | [MEM-memory.md](../03_technical_specifications/MEM-memory.md) |
 
 ---
 
