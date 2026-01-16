@@ -1,11 +1,18 @@
 # System Design: Gateway (SD-GW)
 
 > **Component**: Gateway Layer (API, CLI, UI)  
+> **Version**: 1.1  
 > **Path**: `gateway/`  
 > **Tech Spec**: [GW-gateway.md](../../03_technical_specifications/GW-gateway.md)  
-> **Last Updated**: 2026-01-16
+> **Last Updated**: 2026-01-16  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
 

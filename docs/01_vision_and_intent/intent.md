@@ -1,12 +1,19 @@
 # MASTER Framework — Developer Intent
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
+> **Version**: 1.1  
 
 > **Document**: Framework Developer Intent  
 > **Last Updated**: 2026-01-13  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## Purpose
 
@@ -18,14 +25,14 @@ For framework philosophy, actors, and process, see [Vision.md](Vision.md).
 
 ## Document Structure
 
-> **Note**: For easier reconciliation with BRD documents, domain-specific intents are also available as separate files:
+> **Note**: For easier reconciliation with BRD documents, domain-specific intents are also available as separate files:  
 > 
-> | Standalone Document | Maps to BRD |
-> |--------------------|-------------|
-> | [intent-automation.md](intent-automation.md) | [BRD-automation.md](../02_brd/BRD-automation.md) |
-> | [intent-governance.md](intent-governance.md) | [BRD-governance.md](../02_brd/BRD-governance.md) |
-> | [intent-experience.md](intent-experience.md) | [BRD-experience.md](../02_brd/BRD-experience.md) |
-> | [intent-operations.md](intent-operations.md) | [BRD-operations.md](../02_brd/BRD-operations.md) |
+> | Standalone Document | Maps to BRD |  
+> |--------------------|-------------|  
+> | [intent-automation.md](intent-automation.md) | [BRD-automation.md](../02_brd/BRD-automation.md) |  
+> | [intent-governance.md](intent-governance.md) | [BRD-governance.md](../02_brd/BRD-governance.md) |  
+> | [intent-experience.md](intent-experience.md) | [BRD-experience.md](../02_brd/BRD-experience.md) |  
+> | [intent-operations.md](intent-operations.md) | [BRD-operations.md](../02_brd/BRD-operations.md) |  
 
 | Intent Section | Maps To | Theme |
 |----------------|---------|-------|

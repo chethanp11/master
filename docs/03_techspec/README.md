@@ -1,10 +1,10 @@
 # Technical Specifications Index
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
+> **Version**: 1.1  
 
 > **Document Status**: V1 Release  
 > **Last Updated**: 2026-01-12  
-> **Specification Version**: 1.0.0
 
 ## Purpose
 
@@ -18,6 +18,12 @@ Each specification document includes:
 - **Rationale** explaining design decisions where applicable
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## Specification Documents
 

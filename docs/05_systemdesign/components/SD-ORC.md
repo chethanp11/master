@@ -1,11 +1,18 @@
 # System Design: Orchestration (SD-ORC)
 
 > **Component**: Orchestration Engine  
+> **Version**: 1.1  
 > **Path**: `core/orchestrator/`  
 > **Tech Spec**: [ORC-orchestration.md](../../03_technical_specifications/ORC-orchestration.md)  
-> **Last Updated**: 2026-01-16
+> **Last Updated**: 2026-01-16  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
 

@@ -1,14 +1,21 @@
 # Developer Intent: Intelligent Automation (INT-AUTO)
 
-> **Maps to**: [BRD-automation.md](../02_brd/BRD-automation.md)
+> **Maps to**: [BRD-automation.md](../02_brd/BRD-automation.md)  
+> **Version**: 1.1  
 >
-> **Source**: Extracted from [intent.md](intent.md) § 1
+> **Source**: Extracted from [intent.md](intent.md) § 1  
 
 ---
 
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
+
 ## 1.1 Semantic Interpretation (Added: 2026-01-13)
 
-> **Intent**: Every user input must pass through a semantic interpretation phase before any step execution.
+> **Intent**: Every user input must pass through a semantic interpretation phase before any step execution.  
 
 ### Intent
 

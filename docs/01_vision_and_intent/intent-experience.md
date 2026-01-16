@@ -1,10 +1,17 @@
 # Developer Intent: Developer & User Experience (INT-EXP)
 
-> **Maps to**: [BRD-experience.md](../02_brd/BRD-experience.md)
+> **Maps to**: [BRD-experience.md](../02_brd/BRD-experience.md)  
+> **Version**: 1.1  
 >
-> **Source**: Extracted from [intent.md](intent.md) § 3
+> **Source**: Extracted from [intent.md](intent.md) § 3  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 3.1 API Experience
 

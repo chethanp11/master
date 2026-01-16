@@ -1,9 +1,9 @@
 # Product System Technical Specification
 
 > **Document ID**: PROD  
-> **Version**: 1.1.0  
+> **Version**: 1.1  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13
+> **Last Updated**: 2026-01-13  
 
 ### Version History
 

@@ -1,9 +1,16 @@
 # How to Enhance the MASTER Framework
 
 > **Last Updated**: 2026-01-16  
-> **Audience**: Framework contributors and maintainers
+> **Version**: 1.1  
+> **Audience**: Framework contributors and maintainers  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## Overview
 

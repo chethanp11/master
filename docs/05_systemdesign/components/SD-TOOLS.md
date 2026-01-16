@@ -1,11 +1,18 @@
 # System Design: Tools (SD-TOOLS)
 
 > **Component**: Tool Execution Layer  
+> **Version**: 1.1  
 > **Path**: `core/tools/`  
 > **Tech Spec**: [AGT-agents-tools.md](../../03_technical_specifications/AGT-agents-tools.md) (TOOL-* requirements)  
-> **Last Updated**: 2026-01-16
+> **Last Updated**: 2026-01-16  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
 

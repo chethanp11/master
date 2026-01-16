@@ -1,11 +1,18 @@
 # System Design: Spec Coverage Matrix
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
+> **Version**: 1.1  
 
 > **Last Updated**: 2026-01-16  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## Purpose
 

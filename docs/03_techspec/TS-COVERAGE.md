@@ -1,9 +1,9 @@
 # TechSpec Coverage Matrix
 
 > **Document ID**: TS-COVERAGE  
-> **Version**: 1.0  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
 ---
 

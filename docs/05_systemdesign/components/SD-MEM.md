@@ -1,11 +1,18 @@
 # System Design: Memory (SD-MEM)
 
 > **Component**: Memory & Persistence Layer  
+> **Version**: 1.1  
 > **Path**: `core/memory/`  
 > **Tech Spec**: [MEM-memory.md](../../03_technical_specifications/MEM-memory.md)  
-> **Last Updated**: 2026-01-16
+> **Last Updated**: 2026-01-16  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
 

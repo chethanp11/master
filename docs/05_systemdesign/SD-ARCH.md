@@ -1,11 +1,19 @@
 # System Design: Architecture
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
+> **Version**: 1.1  
 
-> **Last Updated**: 2026-01-16  
-> **Status**: V1 Release
+> **Last Updated**: 2026-01-17  
+> **Status**: V1 Release  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
+| 1.1 | 2026-01-17 | Align architecture with component docs |
 
 ## Purpose
 
@@ -113,16 +121,13 @@ This is the **C4-ish** architecture view — stable across releases.
 
 | Module | Path | Responsibility | Owns |
 |--------|------|----------------|------|
-| **Orchestrator** | `core/orchestrator/` | Run lifecycle, step execution, flow control | `RunContext`, `StepResult`, flow execution |
-| **Agents** | `core/agents/` | Advisory intelligence, reasoning | Agent invocation, recommendations |
-| **Tools** | `core/tools/` | Deterministic tool execution | Tool registry, execution results |
-| **Governance** | `core/governance/` | Policies, hooks, security, budgets | Approval gates, PII redaction |
-| **Memory** | `core/memory/` | Persistence, tracing, observability | State storage, trace events |
-| **Models** | `core/models/` | LLM routing, provider abstraction | Model calls, token counting |
-| **Knowledge** | `core/knowledge/` | Context packs, retrieval | Document retrieval, context assembly |
+| **Orchestrator** | `core/orchestrator/` | Run lifecycle, step execution, flow control | `OrchestratorEngine`, `FlowLoader`, `StepExecutor`, semantic normalization |
+| **Intelligence** | `core/agents/`, `core/models/` | Advisory reasoning + model routing | `AgentRegistry`, reasoning ladder, critic evaluator, `ModelRouter` |
+| **Tools** | `core/tools/` | Deterministic tool execution | `ToolRegistry`, `ToolExecutor`, tool descriptors/results |
+| **Governance** | `core/governance/` | Policies, hooks, security, budgets, gates | `GovernanceHooks`, `PolicyEngine`, `GateRegistry`, `SecurityRedactor` |
+| **Memory** | `core/memory/` | Persistence, tracing, observability | `MemoryRouter`, backends, `Tracer`, observability store |
 | **Gateway** | `gateway/` | External interfaces | HTTP API, CLI, Streamlit UI |
-| **Products** | `products/` | Domain-specific applications | Flows, agents, tools, schemas |
-| **Config** | `core/config/` | Configuration loading | YAML parsing, schema validation |
+| **Products** | `products/` | Domain-specific applications | Product manifest, registry, semantic adapter, flows/tools/agents |
 
 ---
 
@@ -285,13 +290,13 @@ Each component has a detailed design doc following the **contracts + evidence** 
 
 | Component | Document | Key Contracts |
 |-----------|----------|---------------|
-| Orchestration | [SD-ORC.md](components/SD-ORC.md) | `OrchestratorEngine`, `RunContext`, `StepContext`, flow execution |
+| Orchestration | [SD-ORC.md](components/SD-ORC.md) | `OrchestratorEngine`, `RunContext`, `StepExecutor`, `FlowLoader` |
 | Governance | [SD-GOV.md](components/SD-GOV.md) | `GovernanceHooks`, `PolicyEngine`, `GateRegistry`, `SecurityRedactor` |
-| Memory | [SD-MEM.md](components/SD-MEM.md) | `MemoryBackend` ABC, `MemoryRouter`, `Tracer`, trace events |
-| Intelligence | [SD-INT.md](components/SD-INT.md) | `AgentRegistry`, `run_reasoning_ladder()`, `run_critic_evaluator()` |
+| Memory | [SD-MEM.md](components/SD-MEM.md) | `MemoryBackend`, `MemoryRouter`, `Tracer`, `ObservabilityStore` |
+| Intelligence | [SD-INT.md](components/SD-INT.md) | `AgentRegistry`, `run_reasoning_ladder()`, `run_critic_evaluator()`, `ModelRouter` |
 | Tools | [SD-TOOLS.md](components/SD-TOOLS.md) | `ToolRegistry`, `ToolExecutor`, `BaseTool`, `ToolResult` |
-| Gateway | [SD-GW.md](components/SD-GW.md) | HTTP routes, CLI commands (`argparse`), Streamlit UI |
-| Products | [SD-PROD.md](components/SD-PROD.md) | Product manifest, auto-discovery |
+| Gateway | [SD-GW.md](components/SD-GW.md) | HTTP routes, CLI commands, Streamlit UI |
+| Products | [SD-PROD.md](components/SD-PROD.md) | Product manifest, registry, semantic adapter |
 
 ---
 

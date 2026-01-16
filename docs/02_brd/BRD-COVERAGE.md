@@ -1,12 +1,19 @@
 # BRD Coverage Analysis
 
 > **Document ID**: BRD-COVERAGE  
+> **Version**: 1.1  
 > **Last Updated**: 2026-01-17  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
-> **Purpose**: Track traceability between Developer Intent documents and Business Requirement Documents (BRDs).
+> **Purpose**: Track traceability between Developer Intent documents and Business Requirement Documents (BRDs).  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## Coverage Summary
 

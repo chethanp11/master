@@ -1,15 +1,22 @@
 # System Design Index
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
+> **Version**: 1.1  
 
 > **Last Updated**: 2026-01-16  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
 ---
 
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
+
 ## One-Line Rule
 
-> **Write System Design as "implemented contracts + behaviors keyed by Tech Spec IDs", not as narrative explanation.**
+> **Write System Design as "implemented contracts + behaviors keyed by Tech Spec IDs", not as narrative explanation.**  
 
 This single rule is what makes diffs possible.
 

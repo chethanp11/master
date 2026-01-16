@@ -1,11 +1,18 @@
 # Product How-To — master/
 
+**Version:** 1.1
 This document explains **how to build and ship a product** on top of the `master/` platform.  
 Products are thin bundles that plug into the shared runtime; **no core changes are needed**.
 
 **Last Updated:** 12 January 2026
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Product Principles
 

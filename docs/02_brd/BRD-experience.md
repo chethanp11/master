@@ -3,9 +3,9 @@
 > **Document ID**: BRD-EXP  
 > **Version**: 1.1  
 > **Last Updated**: 2026-01-13  
-> **Status**: V1 Release
+> **Status**: V1 Release  
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning
+> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
 
 ---
 

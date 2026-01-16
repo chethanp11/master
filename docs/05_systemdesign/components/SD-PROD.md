@@ -1,11 +1,18 @@
 # System Design: Products (SD-PROD)
 
 > **Component**: Product Layer  
+> **Version**: 1.1  
 > **Path**: `products/`  
 > **Tech Spec**: [PROD-products.md](../../03_technical_specifications/PROD-products.md)  
-> **Last Updated**: 2026-01-16
+> **Last Updated**: 2026-01-16  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
 

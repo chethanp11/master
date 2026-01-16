@@ -1,10 +1,17 @@
 # Developer Intent: Operational Excellence (INT-OPS)
 
-> **Maps to**: [BRD-operations.md](../02_brd/BRD-operations.md)
+> **Maps to**: [BRD-operations.md](../02_brd/BRD-operations.md)  
+> **Version**: 1.1  
 >
-> **Source**: Extracted from [intent.md](intent.md) § 4
+> **Source**: Extracted from [intent.md](intent.md) § 4  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 4.1 State Persistence
 

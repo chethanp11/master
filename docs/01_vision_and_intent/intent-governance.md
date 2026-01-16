@@ -1,10 +1,17 @@
 # Developer Intent: Governance & Compliance (INT-GOV)
 
-> **Maps to**: [BRD-governance.md](../02_brd/BRD-governance.md)
+> **Maps to**: [BRD-governance.md](../02_brd/BRD-governance.md)  
+> **Version**: 1.1  
 >
-> **Source**: Extracted from [intent.md](intent.md) § 2
+> **Source**: Extracted from [intent.md](intent.md) § 2  
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Header version normalization |
 
 ## 2.1 Human Oversight
 
