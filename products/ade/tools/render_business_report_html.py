@@ -5,7 +5,7 @@ import json
 from string import Template
 from typing import Any, Dict, List, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.tools.base import BaseTool, tool
@@ -193,6 +193,7 @@ def render_business_report_html(payload: RenderBusinessReportInput) -> RenderBus
   <header>
     <h1>$title</h1>
     <div class="meta">Dataset: $dataset_id · $dataset_meta</div>
+    <div class="meta">Advisory findings only; human decision required before action.</div>
   </header>
   <main>
     <section class="card">
@@ -343,6 +344,10 @@ class RenderBusinessReportHtmlTool(BaseTool):
             output = render_business_report_html(payload)
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except ValidationError as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=f"validation_error: {exc.errors()}")
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
         except Exception as exc:
             err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
             meta = ToolMeta(tool_name=self.name, backend="local")

@@ -241,6 +241,15 @@ SUFFICIENCY_EVALUATOR_DESCRIPTOR = AgentDescriptor(
     allowed_step_types=["agent"],
 )
 
+CRITIC_EVALUATOR_DESCRIPTOR = AgentDescriptor(
+    name="critic_evaluator",
+    purpose="Evaluates critique requirements before final outputs",
+    purposes=["critique", "evidence_review"],
+    capabilities=["critique", "evidence_review", "confidence_adjustment"],
+    cost_hint=CostHint.LOW,
+    allowed_step_types=["agent"],
+)
+
 
 # ==============================
 # Descriptor Lookup Maps
@@ -272,4 +281,5 @@ AGENT_DESCRIPTORS = {
     "plan_proposal_agent": PLAN_PROPOSAL_AGENT_DESCRIPTOR,
     "planning_agent": PLANNING_AGENT_DESCRIPTOR,
     "sufficiency_evaluator": SUFFICIENCY_EVALUATOR_DESCRIPTOR,
+    "critic_evaluator": CRITIC_EVALUATOR_DESCRIPTOR,
 }

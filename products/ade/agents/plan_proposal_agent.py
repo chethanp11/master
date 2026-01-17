@@ -44,6 +44,29 @@ class PlanProposalAgent(BaseAgent):
             metric_focus = str(plan_spec.get("metric") or "metric")
             tool_flags = plan_spec.get("tool_flags") if isinstance(plan_spec.get("tool_flags"), dict) else {}
             notes = str(plan_input.comment or "")
+            dataset_id = str(plan_spec.get("dataset_id") or "dataset")
+
+            objective = f"Summarize {metric_focus} for {dataset_id}."
+            expected_evidence = [
+                {"source": "compute_business_metrics", "description": "period totals, movers, and trends"},
+                {"source": "build_chart_spec", "description": "primary visualization spec"},
+            ]
+            context_pack = step_context.run.artifacts.get("tool.context_pack.output")
+            if context_pack:
+                expected_evidence.insert(
+                    0, {"source": "context_pack", "description": "dataset profile and coverage summary"}
+                )
+            if tool_flags.get("detect_anomalies"):
+                expected_evidence.append(
+                    {"source": "detect_anomalies", "description": "anomaly candidate list"}
+                )
+            assumptions = [
+                "Inputs reflect the uploaded dataset only.",
+                "No external data sources are used.",
+            ]
+            risks = []
+            if tool_flags.get("detect_anomalies") is False:
+                risks.append("Anomaly detection skipped; unexpected spikes may go unflagged.")
 
             steps: List[PlanStep] = [
                 PlanStep(
@@ -127,13 +150,34 @@ class PlanProposalAgent(BaseAgent):
                 ]
             )
 
-            summary = f"Plan uses chart '{chart_type}' and focuses on '{metric_focus}'. {notes}".strip()
+            summary = f"Objective: {objective} Evidence: {', '.join(item['source'] for item in expected_evidence)}."
+            if notes:
+                summary = f"{summary} Revision note: {notes}"
+            tool_recommendations = [
+                {"tool": step.tool, "rationale": step.description, "optional": True}
+                for step in steps
+                if step.tool
+            ]
             plan = PlanProposal(
                 summary=summary,
                 steps=steps,
                 required_tools=[step.tool for step in steps if step.tool],
                 approvals=[],
-                estimated_cost=EstimatedCost(currency="USD", amount=0.0, tokens=0, details={"comment": plan_input.comment}),
+                estimated_cost=EstimatedCost(
+                    currency="USD",
+                    amount=0.0,
+                    tokens=0,
+                    details={
+                        "comment": plan_input.comment,
+                        "tool_recommendations": tool_recommendations,
+                        "objective": objective,
+                        "expected_evidence": expected_evidence,
+                        "assumptions": assumptions,
+                        "risks": risks,
+                        "replan_change_summary": plan_input.comment or "",
+                        "replan_rationale": "User-provided replan note." if plan_input.comment else "",
+                    },
+                ),
             )
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(ok=True, data=plan.model_dump(mode="json"), error=None, meta=meta)

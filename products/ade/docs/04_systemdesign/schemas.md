@@ -25,6 +25,7 @@ The primary decision output structure for audit and review.
 class DecisionPacket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str                      # "finalize"
     question: str                    # Original analyst question
     decision_summary: str            # Summary of the decision
     confidence_level: str            # "high", "medium", "low"
@@ -33,9 +34,17 @@ class DecisionPacket(BaseModel):
     sections: List[DecisionSection]  # Decision sections with evidence
     trace_refs: List[Dict[str, Any]] # References to execution trace
     reasoning_narrative: Optional[str] = None
+    stop_reason: str                 # "sufficient" or "missing_inputs"
+    version_metadata: Optional[VersionMetadata] = None
 ```
 
+**Evidence**:
+- `products/ade/schemas/evidence.py` (`TrendEvidence`, `OutlierEvidence`, `DataQualityEvidence`, `HypothesisEvidence`)
+
 **Usage**: Primary output of `assemble_decision_packet` tool.
+
+**Evidence**:
+- `products/ade/schemas/decision_packet.py` (`DecisionPacket.stop_reason`, `DecisionPacket.version_metadata`)
 
 ---
 
@@ -71,6 +80,7 @@ The primary stakeholder report structure.
 class BusinessReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "finalize"
     title: str
     generated_at_iso: str            # ISO timestamp
     dataset_id: str                  # Source dataset
@@ -83,9 +93,14 @@ class BusinessReport(BaseModel):
     anomalies: List[AnomalyRow]      # Detected anomalies
     recommendations: List[str]       # Actionable recommendations
     appendix: Appendix               # Supporting details
+    stop_reason: str
+    version_metadata: Optional[VersionMetadata] = None
 ```
 
 ---
+
+**Evidence**:
+- `products/ade/schemas/business_report.py` (`BusinessReport.stop_reason`, `BusinessReport.version_metadata`)
 
 ### 2.4 Finding
 
@@ -174,6 +189,7 @@ Parsed user intent from intent_agent.
 class IntentFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str                       # "interpret"
     intent_summary: str              # Summary of user intent
     inferred_entities: List[str] = Field(default_factory=list)
     inferred_metrics: List[str] = Field(default_factory=list)
@@ -188,31 +204,74 @@ class IntentFrame(BaseModel):
 
 ---
 
+**Evidence**:
+- `products/ade/schemas/intent_frame.py` (`IntentFrame.stage`)
+
 ### 2.9 PlanSpec
 
 Execution plan specification.
 
 **Location**: `products/ade/schemas/plan_spec.py`
 
-Contains deterministic plan specification with tool flags for conditional execution.
+```python
+class ToolRecommendation(BaseModel):
+    tool: str
+    rationale: str
+    optional: bool = True
+
+class PlanSpec(BaseModel):
+    stage: str = "propose"
+    plan_summary: str
+    tool_flags: Dict[str, bool]
+    tool_recommendations: List[ToolRecommendation]
+```
+
+**Evidence**:
+- `products/ade/schemas/plan_spec.py` (`ToolRecommendation`, `PlanSpec.tool_recommendations`)
 
 ---
 
 ## 3. Evidence Schemas
 
-### 3.1 Evidence / EvidenceItem
+### 3.1 Evidence Items
 
 Evidence item with provenance tracking.
 
 **Location**: `products/ade/schemas/evidence.py`
 
 ```python
-class EvidenceItem(BaseModel):
-    evidence_type: str               # "metric", "anomaly", "hypothesis"
-    source: str                      # Source tool/step
-    value: Any                       # Evidence value
-    confidence: float                # Confidence score
-    provenance: Dict[str, Any]       # Provenance metadata
+class EvidenceItemBase(BaseModel):
+    evidence_id: str
+    kind: str
+    tool_step_id: str
+    dataset_id: str
+    created_at_iso: str
+    inputs_hash: str
+
+class TrendEvidence(EvidenceItemBase):
+    kind: Literal["trend"]
+    period_labels: List[str]
+    totals: List[Dict[str, Any]]
+    means: List[Dict[str, Any]]
+    top_movers_abs: List[Dict[str, Any]]
+    top_movers_pct: List[Dict[str, Any]]
+
+class OutlierEvidence(EvidenceItemBase):
+    kind: Literal["outlier"]
+    candidates: List[Dict[str, Any]]
+    method: str = "iqr"
+
+class DataQualityEvidence(EvidenceItemBase):
+    kind: Literal["data_quality"]
+    row_count: int
+    deduped_row_count: int
+    duplicate_count: int
+
+class HypothesisEvidence(EvidenceItemBase):
+    kind: Literal["hypothesis"]
+    hypothesis_name: str
+    status: str
+    reasoning: str
 ```
 
 ---
@@ -270,11 +329,51 @@ Data slicing specifications.
 │                     IntentFrame                             │
 │  (input from intent_agent)                                  │
 └─────────────────────────────────────────────────────────────┘
+
+---
+
+## 6. Context Pack Schema
+
+**Location**: `products/ade/schemas/context_pack.py`
+
+```python
+class ContextPack(BaseModel):
+    dataset_profile: Dict[str, Any]
+    coverage: Dict[str, Any]
+    missingness: Dict[str, Any]
+    data_quality_flags: List[str]
+    metric_availability: List[str]
+    evidence_refs: List[Dict[str, Any]]
+```
+
+**Evidence**:
+- `products/ade/schemas/context_pack.py` (`ContextPack`)
+
+---
+
+## 7. Version Metadata Schema
+
+**Location**: `products/ade/schemas/version_metadata.py`
+
+```python
+class VersionMetadata(BaseModel):
+    product: str
+    product_version: str
+    flow_id: str
+    flow_version: str
+    schema_version: str
+    dataset_hash: str
+    input_hash: str
+    dependency_versions: Dict[str, str]
+```
+
+**Evidence**:
+- `products/ade/schemas/version_metadata.py` (`VersionMetadata`)
 ```
 
 ---
 
-## 6. Validation Rules
+## 8. Validation Rules
 
 All schemas enforce:
 

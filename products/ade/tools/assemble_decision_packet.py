@@ -9,6 +9,7 @@ from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolR
 from core.tools.base import BaseTool, tool
 from products.ade.schemas.decision_packet import DecisionPacket
 from products.ade.schemas.decision_section import DecisionSection
+from products.ade.utils.versioning import build_version_metadata
 
 
 class AssembleDecisionPacketInput(BaseModel):
@@ -22,6 +23,7 @@ class AssembleDecisionPacketInput(BaseModel):
     decision_summary: str = ""
     trace_refs: List[Dict[str, Any]] = Field(default_factory=list)
     reasoning_narrative: str = ""
+    stop_reason: str = "sufficient"
 
 
 class AssembleDecisionPacketOutput(BaseModel):
@@ -40,6 +42,7 @@ def assemble_decision_packet(payload: AssembleDecisionPacketInput) -> AssembleDe
         sections=payload.sections,
         trace_refs=payload.trace_refs,
         reasoning_narrative=payload.reasoning_narrative or None,
+        stop_reason=payload.stop_reason,
     )
     return AssembleDecisionPacketOutput(decision_packet=packet)
 
@@ -62,6 +65,21 @@ class AssembleDecisionPacketTool(BaseTool):
         try:
             payload = AssembleDecisionPacketInput.model_validate(params or {})
             output = assemble_decision_packet(payload)
+            artifacts = getattr(ctx, "run", None).artifacts if getattr(ctx, "run", None) else {}
+            data_reader = artifacts.get("tool.data_reader.output", {}) if isinstance(artifacts, dict) else {}
+            dataset_id = ""
+            run_payload = getattr(getattr(ctx, "run", None), "payload", {}) or {}
+            if isinstance(run_payload, dict):
+                dataset_id = str(run_payload.get("dataset") or "")
+            version_metadata = build_version_metadata(
+                flow_id=str(getattr(getattr(ctx, "run", None), "flow", "")),
+                dataset_id=dataset_id,
+                columns=list(data_reader.get("columns") or []),
+                rows=list(data_reader.get("rows") or []),
+                input_payload=params or {},
+            )
+            packet = output.decision_packet.model_copy(update={"version_metadata": version_metadata})
+            output = output.model_copy(update={"decision_packet": packet})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

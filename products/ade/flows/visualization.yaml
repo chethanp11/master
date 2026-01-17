@@ -29,6 +29,15 @@ steps:
       max_attempts: 2
       backoff_seconds: 1
 
+  - id: "context_pack"
+    type: "tool"
+    backend: "local"
+    tool: "context_pack_builder"
+    params:
+      dataset_id: "{{payload.dataset}}"
+      columns: "{{artifacts.tool.data_reader.output.columns}}"
+      rows: "{{artifacts.tool.data_reader.output.rows}}"
+
   - id: "viz_preferences"
     type: "user_input"
     params:
@@ -90,6 +99,12 @@ steps:
     agent: "plan_proposal_agent"
     params: {}
 
+  - id: "critic_eval"
+    type: "agent"
+    backend: "local"
+    agent: "critic_evaluator"
+    params: {}
+
   - id: "compute_anomalies"
     type: "tool"
     backend: "local"
@@ -139,7 +154,7 @@ steps:
     tool: "assemble_decision_packet"
     params:
       question: "{{payload.prompt}}"
-      decision_summary: "Decision assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}. Hypothesis checks: {{artifacts.tool.hypothesis_test_data_outage.output.status}} / {{artifacts.tool.hypothesis_test_seasonality.output.status}}."
+      decision_summary: "Recommendation assembled from sufficiency evaluation and hypothesis checks. Focus metric: {{artifacts.user_input.viz_preferences.values.metric_focus}}. Chart: {{artifacts.user_input.viz_preferences.values.chart_type}}. Hypothesis checks: {{artifacts.tool.hypothesis_test_data_outage.output.status}} / {{artifacts.tool.hypothesis_test_seasonality.output.status}}."
       confidence_level: "{{artifacts.agent.sufficiency_evaluator.output.confidence_level}}"
       assumptions:
         - "Inputs reflect the provided dataset."
@@ -149,6 +164,7 @@ steps:
         - "Evidence tables are limited to uploaded rows."
       trace_refs:
         - step_id: "read"
+        - step_id: "context_pack"
         - step_id: "compute_anomalies"
         - step_id: "build_chart_spec"
         - step_id: "hypothesis_data_outage"

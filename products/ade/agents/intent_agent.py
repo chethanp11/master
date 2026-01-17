@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
+from products.ade.config.confidence import load_confidence_thresholds
 from products.ade.schemas.intent_frame import IntentFrame
 
 
@@ -150,9 +151,14 @@ class IntentAgent(BaseAgent):
             blocking_questions = [blocking_question] if missing else []
 
             confidence_score = 0.2 if missing else 0.75
-            if confidence_score >= 0.7:
+            thresholds = load_confidence_thresholds()
+            high_threshold = float(thresholds.get("high", 0.7))
+            medium_threshold = float(thresholds.get("medium", 0.4))
+            if high_threshold < medium_threshold:
+                high_threshold, medium_threshold = medium_threshold, high_threshold
+            if confidence_score >= high_threshold:
                 confidence_label = "high"
-            elif confidence_score >= 0.4:
+            elif confidence_score >= medium_threshold:
                 confidence_label = "medium"
             else:
                 confidence_label = "low"

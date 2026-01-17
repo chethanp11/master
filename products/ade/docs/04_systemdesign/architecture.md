@@ -56,6 +56,13 @@ flows:
   - "ade_v1"
 ```
 
+### 3.1.1 Registration Entrypoint
+
+Location: `products/ade/registry.py` (`register`)
+
+**Evidence**:
+- `products/ade/registry.py` (`register`, `auto_register`)
+
 ### 3.2 Flows
 
 | Flow | Purpose | Default |
@@ -74,7 +81,12 @@ Agents provide reasoning roles:
 | `plan_proposal_agent` | Generate PlanProposal for approval | LOW |
 | `planning_agent` | Propose replan after rejection | MED |
 | `sufficiency_evaluator` | Score data sufficiency | LOW |
+| `critic_evaluator` | Evaluate evidence gaps and blocking flags | LOW |
 | `dashboard_agent` | Build narrative summary | MED |
+
+**Evidence**:
+- `products/ade/agents/critic_evaluator.py` (`CriticEvaluatorAgent`, `CritiqueOutput`)
+- `products/ade/agents/sufficiency_evaluator.py` (`SufficiencyEvaluatorAgent`, `SufficiencyOutput`)
 
 ### 3.4 Tools
 
@@ -83,6 +95,7 @@ Tools perform factual computation (no reasoning):
 | Category | Tool | Side Effect |
 |----------|------|-------------|
 | **Data** | `data_reader` | No |
+| **Data** | `context_pack_builder` | No |
 | **Data** | `compute_business_metrics` | No |
 | **Analysis** | `detect_anomalies` | No |
 | **Analysis** | `driver_analysis` | No |
@@ -99,19 +112,31 @@ Tools perform factual computation (no reasoning):
 | **Rendering** | `export_pdf` | Yes |
 | **Narrative** | `build_reasoning_narrative` | No |
 
+**Evidence**:
+- `products/ade/tools/context_pack_builder.py` (`ContextPackBuilderTool`)
+- `products/ade/tools/export_pdf.py` (`ExportPdfTool`)
+
 ### 3.5 Schemas
 
 Pydantic models in `products/ade/schemas/`:
 
 | Schema | Purpose |
 |--------|---------|
-| `DecisionPacket` | Primary decision output structure |
-| `BusinessReport` | Stakeholder report structure |
+| `DecisionPacket` | Primary decision output structure (with stop_reason + version metadata) |
+| `BusinessReport` | Stakeholder report structure (with stop_reason + version metadata) |
 | `IntentFrame` | Parsed user intent |
 | `PlanSpec` | Execution plan specification |
 | `DecisionSection` | Section within decision packet |
 | `Evidence` | Evidence item with provenance |
 | `InsightCard` | Standalone insight card |
+| `ContextPack` | Dataset profile and coverage summary |
+| `VersionMetadata` | Output version + hashing metadata |
+
+**Evidence**:
+- `products/ade/schemas/decision_packet.py` (`DecisionPacket.stop_reason`, `DecisionPacket.version_metadata`)
+- `products/ade/schemas/business_report.py` (`BusinessReport.stop_reason`, `BusinessReport.version_metadata`)
+- `products/ade/schemas/context_pack.py` (`ContextPack`)
+- `products/ade/schemas/version_metadata.py` (`VersionMetadata`)
 
 ---
 
@@ -169,8 +194,11 @@ Pydantic models in `products/ade/schemas/`:
 | Step ID | Flow | Purpose |
 |---------|------|---------|
 | `viz_preferences` | Both | Chart type, metric focus, hypothesis toggle |
-| `clarify_intent` | ade_v1 | Free-text clarification |
-| `clarify_followup` | ade_v1 | Additional clarification |
+| `clarify_intent` | ade_v1 | Free-text clarification (planned, not wired) |
+| `clarify_followup` | ade_v1 | Additional clarification (planned, not wired) |
+
+**Evidence**:
+- `products/ade/flows/ade_v1.yaml` (no `clarify_*` steps wired)
 
 ### 5.2 Plan Approval
 
@@ -185,6 +213,19 @@ The `plan_proposal` step type invokes `plan_proposal_agent` to generate a PlanPr
 ### 6.1 Product Config
 
 Location: `products/ade/config/product.yaml`
+
+Key ADE-specific metadata:
+```yaml
+metadata:
+  confidence:
+    thresholds:
+      high: 0.7
+      medium: 0.4
+```
+
+**Evidence**:
+- `products/ade/config/product.yaml` (`metadata.confidence.thresholds`)
+- `products/ade/config/confidence.py` (`load_confidence_thresholds`)
 
 ### 6.2 User Input Schemas
 
@@ -221,6 +262,24 @@ ui:
 | **Trace References** | `trace_refs` link decisions to step outputs |
 | **Assumptions** | Explicitly listed in DecisionPacket |
 | **Limitations** | Explicitly listed in DecisionPacket |
+| **Advisory Boundary** | Outputs include advisory-only language and recommendations, not decisions |
+| **Version Metadata** | Product/flow/schema versions and hashes added to outputs |
+
+**Evidence**:
+- `products/ade/tools/render_decision_packet_html.py` (advisory label in HTML output)
+- `products/ade/tools/render_business_report_html.py` (advisory label in HTML output)
+- `products/ade/tools/assemble_decision_packet.py` (`build_version_metadata` injection)
+- `products/ade/tools/assemble_business_report.py` (`build_version_metadata` injection)
+
+---
+
+## 9. Behavioral Test Coverage
+
+ADE behavior is exercised by unit and integration tests:
+- Flow execution and output persistence: `products/ade/tests/integration/test_ade_v1.py`
+- Orchestrator flow wiring: `products/ade/tests/integration/test_ade_orchestrator_flow.py`
+- Business report rendering: `products/ade/tests/integration/test_business_report_html.py`
+- Quality checks: `products/ade/tests/unit/test_assemble_business_report_quality.py`
 
 ---
 

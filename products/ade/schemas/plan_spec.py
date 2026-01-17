@@ -12,9 +12,18 @@ class PlanDecision(BaseModel):
     rationale: str
 
 
+class ToolRecommendation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    rationale: str
+    optional: bool = True
+
+
 class PlanSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "propose"
     plan_summary: str
     question_type: str
     dataset_id: Optional[str] = None
@@ -24,3 +33,4 @@ class PlanSpec(BaseModel):
     aggregation: str = "total"
     tool_flags: Dict[str, bool] = Field(default_factory=dict)
     decision_points: List[PlanDecision] = Field(default_factory=list)
+    tool_recommendations: List[ToolRecommendation] = Field(default_factory=list)

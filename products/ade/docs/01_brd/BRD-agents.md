@@ -136,6 +136,7 @@ Agents provide reasoning roles in ADE workflows:
 | BRD-NARR-001 | System MUST generate human-readable narrative | P1 |
 | BRD-NARR-002 | Narrative MUST summarize key dataset characteristics | P1 |
 | BRD-NARR-003 | Narrative SHOULD be concise (< 500 words) | P2 |
+| BRD-NARR-004 | Narrative SHOULD include anomaly interpretation when present | P1 |
 
 ---
 
@@ -147,6 +148,7 @@ Agents provide reasoning roles in ADE workflows:
 | BRD-CONF-002 | Confidence MUST be explainable | P1 |
 | BRD-CONF-003 | Low confidence MUST trigger clarification | P0 |
 | BRD-CONF-004 | Confidence labels MUST use standard values | P0 |
+| BRD-CONF-005 | Confidence thresholds MUST be configurable | P1 |
 
 **Standard Confidence Labels**: "high", "medium", "low"
 

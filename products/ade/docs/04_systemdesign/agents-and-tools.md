@@ -28,6 +28,7 @@ All components have **descriptors** in `products/ade/descriptors.py` that provid
 
 **Output Schema** (`IntentFrame`):
 ```python
+stage: str  # "interpret"
 intent_summary: str
 inferred_entities: List[str]
 inferred_metrics: List[str]
@@ -37,7 +38,12 @@ confidence_score: float
 confidence_label: str  # "low", "medium", "high"
 blocking_required: bool
 blocking_questions: List[str]
+blocking_question: Optional[str]
 ```
+
+**Evidence**:
+- `products/ade/agents/intent_agent.py` (`IntentAgent.run`)
+- `products/ade/schemas/intent_frame.py` (`IntentFrame.stage`)
 
 ---
 
@@ -54,6 +60,10 @@ blocking_questions: List[str]
 - Deterministic plan specification
 - Tool flags for conditional execution
 
+**Evidence**:
+- `products/ade/agents/plan_agent.py` (`PlanAgent.run`, `tool_recommendations`)
+- `products/ade/schemas/plan_spec.py` (`ToolRecommendation`, `PlanSpec.tool_recommendations`)
+
 ---
 
 ### 2.3 plan_proposal_agent
@@ -68,6 +78,15 @@ blocking_questions: List[str]
 
 **Output**: `PlanProposal` for user approval/rejection.
 
+Key metadata (stored in `estimated_cost.details`):
+- `objective`, `expected_evidence`, `assumptions`, `risks`
+- `tool_recommendations` (optional, advisory)
+- `replan_change_summary`, `replan_rationale`
+
+**Evidence**:
+- `products/ade/agents/plan_proposal_agent.py` (`PlanProposalAgent.run`, `estimated_cost.details`)
+- `core/contracts/action_plan_schema.py` (`PlanProposal`, `EstimatedCost`)
+
 ---
 
 ### 2.4 planning_agent
@@ -80,6 +99,9 @@ blocking_questions: List[str]
 | **Location** | `products/ade/agents/planning_agent.py` |
 
 **Used in**: visualization flow for intent interpretation and replanning after rejection.
+
+**Evidence**:
+- `products/ade/agents/planning_agent.py` (`PlanningAgent.run`, `replan_change_summary`)
 
 ---
 
@@ -94,13 +116,43 @@ blocking_questions: List[str]
 
 **Output**:
 ```python
+stage: str  # "critique"
 confidence_level: str  # "high", "medium", "low"
 downgrade_reasons: List[str]
+sufficiency_state: Dict[str, List[str]]  # known/unknown/blocked
 ```
+
+**Evidence**:
+- `products/ade/agents/sufficiency_evaluator.py` (`SufficiencyOutput`)
 
 ---
 
-### 2.6 dashboard_agent
+### 2.6 critic_evaluator
+
+| Attribute | Value |
+|-----------|-------|
+| **Purpose** | Evaluates critique requirements before final outputs |
+| **Capabilities** | critique, evidence_review, confidence_adjustment |
+| **Cost Hint** | LOW |
+| **Location** | `products/ade/agents/critic_evaluator.py` |
+
+**Output**:
+```python
+stage: str  # "critique"
+evidence_gaps: List[str]
+revised_confidence: str
+downgrade_reason: Optional[str]
+blocking_required: bool
+stop_reason: str
+recommended_next_action: str
+```
+
+**Evidence**:
+- `products/ade/agents/critic_evaluator.py` (`CritiqueOutput`)
+
+---
+
+### 2.7 dashboard_agent
 
 | Attribute | Value |
 |-----------|-------|
@@ -109,7 +161,17 @@ downgrade_reasons: List[str]
 | **Cost Hint** | MED |
 | **Location** | `products/ade/agents/dashboard_agent.py` |
 
-**Output**: Narrative summary from dataset summaries.
+**Output**:
+```python
+message: str
+insight: str
+anomaly_summary: str
+anomaly_interpretation: str
+anomaly_count: int
+```
+
+**Evidence**:
+- `products/ade/agents/dashboard_agent.py` (`DashboardOutput`)
 
 ---
 
@@ -137,13 +199,41 @@ dataset: str  # Dataset name (file name)
 **Output**:
 ```python
 columns: List[str]
-rows: List[Dict]
-series: Dict
-data: Dict
-x_field: str
-y_field: str
-category_field: str
+rows: List[List[Any]]
+series: List[Dict[str, Any]]
+data: Dict[str, Any]
+x_field: Optional[str]
+y_field: Optional[str]
+category_field: Optional[str]
+row_count: int
+has_time: bool
+input_path: str
 ```
+
+**Evidence**:
+- `products/ade/tools/data_reader.py` (`DataReaderTool.run`)
+
+---
+
+#### context_pack_builder
+
+| Attribute | Value |
+|-----------|-------|
+| **Description** | Builds dataset profile and coverage context pack |
+| **Capabilities** | context_pack, dataset_profile, coverage |
+| **Read Only** | Yes |
+| **Side Effect** | No |
+| **Sensitivity** | LOW |
+| **Cost** | LOW |
+| **Location** | `products/ade/tools/context_pack_builder.py` |
+
+**Output**:
+```python
+context_pack: ContextPack
+```
+
+**Evidence**:
+- `products/ade/tools/context_pack_builder.py` (`ContextPackBuilderTool`)
 
 ---
 
@@ -171,9 +261,10 @@ include_hypothesis_checks: bool
 
 **Output**:
 ```python
-totals: Dict
-movers: List
-anomalies: List
+totals: List[Dict[str, Any]]
+top_movers_abs: List[Dict[str, Any]]
+top_movers_pct: List[Dict[str, Any]]
+anomalies: List[Dict[str, Any]]
 evidence_items: List[EvidenceItem]
 ```
 
@@ -388,6 +479,11 @@ chart_spec: Dict  # Vega-Lite compatible spec
 | **Cost** | LOW |
 | **Location** | `products/ade/tools/render_business_report_html.py` |
 
+**Validation Gate**: rendering fails on schema validation errors.
+
+**Evidence**:
+- `products/ade/tools/render_business_report_html.py` (`RenderBusinessReportInput.model_validate`)
+
 ---
 
 #### render_decision_packet_html
@@ -401,6 +497,11 @@ chart_spec: Dict  # Vega-Lite compatible spec
 | **Sensitivity** | LOW |
 | **Cost** | LOW |
 | **Location** | `products/ade/tools/render_decision_packet_html.py` |
+
+**Validation Gate**: rendering fails on schema validation errors.
+
+**Evidence**:
+- `products/ade/tools/render_decision_packet_html.py` (`RenderDecisionPacketInput.model_validate`)
 
 ---
 
@@ -447,15 +548,26 @@ All descriptors are exported via lookup maps in `descriptors.py`:
 TOOL_DESCRIPTORS = {
     "data_reader": DATA_READER_DESCRIPTOR,
     "build_chart_spec": BUILD_CHART_SPEC_DESCRIPTOR,
-    # ... (16 tools total)
+    # ... (registered tools)
 }
 
 AGENT_DESCRIPTORS = {
     "dashboard_agent": DASHBOARD_AGENT_DESCRIPTOR,
     "intent_agent": INTENT_AGENT_DESCRIPTOR,
-    # ... (6 agents total)
+    "critic_evaluator": CRITIC_EVALUATOR_DESCRIPTOR,
 }
 ```
+
+---
+
+## 5. Tool Utilities (Non-registered)
+
+These helpers are used internally but are not registered tools.
+
+| Utility | Purpose | Location |
+|---------|---------|----------|
+| `export_rendering` | PDF rendering utilities for insight cards | `products/ade/tools/export_rendering.py` |
+| `evidence_utils` | Evidence hashing and ID helpers | `products/ade/tools/evidence_utils.py` |
 
 ---
 

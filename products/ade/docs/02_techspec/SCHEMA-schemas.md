@@ -293,7 +293,95 @@ blocking_question: Optional[str] = None
 
 ---
 
-## 9. Appendix Schema (SCHEMA-APP)
+### BRD-IF-006: Blocking Questions
+**Priority**: P0  
+**Description**: IntentFrame MUST include blocking_questions.
+
+**Required Field**:
+```python
+blocking_questions: List[str]
+```
+
+---
+
+## 9. Validation Requirements
+
+### BRD-VAL-001: Pydantic Validation
+**Priority**: P0  
+**Description**: All outputs MUST pass Pydantic validation before rendering.
+
+**Acceptance Criteria**:
+- [ ] Schemas validate before rendering
+- [ ] Validation errors are surfaced
+
+---
+
+### BRD-VAL-002: Invalid Output Errors
+**Priority**: P0  
+**Description**: Invalid outputs MUST produce clear errors.
+
+**Acceptance Criteria**:
+- [ ] Errors include schema field path
+- [ ] Errors include failure reason
+
+---
+
+### BRD-VAL-003: Pre-Render Validation
+**Priority**: P0  
+**Description**: Validation MUST happen before rendering outputs.
+
+**Acceptance Criteria**:
+- [ ] Rendering blocked on validation failure
+
+---
+
+## 10. Context Pack Requirements
+
+### BRD-CTX-001: Context Pack Construction
+**Priority**: P0  
+**Description**: System MUST construct a Context Pack after ingestion and before planning.
+
+**Acceptance Criteria**:
+- [ ] Context Pack artifact exists before planning
+- [ ] Context Pack stored in run artifacts
+
+---
+
+### BRD-CTX-002: Dataset Profile Fields
+**Priority**: P0  
+**Description**: Context Pack MUST include dataset profile and coverage metrics.
+
+**Required Fields**:
+```python
+dataset_profile: Dict[str, Any]
+coverage: Dict[str, Any]
+missingness: Dict[str, Any]
+data_quality_flags: List[str]
+metric_availability: List[str]
+```
+
+---
+
+### BRD-CTX-003: Evidence-Backed Stats
+**Priority**: P0  
+**Description**: Context Pack statistics MUST be backed by evidence items.
+
+**Acceptance Criteria**:
+- [ ] Evidence items reference dataset_id/columns
+- [ ] Stats link to evidence_refs
+
+---
+
+### BRD-CTX-004: Grounded Reasoning
+**Priority**: P1  
+**Description**: Advisory reasoning MUST reference Context Pack artifacts.
+
+**Acceptance Criteria**:
+- [ ] Reasoning outputs cite context_pack references
+
+---
+
+## 11. Appendix Schema (SCHEMA-APP)
 
 ### SCHEMA-APP-001: Required Fields
 **Priority**: P0  

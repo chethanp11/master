@@ -6,11 +6,13 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 from products.ade.schemas.decision_section import DecisionSection
+from products.ade.schemas.version_metadata import VersionMetadata
 
 
 class DecisionPacket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "finalize"
     question: str
     decision_summary: str
     confidence_level: str
@@ -19,3 +21,5 @@ class DecisionPacket(BaseModel):
     sections: List[DecisionSection]
     trace_refs: List[Dict[str, Any]]
     reasoning_narrative: Optional[str] = None
+    stop_reason: str = "sufficient"
+    version_metadata: Optional[VersionMetadata] = None

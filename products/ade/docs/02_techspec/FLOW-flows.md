@@ -19,6 +19,16 @@
 
 ---
 
+### BRD-DET-005: No Dynamic Flow Mutation
+**Priority**: P0  
+**Description**: Flows MUST NOT mutate dynamically at runtime.
+
+**Acceptance Criteria**:
+- [ ] Flow definitions are static YAML
+- [ ] No runtime insertion/removal of steps
+
+---
+
 ### FLOW-EXEC-002: Step Sequence
 **Priority**: P0  
 **Description**: Flow steps MUST execute in the defined sequence.
@@ -103,6 +113,36 @@
 - [ ] Execution pauses at plan_proposal for user approval
 - [ ] Rejection triggers appropriate error handling
 - [ ] Approval proceeds to remaining steps
+
+---
+
+### BRD-PLAN-007: Plan Objective and Evidence
+**Priority**: P1  
+**Description**: Plan summary MUST include objective and expected evidence.
+
+**Acceptance Criteria**:
+- [ ] Plan summary lists objective
+- [ ] Plan summary lists expected evidence items
+
+---
+
+### BRD-PLAN-008: Plan Assumptions and Risks
+**Priority**: P1  
+**Description**: Plan summary MUST include assumptions and risks.
+
+**Acceptance Criteria**:
+- [ ] Assumptions enumerated
+- [ ] Risks enumerated
+
+---
+
+### BRD-PLAN-009: Replan Diff
+**Priority**: P1  
+**Description**: Replan output MUST highlight what changed and why.
+
+**Acceptance Criteria**:
+- [ ] Replan notes include change summary
+- [ ] Change rationale documented
 
 ---
 
@@ -239,7 +279,69 @@ retry:
 
 ---
 
-## 7. Artifact References (FLOW-ARTF)
+## 7. Terminal Outcomes and Safe Exits
+
+### BRD-TERM-001: Explicit Outcomes
+**Priority**: P0  
+**Description**: System MUST support explicit outcomes: SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT.
+
+**Acceptance Criteria**:
+- [ ] Outcome recorded in run summary
+- [ ] Outcome exposed to caller
+
+---
+
+### BRD-TERM-002: Partial Success Details
+**Priority**: P1  
+**Description**: PARTIAL_SUCCESS outputs MUST include limitations and unresolved gaps.
+
+**Acceptance Criteria**:
+- [ ] limitations present in output
+- [ ] unresolved_gaps list included
+
+---
+
+### BRD-TERM-003: Abort Details
+**Priority**: P0  
+**Description**: ABORT outcomes MUST include reason codes and recommended next actions.
+
+**Acceptance Criteria**:
+- [ ] reason_code included
+- [ ] next_actions included
+
+---
+
+### BRD-TERM-004: Clarification Handling
+**Priority**: P0  
+**Description**: ASK_USER MUST be used when missing inputs are resolvable.
+
+**Acceptance Criteria**:
+- [ ] Missing fields generate ASK_USER
+- [ ] Clarifying prompts returned
+
+---
+
+### BRD-STOP-001: Safe Exits
+**Priority**: P0  
+**Description**: System MUST prefer safe exits over forced outputs.
+
+**Acceptance Criteria**:
+- [ ] Low signal triggers stop
+- [ ] Conflict triggers stop
+
+---
+
+### BRD-STOP-002: Low Signal Exit
+**Priority**: P0  
+**Description**: Low signal or conflicting evidence MUST result in safe exit.
+
+**Acceptance Criteria**:
+- [ ] Conflicting evidence flags stop
+- [ ] Stop outcome is ASK_USER or ABORT
+
+---
+
+## 8. Artifact References (FLOW-ARTF)
 
 ### FLOW-ARTF-001: Tool Output Reference
 **Priority**: P0  

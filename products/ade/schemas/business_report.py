@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from products.ade.schemas.version_metadata import VersionMetadata
 
 
 class Finding(BaseModel):
@@ -49,6 +50,7 @@ class Appendix(BaseModel):
 class BusinessReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "finalize"
     title: str
     generated_at_iso: str
     dataset_id: str
@@ -61,3 +63,5 @@ class BusinessReport(BaseModel):
     anomalies: List[AnomalyRow]
     recommendations: List[str]
     appendix: Appendix
+    stop_reason: str = "sufficient"
+    version_metadata: Optional[VersionMetadata] = None

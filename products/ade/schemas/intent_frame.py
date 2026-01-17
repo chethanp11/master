@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class IntentFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "interpret"
     intent_summary: str
     inferred_entities: List[str] = Field(default_factory=list)
     inferred_metrics: List[str] = Field(default_factory=list)

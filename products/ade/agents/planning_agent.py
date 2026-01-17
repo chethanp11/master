@@ -147,6 +147,43 @@ class PlanningAgent(BaseAgent):
                             reason = "resume_incomplete_step"
                             break
 
+            replan_change_summary = ""
+            replan_rationale = ""
+            if comment:
+                replan_change_summary = comment
+                replan_rationale = "User-requested replan."
+            elif start_step_id:
+                replan_change_summary = f"Resume from {start_step_id}."
+                replan_rationale = "Prior run incomplete."
+
+            tool_recommendations = [
+                {
+                    "tool": "build_chart_spec",
+                    "rationale": f"Align chart rendering to '{chart_type}' preference.",
+                    "optional": True,
+                },
+                {
+                    "tool": "assemble_decision_packet",
+                    "rationale": "Summarize reasoning with evidence-backed sections.",
+                    "optional": True,
+                },
+            ]
+            if include_hypothesis_checks:
+                tool_recommendations.append(
+                    {
+                        "tool": "hypothesis_test_data_outage",
+                        "rationale": "Check for data outage as a potential cause.",
+                        "optional": True,
+                    }
+                )
+                tool_recommendations.append(
+                    {
+                        "tool": "hypothesis_test_seasonality",
+                        "rationale": "Check for seasonal effects in the trend.",
+                        "optional": True,
+                    }
+                )
+
             meta = AgentMeta(agent_name=self.name)
             return AgentResult(
                 ok=True,
@@ -160,6 +197,9 @@ class PlanningAgent(BaseAgent):
                         time_axis,
                         include_hypothesis_checks,
                     ),
+                    "tool_recommendations": tool_recommendations,
+                    "replan_change_summary": replan_change_summary,
+                    "replan_rationale": replan_rationale,
                     "interpreted_intent": interpreted_intent,
                     "analysis_preferences": {
                         "focus_metric": focus_metric,

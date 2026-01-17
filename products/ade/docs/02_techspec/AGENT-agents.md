@@ -253,6 +253,297 @@ downgrade_reasons: List[str]
 
 ---
 
+## Agent Advisory Boundary
+
+### BRD-AGT-001: Advisory Only
+**Priority**: P0  
+**Description**: Agents MUST be advisory only and MUST NOT execute tools or mutate state.
+
+**Acceptance Criteria**:
+- [ ] Agents return recommendations only
+- [ ] Tool execution always remains with orchestrator
+- [ ] Agents do not write to storage or invoke tool backends
+
+---
+
+### BRD-AGT-002: Propose, Never Execute
+**Priority**: P0  
+**Description**: Agents MUST propose actions without executing them.
+
+**Acceptance Criteria**:
+- [ ] Agent outputs include proposed steps or recommendations only
+- [ ] No agent step triggers direct tool execution
+
+---
+
+### BRD-AGT-003: Structured Outputs
+**Priority**: P0  
+**Description**: Agent outputs MUST be structured and schema-validated.
+
+**Acceptance Criteria**:
+- [ ] Outputs conform to Pydantic schemas
+- [ ] Invalid outputs trigger validation errors
+
+---
+
+### BRD-AGT-004: Auditable Reasoning
+**Priority**: P0  
+**Description**: Agent reasoning MUST be traceable and auditable.
+
+**Acceptance Criteria**:
+- [ ] Trace events capture agent outputs
+- [ ] Evidence references included where relevant
+
+---
+
+## Reasoning Ladder
+
+### BRD-INTEL-001: Multi-Stage Reasoning
+**Priority**: P0  
+**Description**: ADE MUST use multi-stage reasoning (interpret → propose → critique → finalize).
+
+**Acceptance Criteria**:
+- [ ] Stages are explicit in agent outputs
+- [ ] Outputs include stage identifier
+
+---
+
+### BRD-INTEL-002: Observable Stages
+**Priority**: P0  
+**Description**: Each reasoning stage MUST be observable in traces.
+
+**Acceptance Criteria**:
+- [ ] Trace events include stage name
+- [ ] Stage outputs are stored as artifacts
+
+---
+
+### BRD-INTEL-003: Bounded Cycles
+**Priority**: P0  
+**Description**: Reasoning cycles MUST be bounded by iterations, tools, and time.
+
+**Acceptance Criteria**:
+- [ ] Iteration cap enforced
+- [ ] Tool call limits enforced
+- [ ] Timeouts respected
+
+---
+
+### BRD-INTEL-004: Sufficiency Tracking
+**Priority**: P1  
+**Description**: Reasoning MUST track sufficiency state across cycles.
+
+**Acceptance Criteria**:
+- [ ] Outputs include known/unknown/blocked fields
+- [ ] Sufficiency changes are logged
+
+---
+
+### BRD-INTEL-005: Stopping Reason
+**Priority**: P1  
+**Description**: Final outputs MUST state why reasoning stopped.
+
+**Acceptance Criteria**:
+- [ ] Outputs include stop_reason field
+- [ ] stop_reason is one of sufficient/budget_exhausted/missing_inputs/conflict
+
+---
+
+## Critique Requirements
+
+### BRD-CRIT-001: Mandatory Critique
+**Priority**: P0  
+**Description**: A critique stage MUST run before final outputs.
+
+**Acceptance Criteria**:
+- [ ] Critique output exists for each run
+- [ ] Final output references critique outcome
+
+---
+
+### BRD-CRIT-002: Evidence Checks
+**Priority**: P0  
+**Description**: Critique MUST identify missing or weak evidence.
+
+**Acceptance Criteria**:
+- [ ] Critique lists unsupported claims
+- [ ] Evidence gaps are enumerated
+
+---
+
+### BRD-CRIT-003: Confidence Downgrade
+**Priority**: P1  
+**Description**: Critique MUST be able to downgrade confidence with reasons.
+
+**Acceptance Criteria**:
+- [ ] revised_confidence field present
+- [ ] downgrade_reason populated when lowered
+
+---
+
+### BRD-CRIT-004: Advisory-Only Critique
+**Priority**: P0  
+**Description**: Critique MUST NOT execute tools or route flows.
+
+**Acceptance Criteria**:
+- [ ] Critique outputs are advisory only
+- [ ] No tool invocations from critique stage
+
+---
+
+### BRD-CRIT-005: Blocking Findings
+**Priority**: P0  
+**Description**: Blocking critique findings MUST trigger clarification or abort.
+
+**Acceptance Criteria**:
+- [ ] blocking_required flag emitted
+- [ ] Orchestrator transitions to ASK_USER or ABORT
+
+---
+
+## Advisory Tool Selection
+
+### BRD-TOOLSEL-001: Advisory Recommendations
+**Priority**: P1  
+**Description**: Tool selection MUST be surfaced as advisory recommendations.
+
+**Acceptance Criteria**:
+- [ ] Tool recommendations listed explicitly
+- [ ] Rationales included when available
+
+---
+
+### BRD-TOOLSEL-002: Ranked Suggestions
+**Priority**: P2  
+**Description**: Tool recommendations MAY be ranked with rationales.
+
+**Acceptance Criteria**:
+- [ ] Ranked list supported
+
+---
+
+### BRD-TOOLSEL-003: Orchestrator Authority
+**Priority**: P0  
+**Description**: Orchestrator MUST remain the sole authority for tool execution.
+
+**Acceptance Criteria**:
+- [ ] Tool execution not triggered by agent output
+
+---
+
+### BRD-TOOLSEL-004: No Forced Execution
+**Priority**: P0  
+**Description**: Advisory tool suggestions MUST NOT force execution.
+
+**Acceptance Criteria**:
+- [ ] Recommendations are optional
+
+---
+
+## Narrative Requirements
+
+### BRD-NARR-004: Anomaly Interpretation
+**Priority**: P1  
+**Description**: Narrative SHOULD include anomaly interpretation when anomalies are present.
+
+**Acceptance Criteria**:
+- [ ] Narrative references anomalies where detected
+- [ ] Context provided for anomaly significance
+
+---
+
+## Confidence Requirements
+
+### BRD-CONF-005: Configurable Thresholds
+**Priority**: P1  
+**Description**: Confidence thresholds MUST be configurable.
+
+**Acceptance Criteria**:
+- [ ] Thresholds read from product config
+- [ ] Default thresholds documented
+
+---
+
+## Platform Alignment
+
+### BRD-ALIGN-001: Framework Primitives
+**Priority**: P0  
+**Description**: Product reasoning MUST rely on framework primitives.
+
+**Acceptance Criteria**:
+- [ ] No product-level orchestration re-implementation
+- [ ] Uses core reasoning ladder interfaces
+
+---
+
+### BRD-ALIGN-002: Escalate Framework Gaps
+**Priority**: P0  
+**Description**: Requirements needing custom primitives MUST be escalated as framework gaps.
+
+**Acceptance Criteria**:
+- [ ] Gaps logged in product docs
+- [ ] No workaround implementations in product code
+
+---
+
+## Framework Reliance
+
+### BRD-FRI-001: No Shadow Orchestration
+**Priority**: P0  
+**Description**: Product MUST NOT re-implement orchestrator logic.
+
+---
+
+### BRD-FRI-002: No Shadow Iteration
+**Priority**: P0  
+**Description**: Product MUST NOT re-implement iteration control.
+
+---
+
+### BRD-FRI-003: No Shadow Reasoning
+**Priority**: P0  
+**Description**: Product MUST NOT re-implement reasoning ladder semantics.
+
+---
+
+### BRD-FRI-004: Governance Hooks Required
+**Priority**: P0  
+**Description**: Product MUST NOT bypass framework governance hooks.
+
+---
+
+### BRD-FRI-005: Escalate Gaps
+**Priority**: P0  
+**Description**: Framework gaps MUST be escalated, not worked around.
+
+---
+
+## No Runtime Learning
+
+### BRD-NRL-001: No Runtime Behavior Changes
+**Priority**: P0  
+**Description**: Product MUST NOT modify behavior at runtime based on prior runs.
+
+---
+
+### BRD-NRL-002: No Persisted Learning
+**Priority**: P0  
+**Description**: Product MUST NOT persist learned patterns across runs.
+
+---
+
+### BRD-NRL-003: Governed Evolution Only
+**Priority**: P0  
+**Description**: Product evolution MUST follow intent → BRD → implementation lifecycle.
+
+---
+
+### BRD-NRL-004: Run Independence
+**Priority**: P0  
+**Description**: Identical inputs MUST produce identical outputs across runs.
+
+---
+
 ## Cross-References
 
 - **System Design**: [agents-and-tools.md](../04_systemdesign/agents-and-tools.md)

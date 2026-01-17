@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core.contracts.tool_schema import ToolError, ToolErrorCode, ToolMeta, ToolResult
 from core.tools.base import BaseTool, tool
@@ -129,7 +129,7 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{_escape(packet.question or "Decision Packet")}</title>
+  <title>{_escape(packet.question or "Recommendation Packet")}</title>
   <style>
     body {{ font-family: "Helvetica Neue", Arial, sans-serif; margin: 24px; color: #1a1a1a; }}
     h1 {{ margin-bottom: 4px; }}
@@ -151,12 +151,13 @@ def render_decision_packet_html(payload: RenderDecisionPacketInput) -> RenderDec
   </style>
 </head>
 <body>
-  <h1>{_escape(packet.question or "Decision Packet")}</h1>
+  <h1>{_escape(packet.question or "Recommendation Packet")}</h1>
   <div class="meta">Confidence: {_escape(packet.confidence_level)}</div>
   <div class="summary">
-    <strong>Decision summary</strong>
+    <strong>Recommendation summary</strong>
     <p>{_escape(packet.decision_summary)}</p>
   </div>
+  <div class="note">Advisory only. Human decision required before any action.</div>
   <div class="grid">
     <div>
       {user_inputs_html}
@@ -212,6 +213,10 @@ class RenderDecisionPacketHtmlTool(BaseTool):
             output = render_decision_packet_html(payload)
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
+        except ValidationError as exc:
+            err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=f"validation_error: {exc.errors()}")
+            meta = ToolMeta(tool_name=self.name, backend="local")
+            return ToolResult(ok=False, data=None, error=err, meta=meta)
         except Exception as exc:
             err = ToolError(code=ToolErrorCode.INVALID_INPUT, message=str(exc))
             meta = ToolMeta(tool_name=self.name, backend="local")

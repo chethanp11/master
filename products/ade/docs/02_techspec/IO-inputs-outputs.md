@@ -6,6 +6,50 @@
 
 ---
 
+## Product Objectives
+
+### OBJ-001: Evidence References
+**Priority**: P0  
+**Description**: 100% of outputs MUST include evidence references.
+
+---
+
+### OBJ-002: Reproducibility
+**Priority**: P0  
+**Description**: Same inputs MUST always produce same outputs.
+
+---
+
+### OBJ-003: Plan Approval
+**Priority**: P0  
+**Description**: All plans MUST require explicit user approval.
+
+---
+
+### OBJ-004: Transparency Fields
+**Priority**: P0  
+**Description**: Outputs MUST include confidence_level, assumptions, and limitations.
+
+---
+
+### OBJ-005: Time-to-Report
+**Priority**: P1  
+**Description**: Time from question to report SHOULD be under 5 minutes.
+
+---
+
+### OBJ-006: Chart Types
+**Priority**: P1  
+**Description**: At least 4 chart types MUST be available.
+
+---
+
+### OBJ-007: Hypothesis Toggle
+**Priority**: P1  
+**Description**: Hypothesis checks MUST be toggleable.
+
+---
+
 ## 1. Input Payload Requirements (IO-IN)
 
 ### IO-IN-001: Dataset Required
@@ -183,6 +227,153 @@
 - [ ] ade.pdf
 - [ ] ade.html
 - [ ] ade_stub.json
+
+---
+
+## 4.1 Output Quality Requirements
+
+### BRD-QUAL-001: Executive Summary Quality
+**Priority**: P0  
+**Description**: Executive summary MUST be meaningful.
+
+**Acceptance Criteria**:
+- [ ] Executive summary is non-empty
+- [ ] Summary reflects key findings
+
+---
+
+### BRD-QUAL-002: Actionable Key Findings
+**Priority**: P0  
+**Description**: Key findings MUST be actionable.
+
+**Acceptance Criteria**:
+- [ ] Findings include implications
+- [ ] Findings map to evidence
+
+---
+
+### BRD-QUAL-003: Specific Recommendations
+**Priority**: P1  
+**Description**: Recommendations MUST be specific when present.
+
+**Acceptance Criteria**:
+- [ ] Recommendations include concrete actions
+
+---
+
+### BRD-QUAL-004: Human-Readable Narratives
+**Priority**: P0  
+**Description**: Narratives MUST be human-readable.
+
+**Acceptance Criteria**:
+- [ ] Plain-language text
+- [ ] Avoids raw data dumps
+
+---
+
+### BRD-QUAL-010: Chart Rendering
+**Priority**: P0  
+**Description**: Charts MUST render correctly.
+
+**Acceptance Criteria**:
+- [ ] Vega-Lite spec validates
+
+---
+
+### BRD-QUAL-011: Table Readability
+**Priority**: P0  
+**Description**: Tables MUST be readable.
+
+**Acceptance Criteria**:
+- [ ] Column headers visible
+- [ ] No overflow clipping
+
+---
+
+### BRD-QUAL-012: Browser Compatibility
+**Priority**: P0  
+**Description**: HTML MUST display in modern browsers.
+
+**Acceptance Criteria**:
+- [ ] Renders in Chrome/Firefox/Safari
+
+---
+
+## 4.2 Version Transparency Requirements
+
+### BRD-VER-001: Output Version Metadata
+**Priority**: P0  
+**Description**: Outputs MUST include product, flow, and schema versions.
+
+**Acceptance Criteria**:
+- [ ] Version metadata present in output payload
+
+---
+
+### BRD-VER-002: Input Hashing
+**Priority**: P1  
+**Description**: Outputs MUST record dataset hash and input parameter hash.
+
+**Acceptance Criteria**:
+- [ ] dataset_hash present
+- [ ] input_hash present
+
+---
+
+### BRD-VER-003: Dependency Pinning
+**Priority**: P0  
+**Description**: Non-deterministic dependencies MUST be version-pinned or disallowed.
+
+**Acceptance Criteria**:
+- [ ] Dependency versions recorded
+- [ ] Non-pinned dependencies rejected
+
+---
+
+## 4.3 Decision Authority Boundary
+
+### BRD-DAB-001: Recommendation Labeling
+**Priority**: P0  
+**Description**: Outputs MUST be labeled as recommendations/findings, not decisions.
+
+**Acceptance Criteria**:
+- [ ] Output labels avoid \"decision\" language
+
+---
+
+### BRD-DAB-002: Human Authority
+**Priority**: P0  
+**Description**: Decision packets MUST clarify human authority for final decisions.
+
+**Acceptance Criteria**:
+- [ ] Human authority statement included
+
+---
+
+### BRD-DAB-003: No Automatic Actions
+**Priority**: P0  
+**Description**: Outputs MUST NOT trigger downstream actions without explicit approval.
+
+**Acceptance Criteria**:
+- [ ] Outputs marked as advisory-only
+
+---
+
+### BRD-DAB-004: Confidence Language
+**Priority**: P1  
+**Description**: Confidence language MUST avoid implying autonomous decisions.
+
+**Acceptance Criteria**:
+- [ ] Language uses recommendation framing
+
+---
+
+### BRD-DAB-005: Advisory Presentation
+**Priority**: P0  
+**Description**: Recommendations MUST be presented as advisory.
+
+**Acceptance Criteria**:
+- [ ] Recommendation section labeled advisory
 
 ---
 

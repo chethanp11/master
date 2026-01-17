@@ -16,6 +16,7 @@ from products.ade.schemas.business_report import (
     VisualSpec,
 )
 from products.ade.tools.compute_business_metrics import BusinessMetrics
+from products.ade.utils.versioning import build_version_metadata
 
 
 class AssembleBusinessReportInput(BaseModel):
@@ -55,6 +56,39 @@ def _build_series(period_labels: List[str], rows: List[List[Any]]) -> List[Dict[
             except (ValueError, TypeError):
                 continue
     return [{"name": name, "values": values} for name, values in series.items()]
+
+
+def _validate_visuals(visuals: List[VisualSpec]) -> None:
+    if not visuals:
+        raise ValueError("visuals_missing")
+    for visual in visuals:
+        if not visual.title:
+            raise ValueError("visual_title_missing")
+        data = visual.data or {}
+        if visual.kind == "line":
+            periods = data.get("periods") if isinstance(data, dict) else None
+            series = data.get("series") if isinstance(data, dict) else None
+            if not periods or not series:
+                raise ValueError("line_visual_missing_data")
+        if visual.kind == "heatmap":
+            rows = data.get("rows") if isinstance(data, dict) else None
+            columns = data.get("columns") if isinstance(data, dict) else None
+            if rows is None or columns is None:
+                raise ValueError("heatmap_visual_missing_data")
+
+
+def _validate_report_quality(report: BusinessReport) -> None:
+    if not report.executive_summary:
+        raise ValueError("executive_summary_empty")
+    if not report.key_findings:
+        raise ValueError("key_findings_empty")
+    for finding in report.key_findings:
+        if not finding.evidence_refs:
+            raise ValueError("finding_missing_evidence_refs")
+    for recommendation in report.recommendations:
+        if len(str(recommendation).split()) < 3:
+            raise ValueError("recommendation_too_generic")
+    _validate_visuals(report.visuals)
 
 
 def assemble_business_report(payload: AssembleBusinessReportInput) -> AssembleBusinessReportOutput:
@@ -193,7 +227,9 @@ def assemble_business_report(payload: AssembleBusinessReportInput) -> AssembleBu
             assumptions=packet.assumptions,
             limitations=packet.limitations,
         ),
+        stop_reason=packet.stop_reason,
     )
+    _validate_report_quality(report)
     return AssembleBusinessReportOutput(report=report)
 
 
@@ -215,6 +251,21 @@ class AssembleBusinessReportTool(BaseTool):
         try:
             payload = AssembleBusinessReportInput.model_validate(params or {})
             output = assemble_business_report(payload)
+            artifacts = getattr(ctx, "run", None).artifacts if getattr(ctx, "run", None) else {}
+            data_reader = artifacts.get("tool.data_reader.output", {}) if isinstance(artifacts, dict) else {}
+            dataset_id = ""
+            run_payload = getattr(getattr(ctx, "run", None), "payload", {}) or {}
+            if isinstance(run_payload, dict):
+                dataset_id = str(run_payload.get("dataset") or "")
+            version_metadata = build_version_metadata(
+                flow_id=str(getattr(getattr(ctx, "run", None), "flow", "")),
+                dataset_id=dataset_id,
+                columns=list(data_reader.get("columns") or []),
+                rows=list(data_reader.get("rows") or []),
+                input_payload=params or {},
+            )
+            report = output.report.model_copy(update={"version_metadata": version_metadata})
+            output = output.model_copy(update={"report": report})
             meta = ToolMeta(tool_name=self.name, backend="local")
             return ToolResult(ok=True, data=output.model_dump(mode="json"), error=None, meta=meta)
         except Exception as exc:

@@ -4,7 +4,7 @@ from __future__ import annotations
 from math import sqrt
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
@@ -17,8 +17,10 @@ MAX_CV = 0.6
 class SufficiencyOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    stage: str = "critique"
     confidence_level: str
     downgrade_reasons: List[str]
+    sufficiency_state: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 def _extract_series_values(series: List[Dict[str, Any]]) -> List[float]:
@@ -53,19 +55,33 @@ def evaluate_sufficiency(
     series: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     downgrade_reasons: List[str] = []
+    known: List[str] = []
+    unknown: List[str] = []
+    blocked: List[str] = []
     critical = False
 
     if row_count < MIN_ROWS:
         downgrade_reasons.append("insufficient_rows")
         if row_count < max(1, MIN_ROWS // 2):
             critical = True
+            blocked.append("row_count")
+        else:
+            unknown.append("row_count")
+    else:
+        known.append("row_count")
 
     if not has_time or len(series) < MIN_TIME_POINTS:
         downgrade_reasons.append("insufficient_time_window")
+        unknown.append("time_window")
+    else:
+        known.append("time_window")
 
     values = _extract_series_values(series)
     if not _variance_stable(values):
         downgrade_reasons.append("unstable_variance")
+        unknown.append("variance_stability")
+    else:
+        known.append("variance_stability")
 
     if not downgrade_reasons:
         confidence_level = "high"
@@ -77,6 +93,11 @@ def evaluate_sufficiency(
     return SufficiencyOutput(
         confidence_level=confidence_level,
         downgrade_reasons=downgrade_reasons,
+        sufficiency_state={
+            "known": known,
+            "unknown": unknown,
+            "blocked": blocked,
+        },
     ).model_dump(mode="json")
 
 

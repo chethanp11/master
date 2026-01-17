@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from products.ade.schemas.plan_spec import PlanDecision, PlanSpec
+from products.ade.schemas.plan_spec import PlanDecision, PlanSpec, ToolRecommendation
 
 
 class PlanInput(BaseModel):
@@ -68,6 +68,27 @@ class PlanAgent(BaseAgent):
                 "hypothesis_data_outage": question_type in {"explain_drop", "anomaly_investigation"} and include_hypothesis,
                 "hypothesis_seasonality": question_type in {"explain_drop", "anomaly_investigation"} and include_hypothesis,
             }
+            tool_recommendations = [
+                ToolRecommendation(
+                    tool="compute_business_metrics",
+                    rationale="Establish baseline metrics for the requested analysis.",
+                ),
+                ToolRecommendation(
+                    tool="build_chart_spec",
+                    rationale="Provide a visual summary aligned to the selected chart type.",
+                ),
+                ToolRecommendation(
+                    tool="assemble_business_report",
+                    rationale="Deliver a stakeholder-ready report with evidence references.",
+                ),
+            ]
+            if tool_flags.get("detect_anomalies"):
+                tool_recommendations.append(
+                    ToolRecommendation(
+                        tool="detect_anomalies",
+                        rationale="Flag unusual spikes or drops when investigating anomalies.",
+                    )
+                )
 
             decisions = [
                 PlanDecision(decision=f"Metric: {metric or 'unspecified'}", rationale="Aligns with stated intent."),
@@ -90,6 +111,7 @@ class PlanAgent(BaseAgent):
                 aggregation="total",
                 tool_flags=tool_flags,
                 decision_points=decisions,
+                tool_recommendations=tool_recommendations,
             )
 
             meta = AgentMeta(agent_name=self.name)

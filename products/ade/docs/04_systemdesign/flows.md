@@ -12,7 +12,9 @@
 | `ade_v1` | Free-text analyst workflow with visualization preferences and plan approval | ✓ |
 | `visualization` | Dataset-first workflow with explicit preference input | |
 
-Both flows produce `business_report.html` and `decision_packet.html`.
+Outputs by flow:
+- `ade_v1`: `business_report.html` (decision packet is assembled but not rendered)
+- `visualization`: `business_report.html` and `decision_packet.html`
 
 ---
 
@@ -30,20 +32,32 @@ autonomy_level: "suggest_only"
 ### 2.2 Step Sequence
 
 ```
-┌─────────┐     ┌────────────────┐     ┌──────────────────────┐
-│  read   │────▶│ viz_preferences│────▶│compute_business_     │
-│         │     │  (user_input)  │     │metrics               │
-└─────────┘     └────────────────┘     └──────────┬───────────┘
-                                                  │
-                                                  ▼
-┌────────────────┐     ┌───────────────┐     ┌────────────────┐
-│sufficiency_eval│────▶│ plan_proposal │────▶│compute_anomalies│
-│   (agent)      │     │ (approval)    │     │                │
-└────────────────┘     └───────────────┘     └───────┬────────┘
-                                                     │
-                                                     ▼
+┌─────────┐     ┌──────────────┐     ┌────────────────┐
+│  read   │────▶│ context_pack │────▶│ viz_preferences│
+│         │     │   (tool)     │     │  (user_input)  │
+└─────────┘     └──────────────┘     └──────────┬─────┘
+                                                │
+                                                ▼
+                                      ┌──────────────────────┐
+                                      │compute_business_     │
+                                      │metrics               │
+                                      └──────────┬───────────┘
+                                                   │
+                                                   ▼
+┌────────────────┐     ┌───────────────┐     ┌─────────────┐
+│sufficiency_eval│────▶│ plan_proposal │────▶│ critic_eval │
+│   (agent)      │     │ (approval)    │     │  (agent)    │
+└────────────────┘     └───────────────┘     └───────┬─────┘
+                                                      │
+                                                      ▼
+                                           ┌────────────────┐
+                                           │compute_anomalies│
+                                           │                │
+                                           └───────┬────────┘
+                                                      │
+                                                      ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  build_chart_spec → hypothesis_* → assemble_* → render_*     │
+│  build_chart_spec → hypothesis_* → assemble_* → render_*      │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -52,18 +66,23 @@ autonomy_level: "suggest_only"
 | # | Step ID | Type | Component | Purpose |
 |---|---------|------|-----------|---------|
 | 1 | `read` | tool | `data_reader` | Read CSV dataset |
-| 2 | `viz_preferences` | user_input | — | Collect chart type, metric focus |
-| 3 | `compute_business_metrics` | tool | `compute_business_metrics` | Aggregate totals, movers, anomalies |
-| 4 | `sufficiency_eval` | agent | `sufficiency_evaluator` | Score data sufficiency |
-| 5 | `plan_proposal` | plan_proposal | `plan_proposal_agent` | Generate approval request |
-| 6 | `compute_anomalies` | tool | `detect_anomalies` | Z-score anomaly detection |
-| 7 | `build_chart_spec` | tool | `build_chart_spec` | Build chart specification |
-| 8 | `hypothesis_data_outage` | tool | `hypothesis_test_data_outage` | Check outage patterns |
-| 9 | `hypothesis_seasonality` | tool | `hypothesis_test_seasonality` | Check seasonal signals |
-| 10 | `assemble_decision_packet` | tool | `assemble_decision_packet` | Build decision packet |
-| 11 | `assemble_evidence_bundle` | tool | `assemble_evidence_bundle` | Bundle evidence items |
-| 12 | `assemble_business_report` | tool | `assemble_business_report` | Build business report |
-| 13 | `render_business_report_html` | tool | `render_business_report_html` | Render report HTML |
+| 2 | `context_pack` | tool | `context_pack_builder` | Build dataset profile and coverage |
+| 3 | `viz_preferences` | user_input | — | Collect chart type, metric focus |
+| 4 | `compute_business_metrics` | tool | `compute_business_metrics` | Aggregate totals, movers, anomalies |
+| 5 | `sufficiency_eval` | agent | `sufficiency_evaluator` | Score data sufficiency |
+| 6 | `plan_proposal` | plan_proposal | `plan_proposal_agent` | Generate approval request |
+| 7 | `critic_eval` | agent | `critic_evaluator` | Evaluate evidence gaps and blocking flags |
+| 8 | `compute_anomalies` | tool | `detect_anomalies` | Z-score anomaly detection |
+| 9 | `build_chart_spec` | tool | `build_chart_spec` | Build chart specification |
+| 10 | `hypothesis_data_outage` | tool | `hypothesis_test_data_outage` | Check outage patterns |
+| 11 | `hypothesis_seasonality` | tool | `hypothesis_test_seasonality` | Check seasonal signals |
+| 12 | `assemble_decision_packet` | tool | `assemble_decision_packet` | Build decision packet |
+| 13 | `assemble_evidence_bundle` | tool | `assemble_evidence_bundle` | Bundle evidence items |
+| 14 | `assemble_business_report` | tool | `assemble_business_report` | Build business report |
+| 15 | `render_business_report_html` | tool | `render_business_report_html` | Render report HTML |
+
+**Evidence**:
+- `products/ade/flows/ade_v1.yaml` (steps: `context_pack`, `critic_eval`, `assemble_decision_packet`)
 
 ### 2.4 User Input: viz_preferences
 
@@ -120,10 +139,16 @@ autonomy_level: "suggest_only"
 ### 3.2 Step Sequence
 
 ```
-┌─────────────────────┐     ┌─────────┐     ┌────────────────┐
-│intent_interpretation│────▶│  read   │────▶│ viz_preferences│
-│      (agent)        │     │         │     │  (user_input)  │
-└─────────────────────┘     └─────────┘     └───────┬────────┘
+┌─────────────────────┐     ┌─────────┐     ┌──────────────┐
+│intent_interpretation│────▶│  read   │────▶│ context_pack │
+│      (agent)        │     │         │     │   (tool)     │
+└─────────────────────┘     └─────────┘     └───────┬──────┘
+                                                    │
+                                                    ▼
+                                          ┌────────────────┐
+                                          │ viz_preferences│
+                                          │  (user_input)  │
+                                          └───────┬────────┘
                                                     │
                                                     ▼
 ┌──────────────────────┐     ┌──────────────┐     ┌────────────────┐
@@ -132,10 +157,11 @@ autonomy_level: "suggest_only"
 └──────────────────────┘     └──────────────┘     └───────┬────────┘
                                                           │
                                                           ▼
-┌───────────────┐     ┌───────────────────────────────────────────┐
-│ plan_proposal │────▶│ anomalies → chart → hypothesis → assembly │
-│  (approval)   │     │                  → render                 │
-└───────────────┘     └───────────────────────────────────────────┘
+┌───────────────┐     ┌───────────────┐     ┌───────────────────────┐
+│ plan_proposal │────▶│  critic_eval  │────▶│ anomalies → chart →   │
+│  (approval)   │     │   (agent)     │     │ hypothesis → assembly │
+└───────────────┘     └───────────────┘     │        → render        │
+                                           └───────────────────────┘
 ```
 
 ### 3.3 Step Details
@@ -144,19 +170,24 @@ autonomy_level: "suggest_only"
 |---|---------|------|-----------|---------|
 | 1 | `intent_interpretation` | agent | `planning_agent` | Interpret intent and plan |
 | 2 | `read` | tool | `data_reader` | Read dataset |
-| 3 | `viz_preferences` | user_input | — | Collect preferences |
-| 4 | `compute_business_metrics` | tool | `compute_business_metrics` | Compute metrics |
-| 5 | `sufficiency_eval` | agent | `sufficiency_evaluator` | Evaluate sufficiency |
-| 6 | `planning` | agent | `planning_agent` | Refine plan |
-| 7 | `plan_proposal` | plan_proposal | `plan_proposal_agent` | Request approval |
-| 8 | `compute_anomalies` | tool | `detect_anomalies` | Detect anomalies |
-| 9 | `build_chart_spec` | tool | `build_chart_spec` | Build chart |
-| 10 | `hypothesis_data_outage` | tool | `hypothesis_test_data_outage` | Check outage |
-| 11 | `hypothesis_seasonality` | tool | `hypothesis_test_seasonality` | Check seasonality |
-| 12 | `assemble_decision_packet` | tool | `assemble_decision_packet` | Build packet |
-| 13 | `assemble_business_report` | tool | `assemble_business_report` | Build report |
-| 14 | `render_business_report_html` | tool | `render_business_report_html` | Render report |
-| 15 | `render_decision_packet_html` | tool | `render_decision_packet_html` | Render packet |
+| 3 | `context_pack` | tool | `context_pack_builder` | Build dataset profile and coverage |
+| 4 | `viz_preferences` | user_input | — | Collect preferences |
+| 5 | `compute_business_metrics` | tool | `compute_business_metrics` | Compute metrics |
+| 6 | `sufficiency_eval` | agent | `sufficiency_evaluator` | Evaluate sufficiency |
+| 7 | `planning` | agent | `planning_agent` | Refine plan |
+| 8 | `plan_proposal` | plan_proposal | `plan_proposal_agent` | Request approval |
+| 9 | `critic_eval` | agent | `critic_evaluator` | Evaluate evidence gaps and blocking flags |
+| 10 | `compute_anomalies` | tool | `detect_anomalies` | Detect anomalies |
+| 11 | `build_chart_spec` | tool | `build_chart_spec` | Build chart |
+| 12 | `hypothesis_data_outage` | tool | `hypothesis_test_data_outage` | Check outage |
+| 13 | `hypothesis_seasonality` | tool | `hypothesis_test_seasonality` | Check seasonality |
+| 14 | `assemble_decision_packet` | tool | `assemble_decision_packet` | Build packet |
+| 15 | `assemble_business_report` | tool | `assemble_business_report` | Build report |
+| 16 | `render_business_report_html` | tool | `render_business_report_html` | Render report |
+| 17 | `render_decision_packet_html` | tool | `render_decision_packet_html` | Render packet |
+
+**Evidence**:
+- `products/ade/flows/visualization.yaml` (steps: `context_pack`, `critic_eval`, `render_decision_packet_html`)
 
 ### 3.4 Differences from ade_v1
 
