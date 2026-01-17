@@ -39,7 +39,7 @@ ADE accepts analyst questions and CSV datasets to produce **audit-ready analytic
 
 - Live database connectors or streaming inputs
 - Multi-dataset joins
-- Automatic tool discovery or dynamic flow mutation
+- Automatic tool discovery
 - BI dashboarding as primary product surface
 
 ---

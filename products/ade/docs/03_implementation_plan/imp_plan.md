@@ -32,21 +32,6 @@
 
 ---
 
-### IMP-002
-- **Source Tech Spec IDs**: BRD-AGT-001..004
-- **Related SD-COVERAGE Gap IDs**: GAP-002
-- **Target Code Locations**: `core/orchestrator/step_executor.py`, `core/agents/base.py`, `products/ade/agents/*`
-- **Type of Change**: Code extension required
-- **Steps**:
-  1. Add advisory-only enforcement in `core/orchestrator/step_executor.py` for agent steps.
-  2. Ensure agent outputs are schema-validated in `core/agents/base.py`.
-  3. Add explicit advisory-only metadata in ADE agent descriptors under `products/ade/agents/`.
-- **Acceptance Checks**:
-  - Agent steps cannot trigger tool execution directly.
-  - Agent outputs fail fast on schema validation errors.
-
----
-
 ### IMP-003
 - **Source Tech Spec IDs**: BRD-INTEL-001..005
 - **Related SD-COVERAGE Gap IDs**: GAP-003
@@ -129,34 +114,6 @@
 - **Acceptance Checks**:
   - Plan summaries contain objective, evidence, assumptions, risks.
   - Replan output includes diff and rationale.
-
----
-
-### IMP-009
-- **Source Tech Spec IDs**: BRD-DET-005
-- **Related SD-COVERAGE Gap IDs**: GAP-009
-- **Target Code Locations**: `core/orchestrator/flow_loader.py`, `products/ade/flows/*.yaml`
-- **Type of Change**: Code extension required
-- **Steps**:
-  1. Enforce that flow definitions are loaded from static YAML only.
-  2. Reject runtime step insertion or mutation.
-- **Acceptance Checks**:
-  - Flow loader rejects dynamic modifications.
-
----
-
-### IMP-010
-- **Source Tech Spec IDs**: BRD-TERM-001..004, BRD-STOP-001..002
-- **Related SD-COVERAGE Gap IDs**: GAP-010, GAP-011
-- **Target Code Locations**: `core/orchestrator/engine.py`, `products/ade/agents/*`, `products/ade/schemas/*`
-- **Type of Change**: Code addition required
-- **Steps**:
-  1. Add outcome fields (SUCCESS/PARTIAL_SUCCESS/ASK_USER/ABORT) to ADE outputs.
-  2. Populate limitations and unresolved gaps for PARTIAL_SUCCESS.
-  3. Add reason codes and next actions for ABORT.
-  4. Trigger ASK_USER for resolvable missing inputs.
-- **Acceptance Checks**:
-  - Outcomes are present and consistent with run status.
 
 ---
 
@@ -244,21 +201,18 @@
 ## Dependency Order
 
 1. IMP-001 (objectives clarification)
-2. IMP-002 (advisory boundary)
-3. IMP-003 (reasoning ladder)
-4. IMP-004 (critique)
-5. IMP-005 (advisory tool selection)
-6. IMP-006 (anomaly narrative)
-7. IMP-007 (confidence thresholds)
-8. IMP-008 (plan detail + replan diff)
-9. IMP-009 (no dynamic flow mutation)
-10. IMP-010 (terminal outcomes + safe exits)
-11. IMP-011 (context pack)
-12. IMP-012 (validation gating)
-13. IMP-013 (output quality)
-14. IMP-014 (version transparency)
-15. IMP-015 (decision authority boundary)
-16. IMP-016 (alignment/reliance/no runtime learning clarifications)
+2. IMP-003 (reasoning ladder)
+3. IMP-004 (critique)
+4. IMP-005 (advisory tool selection)
+5. IMP-006 (anomaly narrative)
+6. IMP-007 (confidence thresholds)
+7. IMP-008 (plan detail + replan diff)
+8. IMP-011 (context pack)
+9. IMP-012 (validation gating)
+10. IMP-013 (output quality)
+11. IMP-014 (version transparency)
+12. IMP-015 (decision authority boundary)
+13. IMP-016 (alignment/reliance/no runtime learning clarifications)
 
 ---
 

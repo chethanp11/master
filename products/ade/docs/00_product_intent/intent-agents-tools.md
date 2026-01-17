@@ -24,10 +24,6 @@ This file contains sections 3, 4 from the ADE Developer Intent.
 
 | ID | Intent | Rationale |
 |----|--------|-----------|
-| **INT-AGT-001** | All agents must be advisory only | Framework compliance |
-| **INT-AGT-002** | Agents propose, never execute | Safety boundary |
-| **INT-AGT-003** | Agents produce structured outputs | Schema compliance |
-| **INT-AGT-004** | Agents support reasoning transparency | Auditability |
 
 ### Agent Summary
 
@@ -274,4 +270,3 @@ Raw data needs narrative interpretation for human consumption.
 | export_pdf | Optional PDF export |
 
 ---
-

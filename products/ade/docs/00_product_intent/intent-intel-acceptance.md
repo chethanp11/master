@@ -16,7 +16,7 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 
 # 7. Product Intelligence & Execution (INT-INTEL)
 
-> **Cross-Cutting Intent**: These requirements close gaps in reasoning depth, iteration, critique, grounding, safe exits, observability, and UX clarity.
+> **Cross-Cutting Intent**: These requirements close gaps in reasoning depth, iteration, critique, grounding, observability, and UX clarity.
 
 ## 7.1 Semantic Interpretation Phase
 
@@ -121,10 +121,6 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 
 | ID | Intent | Rationale |
 |----|--------|-----------|
-| **INT-TERM-001** | Product SHALL support explicit terminal outcomes: SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT | Clear outcomes |
-| **INT-TERM-002** | PARTIAL_SUCCESS outputs SHALL include limitations and unresolved gaps | Honest outputs |
-| **INT-TERM-003** | ABORT outcomes SHALL include reason codes, blocking conditions, and recommended next actions | Actionable failures |
-| **INT-TERM-004** | ASK_USER outcomes SHALL be used when missing inputs are resolvable via clarification | HITL integration |
 
 ## 7.7 Output Quality Gates
 
@@ -163,8 +159,6 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 
 | ID | Intent | Rationale |
 |----|--------|-----------|
-| **INT-STOP-001** | Product SHALL prioritize knowing when not to proceed over producing forced outputs | Safety first |
-| **INT-STOP-002** | Low signal, conflicting evidence, or insufficient data SHALL result in safe exits rather than speculative conclusions | No forced outputs |
 
 ## 7.11 Thin, Declarative, Framework-Aligned Products
 
@@ -292,11 +286,11 @@ This intent document drives:
 | [Vision.md](Vision.md) | Expands intent into product philosophy |
 | [BRD-overview.md](../01_brd/BRD-overview.md) | INT-OVERVIEW-* → BRD objectives and scope |
 | [BRD-flows.md](../01_brd/BRD-flows.md) | INT-FLOWS-*, INT-V1-*, INT-VIZ-* → Flow requirements |
-| [BRD-agents.md](../01_brd/BRD-agents.md) | INT-AGT-*, INT-INTENT-*, INT-PLAN-* → Agent requirements |
+| [BRD-agents.md](../01_brd/BRD-agents.md) | INT-INTENT-*, INT-PLAN-* → Agent requirements |
 | [BRD-tools.md](../01_brd/BRD-tools.md) | INT-TOOL-*, INT-DATA-*, INT-ANAL-* → Tool requirements |
 | [BRD-data.md](../01_brd/BRD-data.md) | INT-FMT-*, INT-SCHEMA-*, INT-DP-* → Data requirements |
 | [BRD-outputs.md](../01_brd/BRD-outputs.md) | INT-OUT-*, INT-AUDIT-*, INT-TRACE-* → Output requirements |
-| All BRDs (cross-cutting) | INT-SEM-*, INT-INTEL-*, INT-CRIT-*, INT-CTX-*, INT-TERM-*, INT-QUAL-*, INT-VER-*, INT-STOP-*, INT-ALIGN-*, INT-FRI-*, INT-DAB-*, INT-NRL-* → Semantic, intelligence, execution, and invariant requirements |
+| All BRDs (cross-cutting) | INT-SEM-*, INT-INTEL-*, INT-CRIT-*, INT-CTX-*, INT-QUAL-*, INT-VER-*, INT-ALIGN-*, INT-FRI-*, INT-DAB-*, INT-NRL-* → Semantic, intelligence, execution, and invariant requirements |
 
 ---
 

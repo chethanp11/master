@@ -44,9 +44,8 @@
 | visualization flow | INT-VIZ-001..007 | BRD-flows | BRD-VIZ-001..007 | ✅ | Direct ID alignment. |
 | UI preferences | INT-UI-001..003 | BRD-flows | BRD-PREF-001..003 | ✅ | Direct mapping. |
 | Plan approval | INT-UI-004..006 | BRD-flows | BRD-PLAN-001..006 | ✅ | Direct mapping. |
-| Determinism | INT-DET-001..004 | BRD-flows | BRD-DET-001..005 | ✅ | Dynamic flow mutation ban added. |
+| Determinism | INT-DET-001..004 | BRD-flows | BRD-DET-001..004 | ✅ | Determinism requirements captured. |
 | Autonomy config | INT-DET-002 | BRD-flows | BRD-CFG-001 | ✅ | Suggest_only autonomy covered. |
-| Agent advisory | INT-AGT-001..004 | BRD-agents | BRD-AGT-001..004 | ✅ | Advisory boundary captured. |
 | Intent interpretation | INT-INTENT-001..007 | BRD-agents | BRD-INTENT-001..007 | ✅ | Direct mapping. |
 | Plan generation | INT-PLAN-001..008 | BRD-agents | BRD-PLANGEN-001..004, BRD-PROPOSAL-001..004 | ✅ | Direct mapping. |
 | Data sufficiency | INT-SUFF-001..006 | BRD-agents | BRD-SUFF-001..006 | ✅ | Direct mapping. |
@@ -80,9 +79,7 @@
 | Critique stage | INT-CRIT-001..005 | BRD-agents | BRD-CRIT-001..005 | ✅ | Critique gate captured. |
 | Context packs | INT-CTX-001..004 | BRD-data | BRD-CTX-001..004 | ✅ | Context Pack requirements captured. |
 | Advisory tool selection | INT-TOOLSEL-001..004 | BRD-agents | BRD-TOOLSEL-001..004 | ✅ | Advisory selection captured. |
-| Failure modes | INT-TERM-001..004 | BRD-flows | BRD-TERM-001..004 | ✅ | Terminal outcomes captured. |
 | Plan review detail | INT-REVIEW-001..003 | BRD-flows | BRD-PLAN-001..009 | ✅ | Plan detail granularity captured. |
-| Safe stopping | INT-STOP-001..002 | BRD-flows | BRD-STOP-001..002 | ✅ | Safe-exit rules captured. |
 | Framework alignment | INT-ALIGN-001..002 | BRD-overview | BRD-ALIGN-001..002 | ✅ | Framework alignment covered. |
 | Framework reliance | INT-FRI-001..005 | BRD-overview | BRD-FRI-001..005 | ✅ | Framework reliance covered. |
 | Decision authority | INT-DAB-001..005 | BRD-outputs | BRD-DAB-001..005 | ✅ | Labeling discipline covered. |

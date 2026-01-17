@@ -31,10 +31,6 @@
 | AGENT-SUFF-004 | `products/ade/docs/02_techspec/AGENT-agents.md#AGENT-SUFF-004` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Covered |
 | AGENT-DASH-001 | `products/ade/docs/02_techspec/AGENT-agents.md#AGENT-DASH-001` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Covered |
 | AGENT-DASH-002 | `products/ade/docs/02_techspec/AGENT-agents.md#AGENT-DASH-002` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Covered |
-| BRD-AGT-001 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-AGT-001` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Missing |
-| BRD-AGT-002 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-AGT-002` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Missing |
-| BRD-AGT-003 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-AGT-003` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Missing |
-| BRD-AGT-004 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-AGT-004` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Missing |
 | BRD-INTEL-001 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-001` | `products/ade/docs/04_systemdesign/schemas.md#2-8-intentframe` | Covered |
 | BRD-INTEL-002 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-002` | `products/ade/docs/04_systemdesign/schemas.md#2-8-intentframe` | Covered |
 | BRD-INTEL-003 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-003` | `products/ade/docs/04_systemdesign/flows.md#5-error-handling` | Missing |
@@ -101,7 +97,6 @@
 | SEM-OBS-006 | `products/ade/docs/02_techspec/AGENT-agents.md#SEM-OBS-006` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Covered |
 | SEM-OBS-007 | `products/ade/docs/02_techspec/AGENT-agents.md#SEM-OBS-007` | `products/ade/docs/04_systemdesign/agents-and-tools.md#agents` | Covered |
 | FLOW-EXEC-001 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-EXEC-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
-| BRD-DET-005 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-DET-005` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
 | FLOW-EXEC-002 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-EXEC-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-EXEC-003 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-EXEC-003` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-V1-001 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-V1-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
@@ -123,12 +118,6 @@
 | FLOW-COND-002 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-COND-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-ERR-001 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-ERR-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-ERR-002 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-ERR-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
-| BRD-TERM-001 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-TERM-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
-| BRD-TERM-002 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-TERM-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
-| BRD-TERM-003 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-TERM-003` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
-| BRD-TERM-004 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-TERM-004` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
-| BRD-STOP-001 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-STOP-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
-| BRD-STOP-002 | `products/ade/docs/02_techspec/FLOW-flows.md#BRD-STOP-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Missing |
 | FLOW-ARTF-001 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-ARTF-001` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-ARTF-002 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-ARTF-002` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
 | FLOW-ARTF-003 | `products/ade/docs/02_techspec/FLOW-flows.md#FLOW-ARTF-003` | `products/ade/docs/04_systemdesign/flows.md#flow-overview` | Covered |
@@ -249,13 +238,9 @@
 | Gap ID | Tech Spec IDs | Status | Missing in System Design | Why It Matters | Implementation Impact |
 |--------|---------------|--------|---------------------------|----------------|-----------------------|
 | GAP-001 | OBJ-001..OBJ-007 | Clarification Needed | Objectives remain unstated in SD | Objectives define success targets for implementation scope. | Clarification required before build |
-| GAP-002 | BRD-AGT-001..004 | Missing | Advisory boundary and schema enforcement are not described | Prevents agents from executing or mutating state. | Code extension required |
 | GAP-003 | BRD-INTEL-003 | Partial | Bounded cycles (iterations/tools/time) not documented | Limits prevent unbounded reasoning loops. | Clarification required before build |
 | GAP-004 | BRD-CRIT-005 | Partial | Blocking critique does not stop execution | Missing gate can allow unreviewed outputs. | Code addition required |
 | GAP-006 | BRD-NARR-004 | Partial | Anomaly narrative output exists only in dashboard_agent and is not wired into flows | Narrative completeness is inconsistent. | Wiring / integration only |
-| GAP-009 | BRD-DET-005 | Missing | No dynamic flow mutation rule not described | Ensures deterministic flow behavior. | Code extension required |
-| GAP-010 | BRD-TERM-001..004 | Missing | Explicit terminal outcomes not described | Controls run lifecycle and user messaging. | Code addition required |
-| GAP-011 | BRD-STOP-001..002 | Missing | Safe exit rules not described | Prevents forced outputs on low signal. | Code extension required |
 | GAP-012 | BRD-CTX-004 | Partial | Reasoning outputs do not cite context pack artifacts | Limits traceability of context grounding. | Wiring / integration only |
 | GAP-014 | BRD-QUAL-001..004, BRD-QUAL-010..012 | Partial | Quality checks do not validate Vega-Lite spec or browser compatibility | Output usability checks are incomplete. | Code extension required |
 | GAP-015 | BRD-VER-003 | Partial | Dependency pinning not enforced (versions only recorded) | Reproducibility requirements remain incomplete. | Clarification required before build |
@@ -264,4 +249,4 @@
 | GAP-018 | BRD-FRI-001..005 | Clarification Needed | Framework reliance invariant not described | Protects thick framework / thin product model. | Clarification required before build |
 | GAP-019 | BRD-NRL-001..004 | Clarification Needed | No runtime learning invariant not described | Guarantees run independence and reproducibility. | Clarification required before build |
 
-SD-COVERAGE GAP COUNT: 15
+SD-COVERAGE GAP COUNT: 11

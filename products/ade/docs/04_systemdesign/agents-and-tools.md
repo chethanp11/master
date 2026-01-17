@@ -85,7 +85,6 @@ Key metadata (stored in `estimated_cost.details`):
 
 **Evidence**:
 - `products/ade/agents/plan_proposal_agent.py` (`PlanProposalAgent.run`, `estimated_cost.details`)
-- `core/contracts/action_plan_schema.py` (`PlanProposal`, `EstimatedCost`)
 
 ---
 

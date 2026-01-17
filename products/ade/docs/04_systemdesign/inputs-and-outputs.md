@@ -168,7 +168,6 @@ PlanProposal(
 
 **Evidence**:
 - `products/ade/agents/plan_proposal_agent.py` (`PlanProposalAgent.run`)
-- `core/contracts/action_plan_schema.py` (`PlanProposal`, `EstimatedCost`)
 
 ### 4.2 User Actions
 

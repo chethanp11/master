@@ -19,16 +19,6 @@
 
 ---
 
-### BRD-DET-005: No Dynamic Flow Mutation
-**Priority**: P0  
-**Description**: Flows MUST NOT mutate dynamically at runtime.
-
-**Acceptance Criteria**:
-- [ ] Flow definitions are static YAML
-- [ ] No runtime insertion/removal of steps
-
----
-
 ### FLOW-EXEC-002: Step Sequence
 **Priority**: P0  
 **Description**: Flow steps MUST execute in the defined sequence.
@@ -279,69 +269,7 @@ retry:
 
 ---
 
-## 7. Terminal Outcomes and Safe Exits
-
-### BRD-TERM-001: Explicit Outcomes
-**Priority**: P0  
-**Description**: System MUST support explicit outcomes: SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT.
-
-**Acceptance Criteria**:
-- [ ] Outcome recorded in run summary
-- [ ] Outcome exposed to caller
-
----
-
-### BRD-TERM-002: Partial Success Details
-**Priority**: P1  
-**Description**: PARTIAL_SUCCESS outputs MUST include limitations and unresolved gaps.
-
-**Acceptance Criteria**:
-- [ ] limitations present in output
-- [ ] unresolved_gaps list included
-
----
-
-### BRD-TERM-003: Abort Details
-**Priority**: P0  
-**Description**: ABORT outcomes MUST include reason codes and recommended next actions.
-
-**Acceptance Criteria**:
-- [ ] reason_code included
-- [ ] next_actions included
-
----
-
-### BRD-TERM-004: Clarification Handling
-**Priority**: P0  
-**Description**: ASK_USER MUST be used when missing inputs are resolvable.
-
-**Acceptance Criteria**:
-- [ ] Missing fields generate ASK_USER
-- [ ] Clarifying prompts returned
-
----
-
-### BRD-STOP-001: Safe Exits
-**Priority**: P0  
-**Description**: System MUST prefer safe exits over forced outputs.
-
-**Acceptance Criteria**:
-- [ ] Low signal triggers stop
-- [ ] Conflict triggers stop
-
----
-
-### BRD-STOP-002: Low Signal Exit
-**Priority**: P0  
-**Description**: Low signal or conflicting evidence MUST result in safe exit.
-
-**Acceptance Criteria**:
-- [ ] Conflicting evidence flags stop
-- [ ] Stop outcome is ASK_USER or ABORT
-
----
-
-## 8. Artifact References (FLOW-ARTF)
+## 7. Artifact References (FLOW-ARTF)
 
 ### FLOW-ARTF-001: Tool Output Reference
 **Priority**: P0  

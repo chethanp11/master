@@ -20,18 +20,7 @@ Agents provide reasoning roles in ADE workflows:
 
 ---
 
-## 1.1 Advisory Boundary Requirements
-
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-AGT-001 | Agents MUST be advisory only (no direct execution) | P0 |
-| BRD-AGT-002 | Agents MUST propose, never execute tools or change state | P0 |
-| BRD-AGT-003 | Agents MUST produce structured outputs | P0 |
-| BRD-AGT-004 | Agent reasoning MUST be auditable and traceable | P0 |
-
----
-
-## 1.2 Reasoning Ladder Requirements
+## 1.1 Reasoning Ladder Requirements
 
 | ID | Requirement | Priority |
 |----|-------------|----------|

@@ -253,49 +253,6 @@ downgrade_reasons: List[str]
 
 ---
 
-## Agent Advisory Boundary
-
-### BRD-AGT-001: Advisory Only
-**Priority**: P0  
-**Description**: Agents MUST be advisory only and MUST NOT execute tools or mutate state.
-
-**Acceptance Criteria**:
-- [ ] Agents return recommendations only
-- [ ] Tool execution always remains with orchestrator
-- [ ] Agents do not write to storage or invoke tool backends
-
----
-
-### BRD-AGT-002: Propose, Never Execute
-**Priority**: P0  
-**Description**: Agents MUST propose actions without executing them.
-
-**Acceptance Criteria**:
-- [ ] Agent outputs include proposed steps or recommendations only
-- [ ] No agent step triggers direct tool execution
-
----
-
-### BRD-AGT-003: Structured Outputs
-**Priority**: P0  
-**Description**: Agent outputs MUST be structured and schema-validated.
-
-**Acceptance Criteria**:
-- [ ] Outputs conform to Pydantic schemas
-- [ ] Invalid outputs trigger validation errors
-
----
-
-### BRD-AGT-004: Auditable Reasoning
-**Priority**: P0  
-**Description**: Agent reasoning MUST be traceable and auditable.
-
-**Acceptance Criteria**:
-- [ ] Trace events capture agent outputs
-- [ ] Evidence references included where relevant
-
----
-
 ## Reasoning Ladder
 
 ### BRD-INTEL-001: Multi-Stage Reasoning

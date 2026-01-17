@@ -232,7 +232,5 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 | **INT-DET-001** | Flows must be deterministic | Reproducibility |
 | **INT-DET-002** | Flows must use suggest_only autonomy | Framework compliance |
 | **INT-DET-003** | Same inputs must produce same execution | Audit requirement |
-| **INT-DET-004** | No dynamic flow mutation | Predictability |
 
 ---
-
