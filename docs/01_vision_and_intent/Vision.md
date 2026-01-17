@@ -3,8 +3,8 @@
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
 > **Version**: 1.1  
 
-> **Last Updated**: 2026-01-13  
-> **Status**: V1 Release  
+> **Last Updated**: 2026-01-18  
+> **Status**: V1.2 Release
 
 ---
 
@@ -150,7 +150,7 @@ If products start re-implementing:
 
 ### 3.2 Product Developer
 
-**Builds**: Products inside MASTER (ADE, AML Copilot, etc.)
+**Builds**: Products inside MASTER
 
 **Responsible for**:
 - Product workflows (flows)
@@ -324,24 +324,7 @@ Every run produces:
 
 ## 6. Product Structure (Thin by Design)
 
-Each product lives under:
-
-```
-products/<product_name>/
-├── manifest.yaml       ← Product metadata
-├── registry.py         ← Agent/tool registration
-├── flows/              ← YAML flow definitions
-├── agents/             ← Advisory agent implementations
-├── tools/              ← Deterministic tool implementations
-├── schemas/            ← Domain-specific Pydantic models
-├── ui/                 ← Product-specific UI pages
-└── docs/               ← Product documentation
-```
-
-**Products:**
-- Define **what** should happen
-- Never define **how** orchestration works
-- Never bypass framework services
+Products follow a standard structure defined in platform documentation. This vision emphasizes that products define **what** should happen while the framework defines **how** execution is governed.
 
 ---
 

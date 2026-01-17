@@ -3,8 +3,8 @@
 > **Document**: Product Developer Intent  
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Last Updated**: 2026-01-13  
-> **Status**: V1 Release
+> **Last Updated**: 2026-01-18  
+> **Status**: V1.2 Release
 
 ---
 

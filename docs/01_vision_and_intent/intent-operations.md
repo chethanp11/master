@@ -1,444 +1,247 @@
 # Developer Intent: Operational Excellence (INT-OPS)
 
 > **Maps to**: [BRD-operations.md](../02_brd/BRD-operations.md)  
-> **Version**: 1.1  
->
-> **Source**: Extracted from [intent.md](intent.md) § 4  
+> **Version**: 1.2  
+> **Source**: Extracted from [intent.md](intent.md) § 4
 
 ---
 
-## Version Control
+## Purpose
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.1 | 2026-01-13 | Header version normalization |
+Define platform-level operational intent for state, observability, performance, testing, and architecture invariants.
 
-## 4.1 State Persistence
+## Scope
+
+- Platform-only operational requirements.
+- Product-specific operational policies are out of scope.
+
+---
+
+## PLAT-OPS-STATE — State Persistence
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-001** | Run state must survive process restarts | Reliability |
-| **INT-OPS-002** | In-flight workflows must be resumable after restart | No lost work |
-| **INT-OPS-003** | State must be persisted durably (not just in-memory) | Data safety |
-| **INT-OPS-004** | State storage must support concurrent access | Scalability |
-| **INT-OPS-005** | Historical runs must be queryable | Audit, debugging |
-
-### Constraints (Non-Negotiable)
-
-| Constraint | Violation Example |
-|------------|-------------------|
-| State survives restarts | Run lost after process restart |
-| State transitions are traced | State changes without event |
-| Everything is traced | Action taken without trace record |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-001 | Run state SHALL survive process restarts | Reliability | — | legacy content (intent-operations.md#4.1) | ID NEEDS NORMALIZATION |
+| INT-OPS-002 | In-flight workflows SHALL be resumable after restart | No lost work | — | legacy content (intent-operations.md#4.1) | ID NEEDS NORMALIZATION |
+| INT-OPS-003 | State SHALL be persisted durably (not just in-memory) | Data safety | — | legacy content (intent-operations.md#4.1) | ID NEEDS NORMALIZATION |
+| INT-OPS-004 | State storage SHALL support concurrent access | Scalability | — | legacy content (intent-operations.md#4.1) | ID NEEDS NORMALIZATION |
+| INT-OPS-005 | Historical runs SHALL be queryable | Audit, debugging | — | legacy content (intent-operations.md#4.1) | ID NEEDS NORMALIZATION |
+| — | State SHALL survive restarts | Prevent run loss after restart | — | legacy content (intent-operations.md#4.1 constraints) | ID NEEDS NORMALIZATION |
+| — | State transitions SHALL be traced | Prevent silent state changes | — | legacy content (intent-operations.md#4.1 constraints) | ID NEEDS NORMALIZATION |
+| — | All actions SHALL be traced | Prevent untracked actions | — | legacy content (intent-operations.md#4.1 constraints) | ID NEEDS NORMALIZATION |
 
 ---
 
-## 4.2 Observability
+## PLAT-OPS-OBS — Observability
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-010** | Every execution step must be traced | Debugging |
-| **INT-OPS-011** | Traces must include: timestamp, event type, data | Complete picture |
-| **INT-OPS-012** | Traces must be queryable by run, step, timeframe | Investigation |
-| **INT-OPS-013** | Large outputs must be stored to files, not inline | Storage efficiency |
-| **INT-OPS-014** | Observability data must be organized by product/run | Multi-tenancy |
-| **INT-OPS-015** | Dashboards must visualize run status and trends | Operations monitoring |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-010 | Every execution step SHALL be traced | Debugging | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
+| INT-OPS-011 | Traces SHALL include: timestamp, event type, data | Complete picture | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
+| INT-OPS-012 | Traces SHALL be queryable by run, step, timeframe | Investigation | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
+| INT-OPS-013 | Large outputs SHALL be stored to files, not inline | Storage efficiency | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
+| INT-OPS-014 | Observability data SHALL be organized by product/run | Multi-tenancy | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
+| INT-OPS-015 | Dashboards SHALL visualize run status and trends | Operations monitoring | — | legacy content (intent-operations.md#4.2) | ID NEEDS NORMALIZATION |
 
 ---
 
-## 4.3 Semantic Trace Events (Added: 2026-01-13)
-
-> **Intent**: Structured trace events for semantic interpretation phase.
+## PLAT-OPS-SEM-TRACE — Semantic Trace Events
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-SEM-001** | `semantic_interpretation_started` event must be emitted when phase begins | Track phase lifecycle |
-| **INT-OPS-SEM-002** | Started event must include: run_id, product_id, raw_input_length | Context for debugging |
-| **INT-OPS-SEM-003** | `semantic_interpretation_completed` event must be emitted when phase succeeds | Track successful interpretation |
-| **INT-OPS-SEM-004** | Completed event must include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | Interpretation metrics |
-| **INT-OPS-SEM-005** | `semantic_validation_completed` event must be emitted after validation | Track validation outcome |
-| **INT-OPS-SEM-006** | Validation event must include: is_valid, missing_fields, violation_count, revised_confidence | Validation metrics |
-| **INT-OPS-SEM-007** | `semantic_stop_issued` event must be emitted on ASK_USER or ABORT | Track stop decisions |
-| **INT-OPS-SEM-008** | Stop event must include: next_action, question (if ASK_USER), reason (if ABORT), violations | Stop context |
-| **INT-OPS-SEM-009** | `semantic_interpretation_failed` event must be emitted on exception | Error visibility |
-| **INT-OPS-SEM-010** | Failed event must include: error message | Debugging information |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-SEM-001 | `semantic_interpretation_started` event SHALL be emitted when phase begins | Track phase lifecycle | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-002 | Started event SHALL include: run_id, product_id, raw_input_length | Context for debugging | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-003 | `semantic_interpretation_completed` event SHALL be emitted when phase succeeds | Track successful interpretation | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-004 | Completed event SHALL include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | Interpretation metrics | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-005 | `semantic_validation_completed` event SHALL be emitted after validation | Track validation outcome | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-006 | Validation event SHALL include: is_valid, missing_fields, violation_count, revised_confidence | Validation metrics | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-007 | `semantic_stop_issued` event SHALL be emitted on ASK_USER or ABORT | Track stop decisions | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-008 | Stop event SHALL include: next_action, question (if ASK_USER), reason (if ABORT), violations | Stop context | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-009 | `semantic_interpretation_failed` event SHALL be emitted on exception | Error visibility | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| INT-OPS-SEM-010 | Failed event SHALL include: error message | Debugging information | — | legacy content (intent-operations.md#4.3) | ID NEEDS NORMALIZATION |
+| — | Events SHALL be structured | Avoid free-form logs | — | legacy content (intent-operations.md#4.3 constraints) | ID NEEDS NORMALIZATION |
+| — | Events SHALL include run_id | Ensure correlation | — | legacy content (intent-operations.md#4.3 constraints) | ID NEEDS NORMALIZATION |
+| — | Events SHALL include timestamps | Ensure event ordering | — | legacy content (intent-operations.md#4.3 constraints) | ID NEEDS NORMALIZATION |
 
-### Event Catalog (New: 2026-01-13)
+### Event Catalog (Reference)
 
-| Event | When | Payload |
-|-------|------|---------|
-| `semantic_interpretation_started` | Phase begins | `run_id`, `product_id`, `raw_input_length` |
-| `semantic_interpretation_completed` | Phase succeeds | `envelope_hash`, `confidence`, `ambiguity_count`, `entity_count`, `next_action` |
-| `semantic_validation_completed` | After validate() | `is_valid`, `missing_fields`, `violation_count`, `revised_confidence` |
-| `semantic_stop_issued` | ASK_USER or ABORT | `next_action`, `question`, `reason`, `violations` |
-| `semantic_interpretation_failed` | Exception thrown | `error` |
-
-### Constraints (Non-Negotiable)
-
-| Constraint | Violation Example |
-|------------|-------------------|
-| Events are structured | Free-form log message instead of event |
-| Events include run_id | Event cannot be correlated to run |
-| Events have timestamps | Event missing `ts` field |
+- `semantic_interpretation_started`: `run_id`, `product_id`, `raw_input_length`
+- `semantic_interpretation_completed`: `envelope_hash`, `confidence`, `ambiguity_count`, `entity_count`, `next_action`
+- `semantic_validation_completed`: `is_valid`, `missing_fields`, `violation_count`, `revised_confidence`
+- `semantic_stop_issued`: `next_action`, `question`, `reason`, `violations`
+- `semantic_interpretation_failed`: `error`
 
 ---
 
-## 4.4 Performance
+## PLAT-OPS-REPRO — Explainability & Reproducibility
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-020** | API responses must complete within 500ms (p95) | User experience |
-| **INT-OPS-021** | Run startup must complete within 2 seconds | Responsiveness |
-| **INT-OPS-022** | Memory backend operations must complete within 100ms | System responsiveness |
-| **INT-OPS-023** | Performance metrics must be measurable | SLA monitoring |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| PLAT-OPS-001 | Platform SHALL guarantee post-hoc explainability and reproducibility by retaining reasoning artifacts and execution context | Make outcomes explainable and repeatable | PLAT-AUD-001 | bullet 10 | V1.2, 2026-01-18 |
+| PLAT-OPS-002 | Platform SHALL record versions, inputs, and hashes required to reproduce outcomes | Enable deterministic replay and audit | PLAT-OPS-001 | bullet 10 | V1.2, 2026-01-18 |
 
 ---
 
-## 4.5 Quality Assurance
+## PLAT-OPS-PERF — Performance
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-030** | Core modules must have ≥80% test coverage | Quality baseline |
-| **INT-OPS-031** | Critical paths (run lifecycle) must have 100% coverage | Risk mitigation |
-| **INT-OPS-032** | All tests must pass before deployment | Quality gate |
-| **INT-OPS-033** | Tests must complete within 10 minutes | Developer velocity |
-| **INT-OPS-034** | Contracts (Pydantic models) must have validation tests | Interface stability |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-020 | API responses SHALL complete within 500ms (p95) | User experience | — | legacy content (intent-operations.md#4.4) | ID NEEDS NORMALIZATION |
+| INT-OPS-021 | Run startup SHALL complete within 2 seconds | Responsiveness | — | legacy content (intent-operations.md#4.4) | ID NEEDS NORMALIZATION |
+| INT-OPS-022 | Memory backend operations SHALL complete within 100ms | System responsiveness | — | legacy content (intent-operations.md#4.4) | ID NEEDS NORMALIZATION |
+| INT-OPS-023 | Performance metrics SHALL be measurable | SLA monitoring | — | legacy content (intent-operations.md#4.4) | ID NEEDS NORMALIZATION |
 
 ---
 
-## 4.6 Debugging Support
+## PLAT-OPS-QA — Quality Assurance
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-040** | Failed runs must include error details and stack traces | Root cause analysis |
-| **INT-OPS-041** | Event timeline must be viewable for any run | Execution understanding |
-| **INT-OPS-042** | Input/output data must be inspectable | Data debugging |
-| **INT-OPS-043** | LLM calls and responses must be logged | AI debugging |
-| **INT-OPS-044** | Tool calls and results must be logged | Integration debugging |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-030 | Core modules SHALL have ≥80% test coverage | Quality baseline | — | legacy content (intent-operations.md#4.5) | ID NEEDS NORMALIZATION |
+| INT-OPS-031 | Critical paths (run lifecycle) SHALL have 100% coverage | Risk mitigation | — | legacy content (intent-operations.md#4.5) | ID NEEDS NORMALIZATION |
+| INT-OPS-032 | All tests SHALL pass before deployment | Quality gate | — | legacy content (intent-operations.md#4.5) | ID NEEDS NORMALIZATION |
+| INT-OPS-033 | Tests SHALL complete within 10 minutes | Developer velocity | — | legacy content (intent-operations.md#4.5) | ID NEEDS NORMALIZATION |
+| INT-OPS-034 | Contracts (Pydantic models) SHALL have validation tests | Interface stability | — | legacy content (intent-operations.md#4.5) | ID NEEDS NORMALIZATION |
 
 ---
 
-## 4.7 Architecture Tests (Added: 2026-01-13)
-
-> **Intent**: Mandatory tests that lock critical semantic behavior.
+## PLAT-OPS-DEBUG — Debugging Support
 
 ### Intent
 
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-OPS-ARCH-001** | Architecture test must verify semantic phase is mandatory | Prevent regression of mandatory phase |
-| **INT-OPS-ARCH-002** | Architecture test must verify ASK_USER blocks all step execution | Lock stop behavior |
-| **INT-OPS-ARCH-003** | Architecture test must verify ABORT blocks all step execution | Lock abort behavior |
-| **INT-OPS-ARCH-004** | Architecture test must verify product adapters don't import core orchestrator | Enforce isolation |
-| **INT-OPS-ARCH-005** | Architecture test must verify core orchestrator doesn't import products | Enforce isolation |
-| **INT-OPS-ARCH-006** | Architecture tests must live in `tests/architecture/` directory | Clear test organization |
-| **INT-OPS-ARCH-007** | Architecture tests must be run as part of CI pipeline | Continuous enforcement |
-
-### Required Architecture Tests (New: 2026-01-13)
-
-| Test | Invariant Verified |
-|------|-------------------|
-| `test_semantic_phase_is_mandatory` | ORC-SEM-001: Semantic phase runs before any step execution |
-| `test_stop_blocks_execution` | ORC-SEM-STOP-001: ASK_USER/ABORT prevent step execution |
-| `test_product_adapter_isolated` | PROD-SEM-INT-005/006: No cross-layer imports |
-
-### Constraints (Non-Negotiable)
-
-| Constraint | Violation Example |
-|------------|-------------------|
-| Architecture tests must pass | Test failure ignored |
-| Tests verify structure, not behavior | Test only checks runtime values |
-| Tests are automated | Manual verification required |
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-040 | Failed runs SHALL include error details and stack traces | Root cause analysis | — | legacy content (intent-operations.md#4.6) | ID NEEDS NORMALIZATION |
+| INT-OPS-041 | Event timeline SHALL be viewable for any run | Execution understanding | — | legacy content (intent-operations.md#4.6) | ID NEEDS NORMALIZATION |
+| INT-OPS-042 | Input/output data SHALL be inspectable | Data debugging | — | legacy content (intent-operations.md#4.6) | ID NEEDS NORMALIZATION |
+| INT-OPS-043 | LLM calls and responses SHALL be logged | AI debugging | — | legacy content (intent-operations.md#4.6) | ID NEEDS NORMALIZATION |
+| INT-OPS-044 | Tool calls and results SHALL be logged | Integration debugging | — | legacy content (intent-operations.md#4.6) | ID NEEDS NORMALIZATION |
 
 ---
 
+## PLAT-OPS-ARCHTEST — Architecture Tests
+
+### Intent
+
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| INT-OPS-ARCH-001 | Architecture test SHALL verify semantic phase is mandatory | Prevent regression of mandatory phase | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-002 | Architecture test SHALL verify ASK_USER blocks all step execution | Lock stop behavior | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-003 | Architecture test SHALL verify ABORT blocks all step execution | Lock abort behavior | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-004 | Architecture test SHALL verify product adapters do not import core orchestrator | Enforce isolation | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-005 | Architecture test SHALL verify core orchestrator does not import products | Enforce isolation | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-006 | Architecture tests SHALL live in `tests/architecture/` directory | Clear test organization | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| INT-OPS-ARCH-007 | Architecture tests SHALL run as part of CI pipeline | Continuous enforcement | — | legacy content (intent-operations.md#4.7) | ID NEEDS NORMALIZATION |
+| — | Architecture tests SHALL pass | Prevent ignoring failures | — | legacy content (intent-operations.md#4.7 constraints) | ID NEEDS NORMALIZATION |
+| — | Tests SHALL verify structure, not behavior | Validate architecture invariants | — | legacy content (intent-operations.md#4.7 constraints) | ID NEEDS NORMALIZATION |
+| — | Tests SHALL be automated | Avoid manual verification | — | legacy content (intent-operations.md#4.7 constraints) | ID NEEDS NORMALIZATION |
+
+### Required Architecture Tests (Reference)
+
+- `test_semantic_phase_is_mandatory`: ORC-SEM-001
+- `test_stop_blocks_execution`: ORC-SEM-STOP-001
+- `test_product_adapter_isolated`: PROD-SEM-INT-005/006
+
 ---
 
-# Architecture Invariants
+## PLAT-INV — Architecture Invariants
 
 > **Non-negotiable principles that force all BRDs, specs, and code to align.**
 
----
+### INV-1: Reasoning as a Framework Primitive (Not Product Logic)
 
-## INV-1: Reasoning as a Framework Primitive (Not Product Logic)
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | MASTER SHALL provide standard reasoning middleware primitives that products can invoke without custom orchestration | Reasoning is a platform capability | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Reasoning SHALL follow a structured, multi-phase pattern (interpret → propose → critique → recommend) within a controlled step | Consistent and auditable reasoning | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Reasoning primitives SHALL be bounded, repeatable, and auditable | Prevent open-ended reasoning | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Reasoning outputs SHALL be first-class artifacts, not ephemeral prompt responses | Preserve outputs for auditability | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
-- MASTER SHALL provide standard reasoning middleware primitives that products can invoke without custom orchestration.
-- Reasoning SHALL follow a structured, multi-phase pattern (interpret → propose → critique → recommend), executed within a single controlled step.
-- Reasoning primitives SHALL be bounded, repeatable, and auditable, never open-ended.
-- Reasoning outputs SHALL be first-class artifacts, not ephemeral prompt responses.
+Intent signal: Reasoning depth is a platform capability, not something each product reinvents.
 
-> **Intent signal**: Reasoning depth is a platform capability, not something each product reinvents.
+### INV-2: Critique Is Mandatory, Bounded, and Non-Controlling
 
----
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | MASTER SHALL support explicit critique passes as part of intelligent execution | Ensure quality checks | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Critique SHALL be advisory only: it may lower confidence, surface gaps, or recommend escalation | Preserve control boundaries | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Critique SHALL NEVER execute tools, route flows, override policies, or force decisions | Prevent unauthorized control | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Control authority SHALL always remain with the orchestrator and governance layer | Centralize control | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
-## INV-2: Critique Is Mandatory, Bounded, and Non-Controlling
+Intent signal: Self-reflection is allowed; self-control is not.
 
-- MASTER SHALL support explicit critique passes as part of intelligent execution.
-- Critique SHALL be advisory only: it may lower confidence, surface gaps, or recommend escalation.
-- Critique SHALL NEVER execute tools, route flows, override policies, or force decisions.
-- Control authority SHALL always remain with the orchestrator and governance layer.
+### INV-3: Semantic Interpretation Is Probabilistic, Not Truth
 
-> **Intent signal**: Self-reflection is allowed; self-control is not.
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | All semantic interpretations SHALL be treated as hypotheses with confidence, not facts | Prevent over-trust | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | MASTER SHALL represent interpretation as multiple competing candidates where ambiguity exists | Preserve ambiguity | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Confidence and ambiguity SHALL propagate into downstream artifacts, decisions, and outputs | Preserve uncertainty | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | When ambiguity exceeds policy thresholds, execution SHALL require HITL or halt safely | Avoid unsafe execution | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
----
+Intent signal: Ambiguity is a first-class state, not an error condition.
 
-## INV-3: Semantic Interpretation Is Probabilistic, Not Truth
+### INV-4: Decisions Must Be Explainable and Auditable by Construction
 
-- All semantic interpretations SHALL be treated as hypotheses with confidence, not facts.
-- MASTER SHALL represent interpretation as multiple competing candidates where ambiguity exists.
-- Confidence and ambiguity SHALL propagate into downstream artifacts, decisions, and outputs.
-- When ambiguity exceeds policy thresholds, execution SHALL require HITL or halt safely.
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | Any gated or consequential decision SHALL be recorded as a decision artifact | Preserve decision history | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Decision artifacts SHALL capture options, evidence, critique input, final choice, justification, confidence | Ensure auditability | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Decision artifacts SHALL be immutable once recorded | Prevent tampering | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
-> **Intent signal**: Ambiguity is a first-class state, not an error condition.
+Intent signal: Explainability is structural, not narrative.
 
----
+### INV-5: Iteration Is Orchestrator-Controlled, Not Agent-Driven
 
-## INV-4: Decisions Must Be Explainable and Auditable by Construction
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | MASTER SHALL provide standard iteration patterns for intelligent workflows | Avoid ad hoc iteration | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Iteration SHALL follow a governed cycle (propose → gate → execute → evaluate) | Controlled iteration | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Iteration SHALL have explicit deterministic stop conditions (budgets, sufficiency, escalation) | Avoid runaway loops | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Iterative state SHALL be durable and resumable across restarts | Reliability | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
-- Any gated or consequential decision SHALL be recorded as a decision artifact, not just a log entry.
-- Decision artifacts SHALL capture:
-  - options considered
-  - evidence used
-  - critique input
-  - final choice and justification
-  - resulting confidence
-- Decision artifacts SHALL be immutable once recorded.
+Intent signal: Investigation is allowed; autonomy is not.
 
-> **Intent signal**: Explainability is structural, not narrative.
+### INV-6: Platform Laws Are Explicit and Non-Negotiable
 
----
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | Agents SHALL be advisory only and MUST NOT control execution, routing, or side effects | Preserve control boundaries | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Only the orchestrator SHALL execute tools, change flow state, pause/resume runs, and escalate to HITL | Centralize execution control | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Governance hooks SHALL be non-bypassable at all lifecycle points | Enforce governance | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Products SHALL be isolated and MUST NOT access other products' resources directly | Enforce product isolation | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
-## INV-5: Iteration Is Orchestrator-Controlled, Not Agent-Driven
+Intent signal: Safety is enforced by structure, not convention.
 
-- MASTER SHALL provide standard iteration patterns for intelligent workflows.
-- Iteration SHALL always follow a governed cycle (propose → gate → execute → evaluate).
-- Iteration SHALL have explicit deterministic stop conditions (budgets, sufficiency, escalation).
-- Iterative state SHALL be durable and resumable across restarts.
+### INV-7: Reasoning Observability Is as Important as Execution Observability
 
-> **Intent signal**: Investigation is allowed; autonomy is not.
+| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
+|----|----------------|-----------|------------|--------|-------|
+| — | MASTER SHALL make reasoning behavior observable, not just execution steps | Audit reasoning | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Traces SHALL expose options considered, confidence evolution, rejection and escalation reasons | Explainability | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
+| — | Reasoning traces SHALL be queryable for audit, debugging, and improvement analysis | Continuous improvement | — | legacy content (intent-operations.md#Architecture Invariants) | ID NEEDS NORMALIZATION |
 
----
-
-## INV-6: Platform Laws Are Explicit and Non-Negotiable
-
-- Agents SHALL be advisory only and MUST NOT control execution, routing, or side effects.
-- Only the orchestrator SHALL:
-  - execute tools
-  - change flow state
-  - pause/resume runs
-  - escalate to HITL
-- Governance hooks SHALL be non-bypassable at all lifecycle points.
-- Products SHALL be isolated and MUST NOT access other products' resources directly.
-
-> **Intent signal**: Safety is enforced by structure, not convention.
-
----
-
-## INV-7: Reasoning Observability Is as Important as Execution Observability
-
-- MASTER SHALL make reasoning behavior observable, not just execution steps.
-- Traces SHALL expose:
-  - options considered
-  - confidence evolution
-  - rejection and escalation reasons
-- Reasoning traces SHALL be queryable for audit, debugging, and improvement analysis.
-
-> **Intent signal**: "Why" matters as much as "what happened".
+Intent signal: "Why" matters as much as "what happened".
 
 ---
 
-## INV-8: Design-Time Intelligence Is Preferred Over Runtime Autonomy
+## Removed / Quarantined Content (Out of Platform Scope)
 
-- MASTER SHALL favor design-time use of LLMs (intent → BRD → specs → plans → code) over runtime autonomy.
-- Runtime intelligence SHALL remain bounded, supervised, and deterministic.
-- Product creation and evolution SHALL be intent-driven, with code as a generated artifact.
-
-> **Intent signal**: Intelligence compounds safely before production, not unpredictably during it.
+- None.
 
 ---
-
-## INV-9: Feedback Feeds Intent, Not Direct Code Changes
-
-- End-user feedback SHALL be captured as input to Developer Intent, not direct requirements.
-- Bug fixes and enhancements SHALL still follow the governed lifecycle (intent → BRD → plan → implementation).
-- Framework-level feedback SHALL be promoted separately and reviewed by Framework Developers.
-
-> **Intent signal**: Speed does not justify bypassing governance.
-
----
-
-## INV-10: MASTER Exists to Minimize Product Complexity, Not Maximize Flexibility
-
-- If products need to re-implement reasoning patterns, orchestration, or governance, the framework has failed.
-- MASTER SHALL continuously absorb common intelligence patterns into the core.
-- Products SHOULD remain thin, declarative, and domain-focused.
-
-> **Intent signal**: Complexity belongs in one place only — the framework.
-
----
-
-# 5. Developer Intent Lifecycle (INT-LIFECYCLE)
-
-## 5.1 Intent Ownership & Evolution
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-LIFECYCLE-001** | Framework Developer owns Framework Developer Intent | Clear accountability |
-| **INT-LIFECYCLE-002** | Product Developer owns Product Developer Intent | Domain expertise at product level |
-| **INT-LIFECYCLE-003** | End Users never modify intent directly | Preserve integrity of intent documents |
-| **INT-LIFECYCLE-004** | Intent updates must be versioned and reviewed | Change control |
-| **INT-LIFECYCLE-005** | Intent conflicts must have explicit resolution rules | Prevent deadlock |
-
----
-
-## 5.2 User Feedback Handling
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-LIFECYCLE-010** | User feedback is not Developer Intent | Maintain separation of concerns |
-| **INT-LIFECYCLE-011** | Feedback must be captured in structured format | Enable analysis and prioritization |
-| **INT-LIFECYCLE-012** | Feedback must be reviewed before promotion to intent | Quality gate |
-| **INT-LIFECYCLE-013** | Bugs and enhancements have different promotion rules | Different urgency levels |
-| **INT-LIFECYCLE-014** | Framework gaps must escalate to Framework Developer | Clear escalation path |
-
----
-
-## 5.3 Intent-to-BRD Mapping
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-LIFECYCLE-020** | Every intent point must map to at least one BRD requirement | Traceability |
-| **INT-LIFECYCLE-021** | BRD requirements must reference source intent | Bidirectional traceability |
-| **INT-LIFECYCLE-022** | Unmapped intent points are gaps | Coverage validation |
-| **INT-LIFECYCLE-023** | BRD requirements without intent are suspect | Prevent scope creep |
-
----
-
-# 6. Product Factory Model (INT-FACTORY)
-
-## 6.1 MASTER as Product Factory
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-FACTORY-001** | Product creation is primarily an intent-driven activity | Capture intent, not code |
-| **INT-FACTORY-002** | Code is a generated artifact, not the source of truth | Intent is the source |
-| **INT-FACTORY-003** | Products must be shippable in < 1 day | Rapid value delivery |
-| **INT-FACTORY-004** | Products must focus on domain logic only | No infrastructure burden |
-| **INT-FACTORY-005** | Products must be evolvable via intent updates | Safe evolution |
-
----
-
-## 6.2 Framework vs Product Asymmetry
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-FACTORY-010** | Framework owns orchestration, memory, governance, model routing | Single source of truth |
-| **INT-FACTORY-011** | Products are forbidden from re-implementing framework services | Prevent duplication |
-| **INT-FACTORY-012** | Framework evolution is rarer, heavier, more reviewed | Stability requirement |
-| **INT-FACTORY-013** | Products define what, framework defines how | Clear separation |
-| **INT-FACTORY-014** | Framework provides 90% of functionality, products add 10% | Thick core, thin products |
-
----
-
-## 6.3 Success and Failure Smells
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-FACTORY-020** | Success/failure smells must be defined qualitatively | Guide future decisions |
-| **INT-FACTORY-021** | Smells must be checked during architecture reviews | Early detection |
-| **INT-FACTORY-022** | Smell detection must trigger design review | Corrective action |
-
----
-
-## 6.4 Design-Time vs Runtime Intelligence
-
-### Intent
-
-| ID | Intent | Rationale |
-|----|--------|-----------|
-| **INT-FACTORY-030** | Design-time intelligence is preferred over runtime autonomy | Safety through structure |
-| **INT-FACTORY-031** | AI can derive BRDs from intent | Accelerate documentation |
-| **INT-FACTORY-032** | AI can derive specs from BRDs | Consistent translation |
-| **INT-FACTORY-033** | AI can generate code from specs | Reduce manual coding |
-| **INT-FACTORY-034** | AI can generate system design from code | Keep docs current |
-| **INT-FACTORY-035** | Runtime AI is advisory only, never autonomous | Human control preserved |
-
----
-
-# 7. Framework Laws
-
-> **What can never happen in MASTER.**
-
-| Law | Violation Example |
-|-----|-------------------|
-| Agents never execute tools | Agent calls tool directly |
-| Tools never call models | Tool makes LLM API call |
-| Governance hooks are mandatory | Hook is bypassed or disabled |
-| State transitions are traced | State changes without event |
-| Budgets are enforced | Limits exceeded without halt |
-| Products are isolated | Product accesses another's data |
-| PII is never logged | Sensitive data in traces |
-| Flows are explicit | Implicit execution path |
-| Intent precedes BRD | BRD created without intent source |
-| Feedback is not intent | User request treated as requirement |
-| Semantic phase is mandatory | Steps execute without interpretation |
-| Stop blocks all steps | Step executes after ASK_USER |
-| Product adapters are isolated | Adapter imports core orchestrator |
-
----
-
-# 8. Acceptance Criteria
-
-| Criterion | Target | Measurement |
-|-----------|--------|-------------|
-| Time-to-first-product | < 1 day | Scaffolding to running |
-| Compliance audit pass rate | 100% | External audit |
-| PII leakage incidents | 0 | Security scans |
-| Agent task success rate | > 85% | Production metrics |
-| Test coverage (core) | > 80% | Coverage tools |
-| Platform availability | > 99.5% | Uptime monitoring |
-| Intent→BRD traceability | 100% | Document review |
-| Failure smell occurrences | 0 | Architecture reviews |
-| Semantic misunderstanding rate | < 5% | User reports after clarification |
-| Clarification acceptance rate | > 80% | Users proceed after ASK_USER |
-| Semantic phase latency | < 100ms | P99 execution time |
-| Architecture tests passing | 100% | CI pipeline |
-
----
-
-# 9. Derived Documents
-
-| Document | Derivation |
-|----------|------------|
-| [Vision.md](Vision.md) | Framework philosophy and architecture |
-| [BRD-automation.md](../02_brd/BRD-automation.md) | INT-AUTO-*, INT-AUTO-SEM-*, INT-AUTO-ADAPT-*, INT-AUTO-STOP-* → BRD-AUTO-* |
-| [BRD-governance.md](../02_brd/BRD-governance.md) | INT-GOV-*, INT-GOV-CONF-* → BRD-GOV-* |
-| [BRD-experience.md](../02_brd/BRD-experience.md) | INT-EXP-* → BRD-EXP-* |
-| [BRD-operations.md](../02_brd/BRD-operations.md) | INT-OPS-*, INT-OPS-SEM-*, INT-OPS-ARCH-* → BRD-OPS-* |
 
 ## BRD Derivation
 
