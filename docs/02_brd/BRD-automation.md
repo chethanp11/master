@@ -72,13 +72,13 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.1 Agent Capabilities
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-001** | Agents must reason through multi-step tasks with observable decision points | P0 | INT-AUTO-001 | 2026-01-12 |
-| **BRD-AUTO-002** | Agents must provide evidence supporting their decisions | P0 | INT-AUTO-002 | 2026-01-12 |
-| **BRD-AUTO-003** | Agents must be composable—one agent can delegate to others | P1 | INT-AUTO-003 | 2026-01-12 |
-| **BRD-AUTO-004** | Agents must handle failures gracefully with retry or escalation | P1 | INT-AUTO-004 | 2026-01-12 |
-| **BRD-AUTO-005** | Agent behavior must be deterministic given the same inputs | P2 | INT-AUTO-005 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-001** | Agents must reason through multi-step tasks with observable decision points | Derived from: INT-AUTO-001 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-002** | Agents must provide evidence supporting their decisions | Derived from: INT-AUTO-002 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-003** | Agents must be composable—one agent can delegate to others | Derived from: INT-AUTO-003 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-004** | Agents must handle failures gracefully with retry or escalation | Derived from: INT-AUTO-004 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-005** | Agent behavior must be deterministic given the same inputs | Derived from: INT-AUTO-005 | P2 | 2026-01-12 | V1.1 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -90,13 +90,13 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.2 Tool Ecosystem
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-010** | Tools must be discoverable with clear capability descriptions | P0 | INT-AUTO-010 | 2026-01-12 |
-| **BRD-AUTO-011** | Tools must have typed inputs and outputs | P0 | INT-AUTO-011 | 2026-01-12 |
-| **BRD-AUTO-012** | Tools must be executable in isolation for testing | P0 | INT-AUTO-012 | 2026-01-12 |
-| **BRD-AUTO-013** | Tool results must include structured evidence | P1 | INT-AUTO-013 | 2026-01-12 |
-| **BRD-AUTO-014** | Tool execution must be observable and traceable | P1 | INT-AUTO-014 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-010** | Tools must be discoverable with clear capability descriptions | Derived from: INT-AUTO-010 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-011** | Tools must have typed inputs and outputs | Derived from: INT-AUTO-011 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-012** | Tools must be executable in isolation for testing | Derived from: INT-AUTO-012 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-013** | Tool results must include structured evidence | Derived from: INT-AUTO-013 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-014** | Tool execution must be observable and traceable | Derived from: INT-AUTO-014 | P1 | 2026-01-12 | V1.1 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -107,57 +107,59 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.3 Intelligence Layer
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-020** | System must select appropriate tools for tasks automatically | P0 | INT-AUTO-020 | 2026-01-12 |
-| **BRD-AUTO-021** | System must select appropriate agents for subtasks | P0 | INT-AUTO-021 | 2026-01-12 |
-| **BRD-AUTO-022** | System must identify gaps in information and request clarification | P1 | INT-AUTO-022 | 2026-01-12 |
-| **BRD-AUTO-023** | System must summarize complex results for human consumption | P1 | INT-AUTO-023 | 2026-01-12 |
-| **BRD-AUTO-024** | System must explain risks before executing high-impact actions | P1 | INT-AUTO-024 | 2026-01-12 |
-| **BRD-AUTO-025** | System must interpret user intent before planning/execution | P0 | INT-AUTO-025 | 2026-01-12 |
-| **BRD-AUTO-026** | System must normalize and validate input before acting | P0 | INT-AUTO-026 | 2026-01-12 |
-| **BRD-AUTO-027** | System must express interpretation confidence and request clarification when uncertain | P1 | INT-AUTO-027 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-020** | System must select appropriate tools for tasks automatically | Derived from: INT-AUTO-020 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-021** | System must select appropriate agents for subtasks | Derived from: INT-AUTO-021 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-022** | System must identify gaps in information and request clarification | Derived from: INT-AUTO-022 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-023** | System must summarize complex results for human consumption | Derived from: INT-AUTO-023 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-024** | System must explain risks before executing high-impact actions | Derived from: INT-AUTO-024 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-025** | System must interpret user intent before planning/execution | Derived from: INT-AUTO-025 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-026** | System must normalize and validate input before acting | Derived from: INT-AUTO-026 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-027** | System must express interpretation confidence and request clarification when uncertain | Derived from: INT-AUTO-027 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-028** | System must support multiple competing hypotheses with confidence scores as first-class reasoning outputs | Derived from: — | P1 | 2026-01-18 | V1.1 |
+| **BRD-AUTO-029** | System must maintain a persistent sufficiency state tracking known facts, unknowns, assumptions, and blocking gaps | Derived from: — | P1 | 2026-01-18 | V1.1 |
 
 ### 3.4 Reasoning Quality
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-030** | Reasoning must progress through structured phases (interpret→propose→select) | P0 | INT-AUTO-030, INV-1 | 2026-01-12 |
-| **BRD-AUTO-031** | Proposals must be evaluated by critic before execution | P1 | INT-AUTO-031, INV-2 | 2026-01-12 |
-| **BRD-AUTO-032** | Context must be enriched with relevant knowledge before reasoning | P1 | INT-AUTO-032 | 2026-01-12 |
-| **BRD-AUTO-033** | Reasoning failures must trigger appropriate escalation | P1 | INT-AUTO-033 | 2026-01-12 |
-| **BRD-AUTO-034** | Reasoning behavior must be observable, not just execution steps | P0 | INV-7 | Added: 2026-01-13 |
-| **BRD-AUTO-035** | Traces must expose options considered, confidence evolution, rejection reasons | P1 | INV-7 | Added: 2026-01-13 |
-| **BRD-AUTO-036** | Reasoning outputs must be first-class artifacts, not ephemeral responses | P1 | INV-1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-030** | Reasoning must progress through structured phases (interpret→propose→select) | Derived from: INT-AUTO-030 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-031** | Proposals must be evaluated by critic before execution | Derived from: INT-AUTO-031 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-032** | Context must be enriched with relevant knowledge before reasoning | Derived from: INT-AUTO-032 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-033** | Reasoning failures must trigger appropriate escalation | Derived from: INT-AUTO-033 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-034** | Reasoning behavior must be observable, not just execution steps | Derived from: — | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-035** | Traces must expose options considered, confidence evolution, rejection reasons | Derived from: — | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-036** | Reasoning outputs must be first-class artifacts, not ephemeral responses | Derived from: — | P1 | 2026-01-13 | V1.1 |
 
 ### 3.5 Workflow Execution
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-040** | Workflows must support sequential, parallel, and conditional steps | P0 | INT-AUTO-040 | 2026-01-12 |
-| **BRD-AUTO-041** | Workflows must support iteration over collections | P0 | INT-AUTO-041 | 2026-01-12 |
-| **BRD-AUTO-042** | Workflow steps must be independently restartable | P1 | INT-AUTO-042 | 2026-01-12 |
-| **BRD-AUTO-043** | Workflows must support nested sub-workflows | P2 | INT-AUTO-043 | 2026-01-12 |
-| **BRD-AUTO-044** | Iteration must follow governed cycle (propose→gate→execute→evaluate) | P0 | INV-5 | 1.0 | Added: 2026-01-13 |
-| **BRD-AUTO-045** | Iteration must have explicit deterministic stop conditions | P0 | INV-5 | 1.0 | Added: 2026-01-13 |
-| **BRD-AUTO-046** | Iterative state must be durable and resumable across restarts | P1 | INV-5 | 1.0 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-040** | Workflows must support sequential, parallel, and conditional steps | Derived from: INT-AUTO-040 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-041** | Workflows must support iteration over collections | Derived from: INT-AUTO-041 | P0 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-042** | Workflow steps must be independently restartable | Derived from: INT-AUTO-042 | P1 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-043** | Workflows must support nested sub-workflows | Derived from: INT-AUTO-043 | P2 | 2026-01-12 | V1.1 |
+| **BRD-AUTO-044** | Iteration must follow governed cycle (propose→gate→execute→evaluate) | Derived from: — | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-045** | Iteration must have explicit deterministic stop conditions | Derived from: — | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-046** | Iterative state must be durable and resumable across restarts | Derived from: — | P1 | 2026-01-13 | V1.1 |
 
 ### 3.6 Semantic Interpretation Phase (Added: 2026-01-13)
 
 > **Source**: [INT-AUTO-SEM](../00_developer_intent/intent.md#11-semantic-interpretation-phase-added-2026-01-13)
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-AUTO-SEM-001** | Every orchestrator run must execute a semantic interpretation phase before step execution | P0 | INT-AUTO-SEM-001 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-002** | Semantic phase must interpret user intent and produce a structured envelope | P0 | INT-AUTO-SEM-002 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-003** | Semantic envelope must capture: intent_type, entities, constraints, confidence, ambiguities | P0 | INT-AUTO-SEM-003 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-004** | Semantic phase must determine next action: CONTINUE, ASK_USER, ABORT, or NEEDS_APPROVAL | P0 | INT-AUTO-SEM-004 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-005** | Semantic envelope must be attached to run record for traceability | P0 | INT-AUTO-SEM-005 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-006** | Core must provide domain-agnostic normalization rules (whitespace, deduplication, ordering) | P0 | INT-AUTO-SEM-006 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-007** | Normalization must be deterministic and reproducible | P0 | INT-AUTO-SEM-007 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-008** | Entities must be deduplicated (same type+value → single entity with highest confidence) | P1 | INT-AUTO-SEM-008 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-009** | Constraints must be merged deterministically with stable key ordering | P1 | INT-AUTO-SEM-009 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-SEM-010** | Type coercion must be supported for schema-declared types (string→int, string→date) | P1 | INT-AUTO-SEM-010 | 1.1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-SEM-001** | Every orchestrator run must execute a semantic interpretation phase before step execution | Derived from: INT-AUTO-SEM-001 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-002** | Semantic phase must interpret user intent and produce a structured envelope | Derived from: INT-AUTO-SEM-002 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-003** | Semantic envelope must capture: intent_type, entities, constraints, confidence, ambiguities | Derived from: INT-AUTO-SEM-003 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-004** | Semantic phase must determine next action: CONTINUE, ASK_USER, ABORT, or NEEDS_APPROVAL | Derived from: INT-AUTO-SEM-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-005** | Semantic envelope must be attached to run record for traceability | Derived from: INT-AUTO-SEM-005 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-006** | Core must provide domain-agnostic normalization rules (whitespace, deduplication, ordering) | Derived from: INT-AUTO-SEM-006 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-007** | Normalization must be deterministic and reproducible | Derived from: INT-AUTO-SEM-007 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-008** | Entities must be deduplicated (same type+value → single entity with highest confidence) | Derived from: INT-AUTO-SEM-008 | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-009** | Constraints must be merged deterministically with stable key ordering | Derived from: INT-AUTO-SEM-009 | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-SEM-010** | Type coercion must be supported for schema-declared types (string→int, string→date) | Derived from: INT-AUTO-SEM-010 | P1 | 2026-01-13 | V1.1 |
 
 **Contracts (New: 2026-01-13)**:
 | Contract | Purpose | Fields |
@@ -180,18 +182,18 @@ A platform that provides structured, composable, and governed AI agents that can
 
 > **Source**: [INT-AUTO-ADAPT](../00_developer_intent/intent.md#12-product-semantic-adapter-added-2026-01-13)
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-AUTO-ADAPT-001** | Products must be able to provide custom semantic interpretation via adapter interface | P0 | INT-AUTO-ADAPT-001 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-002** | Adapter interface must define `interpret(context) → SemanticEnvelope` method | P0 | INT-AUTO-ADAPT-002 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-003** | Adapter interface must define `validate(envelope, context) → ValidationResult` method | P0 | INT-AUTO-ADAPT-003 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-004** | Default adapter must be provided for products without custom implementation | P0 | INT-AUTO-ADAPT-004 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-005** | Default adapter must return passthrough envelope with confidence=1.0 | P1 | INT-AUTO-ADAPT-005 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-006** | Adapters must be discovered from `products/<name>/semantic.py` | P1 | INT-AUTO-ADAPT-006 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-007** | Adapters must be resolved via ProductRouter, not direct import | P0 | INT-AUTO-ADAPT-007 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-008** | Product adapters must NOT import from `core/orchestrator/*` | P0 | INT-AUTO-ADAPT-008 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-009** | Core orchestrator must NOT import from `products/*` | P0 | INT-AUTO-ADAPT-009 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-ADAPT-010** | Adapter execution must have timeout with fallback to default | P1 | INT-AUTO-ADAPT-010 | 1.1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-ADAPT-001** | Products must be able to provide custom semantic interpretation via adapter interface | Derived from: INT-AUTO-ADAPT-001 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-002** | Adapter interface must define `interpret(context) → SemanticEnvelope` method | Derived from: INT-AUTO-ADAPT-002 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-003** | Adapter interface must define `validate(envelope, context) → ValidationResult` method | Derived from: INT-AUTO-ADAPT-003 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-004** | Default adapter must be provided for products without custom implementation | Derived from: INT-AUTO-ADAPT-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-005** | Default adapter must return passthrough envelope with confidence=1.0 | Derived from: INT-AUTO-ADAPT-005 | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-006** | Adapters must be discovered from `products/<name>/semantic.py` | Derived from: INT-AUTO-ADAPT-006 | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-007** | Adapters must be resolved via ProductRouter, not direct import | Derived from: INT-AUTO-ADAPT-007 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-008** | Product adapters must NOT import from `core/orchestrator/*` | Derived from: INT-AUTO-ADAPT-008 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-009** | Core orchestrator must NOT import from `products/*` | Derived from: INT-AUTO-ADAPT-009 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-ADAPT-010** | Adapter execution must have timeout with fallback to default | Derived from: INT-AUTO-ADAPT-010 | P1 | 2026-01-13 | V1.1 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -205,17 +207,17 @@ A platform that provides structured, composable, and governed AI agents that can
 
 > **Source**: [INT-AUTO-STOP](../00_developer_intent/intent.md#13-stoppause-mechanism-added-2026-01-13)
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-AUTO-STOP-001** | ASK_USER must pause the run and return a structured clarification response | P0 | INT-AUTO-STOP-001 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-002** | Clarification response must include: question, ambiguities, original confidence, context | P0 | INT-AUTO-STOP-002 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-003** | Run status must be PAUSED_WAITING_FOR_USER during clarification | P0 | INT-AUTO-STOP-003 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-004** | ABORT must fail the run with structured error response | P0 | INT-AUTO-STOP-004 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-005** | Abort error must include: error_code=semantic_abort, reason, violations, ambiguities | P0 | INT-AUTO-STOP-005 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-006** | Run status must be FAILED after ABORT | P0 | INT-AUTO-STOP-006 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-007** | ASK_USER and ABORT must prevent any step execution | P0 | INT-AUTO-STOP-007 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-008** | Trace event `semantic_stop_issued` must be emitted on stop | P0 | INT-AUTO-STOP-008 | 1.1 | Added: 2026-01-13 |
-| **BRD-AUTO-STOP-009** | Paused runs must be resumable with user-provided clarification | P0 | INT-AUTO-STOP-009 | 1.1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-STOP-001** | ASK_USER must pause the run and return a structured clarification response | Derived from: INT-AUTO-STOP-001 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-002** | Clarification response must include: question, ambiguities, original confidence, context | Derived from: INT-AUTO-STOP-002 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-003** | Run status must be PAUSED_WAITING_FOR_USER during clarification | Derived from: INT-AUTO-STOP-003 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-004** | ABORT must fail the run with structured error response | Derived from: INT-AUTO-STOP-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-005** | Abort error must include: error_code=semantic_abort, reason, violations, ambiguities | Derived from: INT-AUTO-STOP-005 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-006** | Run status must be FAILED after ABORT | Derived from: INT-AUTO-STOP-006 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-007** | ASK_USER and ABORT must prevent any step execution | Derived from: INT-AUTO-STOP-007 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-008** | Trace event `semantic_stop_issued` must be emitted on stop | Derived from: INT-AUTO-STOP-008 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-STOP-009** | Paused runs must be resumable with user-provided clarification | Derived from: INT-AUTO-STOP-009 | P0 | 2026-01-13 | V1.1 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -223,6 +225,27 @@ A platform that provides structured, composable, and governed AI agents that can
 | Stop blocks all steps | Step executes after ASK_USER |
 | Abort is terminal | Run continues after ABORT |
 | Clarification is structured | Free-form error message only |
+
+### 3.9 Orchestrator-Controlled Reasoning (Added: 2026-01-18)
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-047** | Platform must provide a central, reusable reasoning lifecycle (interpret → propose → critique → recommend) that is orchestrator-controlled, bounded, and non-autonomous | Derived from: — | P0 | 2026-01-18 | V1.1 |
+| **BRD-AUTO-048** | Orchestrator must support bounded reasoning iteration with deterministic stop conditions based on sufficiency, budget, iteration limits, or human intervention | Derived from: — | P0 | 2026-01-18 | V1.1 |
+
+### 3.10 Confidence and Critique Control (Added: 2026-01-18)
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-049** | Platform must track, update, and propagate confidence as a core runtime signal across reasoning stages, steps, and decision gates | Derived from: — | P0 | 2026-01-18 | V1.1 |
+| **BRD-AUTO-050** | Platform must enforce a mandatory advisory critique phase before finalizing any decision or output, with the ability to downgrade confidence or block progression | Derived from: — | P0 | 2026-01-18 | V1.1 |
+
+### 3.11 Execution Gatekeeping (Added: 2026-01-18)
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-051** | Platform must construct and freeze a ContextPack before planning or execution, consolidating data availability, evidence, constraints, and quality limitations | Derived from: — | P0 | 2026-01-18 | V1.1 |
+| **BRD-AUTO-052** | Platform must define and enforce explicit terminal outcomes (SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT) with required explanations and artifacts | Derived from: — | P0 | 2026-01-18 | V1.1 |
 
 ---
 
@@ -292,21 +315,21 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 7.1 Intent-to-BRD Traceability
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-LIFE-001** | Every automation intent point must map to at least one BRD requirement | P0 | INT-LIFECYCLE-020 | Added: 2026-01-13 |
-| **BRD-AUTO-LIFE-002** | BRD requirements must reference source intent | P0 | INT-LIFECYCLE-021 | Added: 2026-01-13 |
-| **BRD-AUTO-LIFE-003** | Unmapped intent points are coverage gaps requiring review | P1 | INT-LIFECYCLE-022 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-LIFE-001** | Every automation intent point must map to at least one BRD requirement | Derived from: INT-LIFECYCLE-020 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-LIFE-002** | BRD requirements must reference source intent | Derived from: INT-LIFECYCLE-021 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-LIFE-003** | Unmapped intent points MUST be treated as coverage gaps requiring review | Derived from: INT-LIFECYCLE-022 | P1 | 2026-01-13 | V1.1 |
 
 ### 7.2 Product Factory Model
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-AUTO-FAC-001** | Products must be shippable in < 1 day using framework automation primitives | P1 | INT-FACTORY-003 | Added: 2026-01-13 |
-| **BRD-AUTO-FAC-002** | Products must focus on domain logic; automation infrastructure provided by framework | P0 | INT-FACTORY-004 | Added: 2026-01-13 |
-| **BRD-AUTO-FAC-003** | Products are forbidden from re-implementing agent/tool/reasoning services | P0 | INT-FACTORY-011 | Added: 2026-01-13 |
-| **BRD-AUTO-FAC-004** | Design-time intelligence is preferred over runtime autonomy | P0 | INT-FACTORY-030, INV-8 | Added: 2026-01-13 |
-| **BRD-AUTO-FAC-005** | Runtime AI is advisory only, never autonomous | P0 | INT-FACTORY-035 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-AUTO-FAC-001** | Products must be shippable in < 1 day using framework automation primitives | Derived from: INT-FACTORY-003 | P1 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-FAC-002** | Products must focus on domain logic; automation infrastructure provided by framework | Derived from: INT-FACTORY-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-FAC-003** | Products MUST NOT re-implement agent/tool/reasoning services | Derived from: INT-FACTORY-011 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-FAC-004** | Design-time intelligence MUST be preferred over runtime autonomy | Derived from: INT-FACTORY-030 | P0 | 2026-01-13 | V1.1 |
+| **BRD-AUTO-FAC-005** | Runtime AI MUST be advisory only and MUST NOT be autonomous | Derived from: INT-FACTORY-035 | P0 | 2026-01-13 | V1.1 |
 
 ---
 

@@ -72,13 +72,13 @@ An operational foundation that provides:
 
 ### 3.1 State Persistence
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-001** | Run state must survive process restarts | P0 | INT-OPS-001 | 2026-01-12 |
-| **BRD-OPS-002** | In-flight workflows must be resumable after restart | P0 | INT-OPS-002 | 2026-01-12 |
-| **BRD-OPS-003** | State must be persisted durably (not just in-memory) | P0 | INT-OPS-003 | 2026-01-12 |
-| **BRD-OPS-004** | State storage must support concurrent access | P1 | INT-OPS-004 | 2026-01-12 |
-| **BRD-OPS-005** | Historical runs must be queryable | P0 | INT-OPS-005 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-001** | Run state must survive process restarts | Derived from: INT-OPS-001 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-002** | In-flight workflows must be resumable after restart | Derived from: INT-OPS-002 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-003** | State must be persisted durably (not just in-memory) | Derived from: INT-OPS-003 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-004** | State storage must support concurrent access | Derived from: INT-OPS-004 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-005** | Historical runs must be queryable | Derived from: INT-OPS-005 | P0 | 2026-01-12 | V1.1 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -89,72 +89,72 @@ An operational foundation that provides:
 
 ### 3.2 Observability
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-010** | Every execution step must be traced | P0 | INT-OPS-010 | 2026-01-12 |
-| **BRD-OPS-011** | Traces must include: timestamp, event type, data | P0 | INT-OPS-011 | 2026-01-12 |
-| **BRD-OPS-012** | Traces must be queryable by run, step, timeframe | P0 | INT-OPS-012 | 2026-01-12 |
-| **BRD-OPS-013** | Large outputs must be stored to files, not inline | P1 | INT-OPS-013 | 2026-01-12 |
-| **BRD-OPS-014** | Observability data must be organized by product/run | P0 | INT-OPS-014 | 2026-01-12 |
-| **BRD-OPS-015** | Dashboards must visualize run status and trends | P2 | INT-OPS-015 | 2026-01-12 |
-| **BRD-OPS-016** | Reasoning behavior must be observable, not just execution steps | P0 | INV-7 | Added: 2026-01-13 |
-| **BRD-OPS-017** | Traces must expose options considered, confidence evolution, rejection reasons | P0 | INV-7 | Added: 2026-01-13 |
-| **BRD-OPS-018** | Reasoning traces must be queryable for audit, debugging, and improvement analysis | P1 | INV-7 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-010** | Every execution step must be traced | Derived from: INT-OPS-010 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-011** | Traces must include: timestamp, event type, data | Derived from: INT-OPS-011 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-012** | Traces must be queryable by run, step, timeframe | Derived from: INT-OPS-012 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-013** | Large outputs must be stored to files, not inline | Derived from: INT-OPS-013 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-014** | Observability data must be organized by product/run | Derived from: INT-OPS-014 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-015** | Dashboards must visualize run status and trends | Derived from: INT-OPS-015 | P2 | 2026-01-12 | V1.1 |
+| **BRD-OPS-016** | Reasoning behavior must be observable, not just execution steps | Derived from: — | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-017** | Traces must expose options considered, confidence evolution, rejection reasons | Derived from: — | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-018** | Reasoning traces must be queryable for audit, debugging, and improvement analysis | Derived from: — | P1 | 2026-01-13 | V1.1 |
 
 ### 3.3 Performance
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-020** | API responses must complete within 500ms (p95) | P1 | INT-OPS-020 | 2026-01-12 |
-| **BRD-OPS-021** | Run startup must complete within 2 seconds | P1 | INT-OPS-021 | 2026-01-12 |
-| **BRD-OPS-022** | Memory backend operations must complete within 100ms | P1 | INT-OPS-022 | 2026-01-12 |
-| **BRD-OPS-023** | Performance metrics must be measurable | P1 | INT-OPS-023 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-020** | API responses must complete within 500ms (p95) | Derived from: INT-OPS-020 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-021** | Run startup must complete within 2 seconds | Derived from: INT-OPS-021 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-022** | Memory backend operations must complete within 100ms | Derived from: INT-OPS-022 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-023** | Performance metrics must be measurable | Derived from: INT-OPS-023 | P1 | 2026-01-12 | V1.1 |
 
 ### 3.4 Quality Assurance
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-030** | Core modules must have ≥80% test coverage | P1 | INT-OPS-030 | 2026-01-12 |
-| **BRD-OPS-031** | Critical paths (run lifecycle) must have 100% coverage | P0 | INT-OPS-031 | 2026-01-12 |
-| **BRD-OPS-032** | All tests must pass before deployment | P0 | INT-OPS-032 | 2026-01-12 |
-| **BRD-OPS-033** | Tests must complete within 10 minutes | P1 | INT-OPS-033 | 2026-01-12 |
-| **BRD-OPS-034** | Contracts (Pydantic models) must have validation tests | P0 | INT-OPS-034 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-030** | Core modules must have ≥80% test coverage | Derived from: INT-OPS-030 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-031** | Critical paths (run lifecycle) must have 100% coverage | Derived from: INT-OPS-031 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-032** | All tests must pass before deployment | Derived from: INT-OPS-032 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-033** | Tests must complete within 10 minutes | Derived from: INT-OPS-033 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-034** | Contracts (Pydantic models) must have validation tests | Derived from: INT-OPS-034 | P0 | 2026-01-12 | V1.1 |
 
 ### 3.5 Debugging Support
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-040** | Failed runs must include error details and stack traces | P0 | INT-OPS-040 | 2026-01-12 |
-| **BRD-OPS-041** | Event timeline must be viewable for any run | P0 | INT-OPS-041 | 2026-01-12 |
-| **BRD-OPS-042** | Input/output data must be inspectable | P0 | INT-OPS-042 | 2026-01-12 |
-| **BRD-OPS-043** | LLM calls and responses must be logged | P1 | INT-OPS-043 | 2026-01-12 |
-| **BRD-OPS-044** | Tool calls and results must be logged | P1 | INT-OPS-044 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-040** | Failed runs must include error details and stack traces | Derived from: INT-OPS-040 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-041** | Event timeline must be viewable for any run | Derived from: INT-OPS-041 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-042** | Input/output data must be inspectable | Derived from: INT-OPS-042 | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-043** | LLM calls and responses must be logged | Derived from: INT-OPS-043 | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-044** | Tool calls and results must be logged | Derived from: INT-OPS-044 | P1 | 2026-01-12 | V1.1 |
 
 ### 3.6 Operational Tooling
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-OPS-050** | Operators must be able to list all runs | P0 | — | 1.0 | 2026-01-12 |
-| **BRD-OPS-051** | Operators must be able to cancel stuck runs | P1 | — | 1.0 | 2026-01-12 |
-| **BRD-OPS-052** | Operators must be able to view run details | P0 | — | 1.0 | 2026-01-12 |
-| **BRD-OPS-053** | Operators must be able to export run data | P1 | — | 1.0 | 2026-01-12 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-050** | Operators must be able to list all runs | Derived from: — | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-051** | Operators must be able to cancel stuck runs | Derived from: — | P1 | 2026-01-12 | V1.1 |
+| **BRD-OPS-052** | Operators must be able to view run details | Derived from: — | P0 | 2026-01-12 | V1.1 |
+| **BRD-OPS-053** | Operators must be able to export run data | Derived from: — | P1 | 2026-01-12 | V1.1 |
 
 ### 3.7 Semantic Trace Events (Added: 2026-01-13)
 
 > **Source**: [INT-OPS-SEM](../00_developer_intent/intent.md#43-semantic-trace-events-added-2026-01-13)
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-OPS-SEM-001** | `semantic_interpretation_started` event must be emitted when phase begins | P0 | INT-OPS-SEM-001 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-002** | Started event must include: run_id, product_id, raw_input_length | P0 | INT-OPS-SEM-002 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-003** | `semantic_interpretation_completed` event must be emitted when phase succeeds | P0 | INT-OPS-SEM-003 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-004** | Completed event must include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | P0 | INT-OPS-SEM-004 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-005** | `semantic_validation_completed` event must be emitted after validation | P0 | INT-OPS-SEM-005 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-006** | Validation event must include: is_valid, missing_fields, violation_count, revised_confidence | P0 | INT-OPS-SEM-006 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-007** | `semantic_stop_issued` event must be emitted on ASK_USER or ABORT | P0 | INT-OPS-SEM-007 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-008** | Stop event must include: next_action, question (if ASK_USER), reason (if ABORT), violations | P0 | INT-OPS-SEM-008 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-009** | `semantic_interpretation_failed` event must be emitted on exception | P0 | INT-OPS-SEM-009 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-SEM-010** | Failed event must include: error message | P1 | INT-OPS-SEM-010 | 1.1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-SEM-001** | `semantic_interpretation_started` event must be emitted when phase begins | Derived from: INT-OPS-SEM-001 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-002** | Started event must include: run_id, product_id, raw_input_length | Derived from: INT-OPS-SEM-002 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-003** | `semantic_interpretation_completed` event must be emitted when phase succeeds | Derived from: INT-OPS-SEM-003 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-004** | Completed event must include: envelope_hash, confidence, ambiguity_count, entity_count, next_action | Derived from: INT-OPS-SEM-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-005** | `semantic_validation_completed` event must be emitted after validation | Derived from: INT-OPS-SEM-005 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-006** | Validation event must include: is_valid, missing_fields, violation_count, revised_confidence | Derived from: INT-OPS-SEM-006 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-007** | `semantic_stop_issued` event must be emitted on ASK_USER or ABORT | Derived from: INT-OPS-SEM-007 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-008** | Stop event must include: next_action, question (if ASK_USER), reason (if ABORT), violations | Derived from: INT-OPS-SEM-008 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-009** | `semantic_interpretation_failed` event must be emitted on exception | Derived from: INT-OPS-SEM-009 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-SEM-010** | Failed event must include: error message | Derived from: INT-OPS-SEM-010 | P1 | 2026-01-13 | V1.1 |
 
 **Event Catalog (New: 2026-01-13)**:
 | Event | When | Payload |
@@ -176,15 +176,15 @@ An operational foundation that provides:
 
 > **Source**: [INT-OPS-ARCH](../00_developer_intent/intent.md#47-architecture-tests-added-2026-01-13)
 
-| ID | Requirement | Priority | Source | Ver | Date |
-|----|-------------|----------|--------|-----|------|
-| **BRD-OPS-ARCH-001** | Architecture test must verify semantic phase is mandatory | P0 | INT-OPS-ARCH-001 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-002** | Architecture test must verify ASK_USER blocks all step execution | P0 | INT-OPS-ARCH-002 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-003** | Architecture test must verify ABORT blocks all step execution | P0 | INT-OPS-ARCH-003 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-004** | Architecture test must verify product adapters don't import core orchestrator | P0 | INT-OPS-ARCH-004 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-005** | Architecture test must verify core orchestrator doesn't import products | P0 | INT-OPS-ARCH-005 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-006** | Architecture tests must live in `tests/architecture/` directory | P1 | INT-OPS-ARCH-006 | 1.1 | Added: 2026-01-13 |
-| **BRD-OPS-ARCH-007** | Architecture tests must be run as part of CI pipeline | P0 | INT-OPS-ARCH-007 | 1.1 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-ARCH-001** | Architecture test must verify semantic phase is mandatory | Derived from: INT-OPS-ARCH-001 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-002** | Architecture test must verify ASK_USER blocks all step execution | Derived from: INT-OPS-ARCH-002 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-003** | Architecture test must verify ABORT blocks all step execution | Derived from: INT-OPS-ARCH-003 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-004** | Architecture test must verify product adapters don't import core orchestrator | Derived from: INT-OPS-ARCH-004 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-005** | Architecture test must verify core orchestrator doesn't import products | Derived from: INT-OPS-ARCH-005 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-006** | Architecture tests must live in `tests/architecture/` directory | Derived from: INT-OPS-ARCH-006 | P1 | 2026-01-13 | V1.1 |
+| **BRD-OPS-ARCH-007** | Architecture tests must be run as part of CI pipeline | Derived from: INT-OPS-ARCH-007 | P0 | 2026-01-13 | V1.1 |
 
 **Required Architecture Tests (New: 2026-01-13)**:
 | Test | Invariant Verified |
@@ -199,6 +199,13 @@ An operational foundation that provides:
 | Architecture tests must pass | Test failure ignored |
 | Tests verify structure, not behavior | Test only checks runtime values |
 | Tests are automated | Manual verification required |
+
+### 3.9 Explainability & Reproducibility (Added: 2026-01-18)
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-060** | Platform must retain reasoning artifacts and execution context to enable post-hoc explainability and reproducibility | Derived from: — | P0 | 2026-01-18 | V1.1 |
+| **BRD-OPS-061** | Platform must record the versions, inputs, and hashes required to reproduce outcomes | Derived from: — | P0 | 2026-01-18 | V1.1 |
 
 ---
 
@@ -271,17 +278,17 @@ An operational foundation that provides:
 
 ### 7.1 Intent-to-BRD Traceability
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-LIFE-001** | Every operations intent point must map to at least one BRD requirement | P0 | INT-LIFECYCLE-020 | Added: 2026-01-13 |
-| **BRD-OPS-LIFE-002** | BRD requirements must reference source intent | P0 | INT-LIFECYCLE-021 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-LIFE-001** | Every operations intent point must map to at least one BRD requirement | Derived from: INT-LIFECYCLE-020 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-LIFE-002** | BRD requirements must reference source intent | Derived from: INT-LIFECYCLE-021 | P0 | 2026-01-13 | V1.1 |
 
 ### 7.2 Product Factory Model
 
-| ID | Requirement | Priority | Source | Date |
-|----|-------------|----------|--------|------|
-| **BRD-OPS-FAC-001** | Framework owns memory, observability; products use them | P0 | INT-FACTORY-010 | Added: 2026-01-13 |
-| **BRD-OPS-FAC-002** | Products are forbidden from re-implementing operational services | P0 | INT-FACTORY-011 | Added: 2026-01-13 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| **BRD-OPS-FAC-001** | Framework MUST own memory and observability; products MUST use them | Derived from: INT-FACTORY-010 | P0 | 2026-01-13 | V1.1 |
+| **BRD-OPS-FAC-002** | Products MUST NOT re-implement operational services | Derived from: INT-FACTORY-011 | P0 | 2026-01-13 | V1.1 |
 
 ---
 

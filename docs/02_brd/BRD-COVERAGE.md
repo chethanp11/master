@@ -19,10 +19,10 @@
 
 | Intent Document | BRD Document | Intent IDs Covered | BRD IDs Derived | Coverage |
 |-----------------|--------------|-------------------|-----------------|----------|
-| [intent-automation.md](../01_vision_and_intent/intent-automation.md) | [BRD-automation.md](BRD-automation.md) | 43 | 56 | ✅ Full |
-| [intent-governance.md](../01_vision_and_intent/intent-governance.md) | [BRD-governance.md](BRD-governance.md) | 29 | 47 | ✅ Full |
-| [intent-experience.md](../01_vision_and_intent/intent-experience.md) | [BRD-experience.md](BRD-experience.md) | 26 | 44 | ✅ Full |
-| [intent-operations.md](../01_vision_and_intent/intent-operations.md) | [BRD-operations.md](BRD-operations.md) | 32 | 53 | ✅ Full |
+| [intent-automation.md](../01_vision_and_intent/intent-automation.md) | [BRD-automation.md](BRD-automation.md) | 63 | 77 | ⚠️ Partial |
+| [intent-governance.md](../01_vision_and_intent/intent-governance.md) | [BRD-governance.md](BRD-governance.md) | 40 | 57 | ⚠️ Partial |
+| [intent-experience.md](../01_vision_and_intent/intent-experience.md) | [BRD-experience.md](BRD-experience.md) | 28 | 51 | ⚠️ Partial |
+| [intent-operations.md](../01_vision_and_intent/intent-operations.md) | [BRD-operations.md](BRD-operations.md) | 45 | 55 | ⚠️ Partial |
 
 ---
 
@@ -104,6 +104,8 @@
 | INT-AUTO-025 | System must interpret user intent before planning/execution | BRD-AUTO-025 | ✅ |
 | INT-AUTO-026 | System must normalize and validate input before acting | BRD-AUTO-026 | ✅ |
 | INT-AUTO-027 | System must express interpretation confidence and request clarification | BRD-AUTO-027 | ✅ |
+| PLAT-AUTO-001 | System must support multiple competing hypotheses with confidence scores as a first-class reasoning output | BRD-AUTO-028 | ✅ |
+| PLAT-AUTO-002 | System must maintain a persistent sufficiency state tracking known facts, unknowns, assumptions, and blocking gaps | BRD-AUTO-029 | ✅ |
 
 ### 1.7 Reasoning Quality (INT-AUTO-030...033)
 
@@ -122,6 +124,27 @@
 | INT-AUTO-041 | Workflows must support iteration over collections | BRD-AUTO-041 | ✅ |
 | INT-AUTO-042 | Workflow steps must be independently restartable | BRD-AUTO-042 | ✅ |
 | INT-AUTO-043 | Workflows must support nested sub-workflows | BRD-AUTO-043 | ✅ |
+
+### 1.9 Orchestrator-Controlled Reasoning (PLAT-ORCH)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-ORCH-001 | Platform must provide a central, reusable reasoning lifecycle (interpret → propose → critique → recommend) that is orchestrator-controlled, bounded, and non-autonomous | BRD-AUTO-047 | ✅ |
+| PLAT-ORCH-002 | Orchestrator must support bounded reasoning iteration with deterministic stop conditions based on sufficiency, budget, iteration limits, or human intervention | BRD-AUTO-048 | ✅ |
+
+### 1.10 Confidence and Critique Control (PLAT-CTRL)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-CTRL-001 | Platform must track, update, and propagate confidence as a core runtime signal across reasoning stages, steps, and decision gates | BRD-AUTO-049 | ✅ |
+| PLAT-CTRL-002 | Platform must enforce a mandatory advisory critique phase before finalizing any decision or output, with the ability to downgrade confidence or block progression | BRD-AUTO-050 | ✅ |
+
+### 1.11 Execution Gatekeeping (PLAT-EXEC)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-EXEC-001 | Platform must construct and freeze a ContextPack before planning or execution, consolidating data availability, evidence, constraints, and quality limitations | BRD-AUTO-051 | ✅ |
+| PLAT-EXEC-002 | Platform must define and enforce explicit terminal outcomes (SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT) with required explanations and artifacts | BRD-AUTO-052 | ✅ |
 
 ---
 
@@ -192,6 +215,18 @@
 | INT-GOV-042 | Audit logs must be queryable by run, user, timeframe | BRD-GOV-042 | ✅ |
 | INT-GOV-043 | Audit data must be exportable in standard formats | BRD-GOV-043 | ✅ |
 | INT-GOV-044 | Audit retention period must be configurable | BRD-GOV-044 | ✅ |
+
+### 2.7 Decision Records (PLAT-AUD)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-AUD-001 | Platform must generate immutable decision records for every gated action, capturing options considered, evidence used, critique feedback, final choice, and confidence | BRD-GOV-045, BRD-GOV-046, BRD-GOV-047 | ✅ |
+
+### 2.8 Runtime Integrity (PLAT-POL)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-POL-001 | Platform must prevent runtime learning or self-modification during execution | BRD-GOV-054 | ✅ |
 
 ---
 
@@ -331,6 +366,13 @@
 | INT-OPS-ARCH-006 | Architecture tests must live in `tests/architecture/` directory | BRD-OPS-ARCH-006 | ✅ |
 | INT-OPS-ARCH-007 | Architecture tests must be run as part of CI pipeline | BRD-OPS-ARCH-007 | ✅ |
 
+### 4.8 Explainability & Reproducibility (PLAT-OPS)
+
+| Intent ID | Intent | BRD ID | Covered |
+|-----------|--------|--------|---------|
+| PLAT-OPS-001 | Platform must retain reasoning artifacts and execution context for post-hoc explainability and reproducibility | BRD-OPS-060 | ✅ |
+| PLAT-OPS-002 | Platform must record versions, inputs, and hashes required to reproduce outcomes | BRD-OPS-061 | ✅ |
+
 ---
 
 ## 5. BRD Requirements Without Direct Intent Source
@@ -352,9 +394,6 @@
 
 | BRD ID | Requirement | Source |
 |--------|-------------|--------|
-| BRD-GOV-045 | Gated decisions must be recorded as decision artifacts | INV-4 |
-| BRD-GOV-046 | Decision artifacts must capture options, evidence, critique, choice | INV-4 |
-| BRD-GOV-047 | Decision artifacts must be immutable once recorded | INV-4 |
 | BRD-GOV-050...053 | Governance hooks lifecycle | INV-6 |
 | BRD-GOV-060...063 | Semantic interpretation governance | INV-3 |
 
@@ -365,7 +404,7 @@
 | BRD-EXP-035 | Products must be shippable in < 1 day | INT-FACTORY-003 |
 | BRD-EXP-036 | Products must focus on domain logic only | INT-FACTORY-004 |
 | BRD-EXP-037 | Products must be evolvable via intent updates | INT-FACTORY-005 |
-| BRD-EXP-044 | Products cannot modify core framework | INV-6 |
+| BRD-EXP-044 | Products MUST NOT modify core framework | INV-6 |
 | BRD-EXP-050...053 | Error experience | Operational necessity |
 | BRD-EXP-060...064 | Product Factory Model | INT-FACTORY-* |
 
@@ -386,16 +425,37 @@
 
 | Status | Count | Notes |
 |--------|-------|-------|
-| ✅ Covered | 130 | All intent IDs have corresponding BRD requirements |
-| ⚠️ Gaps | 0 | No gaps identified |
+| ✅ Covered | 176 | All INT-/PLAT- IDs map to BRD requirements |
+| ⚠️ Clarification Needed | 4 | Intent statements exist without stable IDs |
 
-### BRD Requirements Without Intent Source
+### Gap Register (Partial / Missing / Clarification Needed Only)
 
-| Status | Count | Notes |
-|--------|-------|-------|
-| INV-derived | 16 | Requirements derived from Architecture Invariants |
-| INT-FACTORY | 6 | Requirements from Product Factory Model section |
-| Operational | 8 | Operational necessities (error handling, tooling) |
+| Gap Type | Intent Document | Gap Detail | Status |
+|---------|-----------------|------------|--------|
+| Clarification Needed | intent-automation.md | 18 constraint statements lack Intent IDs (Semantic Interpretation, Product Semantic Adapter, Stop/Pause, Agent Capabilities, Tool Ecosystem) | Clarification Needed |
+| Clarification Needed | intent-governance.md | 9 constraint statements lack Intent IDs (Security & Privacy, Policy Enforcement, Semantic Confidence Governance) | Clarification Needed |
+| Clarification Needed | intent-experience.md | 3 constraint statements lack Intent IDs (Product Isolation constraints) | Clarification Needed |
+| Clarification Needed | intent-operations.md | 32 statements lack Intent IDs (State Persistence constraints, Semantic Trace constraints, Architecture Test constraints, Architecture Invariants) | Clarification Needed |
+
+### Next BRD Edits Required
+
+- [ ] docs/02_brd/BRD-automation.md (add BRD IDs for missing-ID constraint statements once Intent IDs are assigned)
+- [ ] docs/02_brd/BRD-governance.md (add BRD IDs for missing-ID constraint statements once Intent IDs are assigned)
+- [ ] docs/02_brd/BRD-experience.md (add BRD IDs for missing-ID constraint statements once Intent IDs are assigned)
+- [ ] docs/02_brd/BRD-operations.md (add BRD IDs for missing-ID constraint statements once Intent IDs are assigned)
+
+### Completion Line
+
+BRD-COVERAGE GAP COUNT: 4
+
+---
+
+## Open Intent Clarifications Required
+
+- Assign stable Intent IDs for the 18 constraint statements in `docs/01_vision_and_intent/intent-automation.md` (Semantic Interpretation, Product Semantic Adapter, Stop/Pause, Agent Capabilities, Tool Ecosystem).
+- Assign stable Intent IDs for the 9 constraint statements in `docs/01_vision_and_intent/intent-governance.md` (Security & Privacy, Policy Enforcement, Semantic Confidence Governance).
+- Assign stable Intent IDs for the 3 constraint statements in `docs/01_vision_and_intent/intent-experience.md` (Product Isolation constraints).
+- Assign stable Intent IDs for the 32 constraint statements in `docs/01_vision_and_intent/intent-operations.md` (State Persistence constraints, Semantic Trace constraints, Architecture Test constraints, Architecture Invariants).
 
 ---
 

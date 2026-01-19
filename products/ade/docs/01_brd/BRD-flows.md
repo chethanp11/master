@@ -14,6 +14,14 @@ ADE provides two workflows optimized for different use cases:
 | `ade_v1` | Analyst has a question to answer | Question/prompt |
 | `visualization` | Analyst has a dataset to explore | Dataset selection |
 
+### 1.1 Flow Coverage Requirements
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-FLOW-001 | ADE MUST provide two entry points for different analyst use cases | Derived from: INT-FLOWS-001 | P0 | 2026-01-13 | V1.1 |
+| BRD-FLOW-002 | ade_v1 flow MUST support question-first workflow | Derived from: INT-FLOWS-002 | P0 | 2026-01-13 | V1.1 |
+| BRD-FLOW-003 | visualization flow MUST support dataset-first workflow | Derived from: INT-FLOWS-003 | P0 | 2026-01-13 | V1.1 |
+
 ---
 
 ## 2. ade_v1 Flow Requirements
@@ -31,16 +39,16 @@ Analyst Question → Dataset Selection → Visualization Preferences
 
 ### 2.3 Business Requirements
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-V1-001 | User MUST be able to enter free-text question | P0 |
-| BRD-V1-002 | System MUST interpret intent from question | P0 |
-| BRD-V1-003 | User MUST select dataset for analysis | P0 |
-| BRD-V1-004 | User MUST configure visualization preferences | P0 |
-| BRD-V1-005 | User MUST approve plan before execution | P0 |
-| BRD-V1-006 | System MUST produce business report | P0 |
-| BRD-V1-007 | User SHOULD be able to enable/disable hypothesis checks | P1 |
-| BRD-V1-008 | User SHOULD be able to add notes to analysis | P2 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-V1-001 | User MUST be able to enter free-text question | Derived from: INT-V1-001 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-002 | System MUST interpret intent from question | Derived from: INT-V1-002 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-003 | User MUST select dataset for analysis | Derived from: INT-V1-003 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-004 | User MUST configure visualization preferences | Derived from: INT-V1-004 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-005 | User MUST approve plan before execution | Derived from: INT-V1-005 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-006 | System MUST produce business report | Derived from: INT-V1-006 | P0 | 2026-01-13 | V1.1 |
+| BRD-V1-007 | User SHOULD be able to enable/disable hypothesis checks | Derived from: INT-V1-007 | P1 | 2026-01-13 | V1.1 |
+| BRD-V1-008 | User SHOULD be able to add notes to analysis | Derived from: INT-V1-008 | P2 | 2026-01-13 | V1.1 |
 
 ### 2.4 Inputs
 
@@ -77,16 +85,16 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 
 ### 3.3 Business Requirements
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-VIZ-001 | User MUST select dataset first | P0 |
-| BRD-VIZ-002 | System MUST interpret dataset-based intent | P0 |
-| BRD-VIZ-003 | User MUST configure visualization preferences | P0 |
-| BRD-VIZ-004 | System MUST evaluate data sufficiency | P0 |
-| BRD-VIZ-005 | User MUST approve plan before execution | P0 |
-| BRD-VIZ-006 | System MUST produce decision packet | P0 |
-| BRD-VIZ-007 | System MUST produce business report | P0 |
-| BRD-VIZ-008 | User SHOULD be able to toggle hypothesis checks | P1 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-VIZ-001 | User MUST select dataset first | Derived from: INT-VIZ-001 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-002 | System MUST interpret dataset-based intent | Derived from: INT-VIZ-002 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-003 | User MUST configure visualization preferences | Derived from: INT-VIZ-003 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-004 | System MUST evaluate data sufficiency | Derived from: INT-VIZ-004 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-005 | User MUST approve plan before execution | Derived from: INT-VIZ-005 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-006 | System MUST produce decision packet | Derived from: INT-VIZ-006 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-007 | System MUST produce business report | Derived from: INT-VIZ-007 | P0 | 2026-01-13 | V1.1 |
+| BRD-VIZ-008 | User SHOULD be able to toggle hypothesis checks | Derived from: INT-UI-003 | P1 | 2026-01-13 | V1.1 |
 
 ### 3.4 Inputs
 
@@ -108,12 +116,12 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 
 ### 4.1 Visualization Preferences
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-PREF-001 | User MUST select chart type | P0 |
-| BRD-PREF-002 | User MUST select metric focus | P0 |
-| BRD-PREF-003 | User SHOULD be able to toggle hypothesis checks | P1 |
-| BRD-PREF-004 | User MAY add notes | P2 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-PREF-001 | User MUST select chart type | Derived from: INT-UI-001 | P0 | 2026-01-13 | V1.1 |
+| BRD-PREF-002 | User MUST select metric focus | Derived from: INT-UI-002 | P0 | 2026-01-13 | V1.1 |
+| BRD-PREF-003 | User SHOULD be able to toggle hypothesis checks | Derived from: INT-UI-003 | P1 | 2026-01-13 | V1.1 |
+| BRD-PREF-004 | User MAY add notes | Derived from: INT-V1-008 | P2 | 2026-01-13 | V1.1 |
 
 **Chart Types**: bar, line, area, scatter
 
@@ -121,38 +129,37 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 
 ### 4.2 Plan Approval
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-PLAN-001 | System MUST present plan summary before execution | P0 |
-| BRD-PLAN-002 | System MUST show estimated steps | P1 |
-| BRD-PLAN-003 | System MUST show estimated cost | P1 |
-| BRD-PLAN-004 | User MUST be able to approve plan | P0 |
-| BRD-PLAN-005 | User MUST be able to reject plan | P0 |
-| BRD-PLAN-006 | Rejection SHOULD trigger replanning | P1 |
-| BRD-PLAN-007 | Plan summary MUST include objective and expected evidence | P1 |
-| BRD-PLAN-008 | Plan summary MUST include assumptions and risks | P1 |
-| BRD-PLAN-009 | Replan output MUST highlight what changed and why | P1 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-PLAN-001 | System MUST present plan summary before execution | Derived from: INT-UI-004, INT-PLAN-005 | P0 | 2026-01-13 | V1.1 |
+| BRD-PLAN-002 | System MUST show estimated steps | Derived from: INT-PLAN-006 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-003 | System MUST show estimated cost | Derived from: INT-PLAN-007 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-004 | User MUST be able to approve plan | Derived from: INT-UI-005 | P0 | 2026-01-13 | V1.1 |
+| BRD-PLAN-005 | User MUST be able to reject plan | Derived from: INT-UI-005 | P0 | 2026-01-13 | V1.1 |
+| BRD-PLAN-006 | Rejection SHOULD trigger replanning | Derived from: INT-UI-006 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-007 | Plan summary MUST include objective and expected evidence | Derived from: INT-REVIEW-001 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-008 | Plan summary MUST include assumptions and risks | Derived from: INT-REVIEW-001 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-009 | Replan output MUST highlight what changed and why | Derived from: INT-REVIEW-003 | P1 | 2026-01-13 | V1.1 |
+| BRD-PLAN-010 | Users MUST be able to approve plans with constraints (time window, iteration caps, disabled tests) | Derived from: INT-REVIEW-002 | P1 | 2026-01-13 | V1.1 |
 
 ---
 
 ## 5. Determinism Requirements
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-DET-001 | Same inputs MUST produce same outputs | P0 |
-| BRD-DET-002 | No random variations in analysis | P0 |
-| BRD-DET-003 | Timestamps are the only allowed variation | P0 |
-| BRD-DET-004 | No LLM calls from tools | P0 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-DET-001 | Same inputs MUST produce same outputs | Derived from: INT-DET-001, INT-DET-003 | P0 | 2026-01-13 | V1.1 |
+| BRD-DET-002 | No random variations in analysis | Derived from: INT-REPRO-003 | P0 | 2026-01-13 | V1.1 |
+| BRD-DET-003 | Timestamps are the only allowed variation | Derived from: INT-REPRO-002 | P0 | 2026-01-13 | V1.1 |
+| BRD-DET-004 | No LLM calls from tools | Derived from: INT-TOOL-002 | P0 | 2026-01-13 | V1.1 |
 
 ---
 
 ## 6. Flow Configuration Requirements
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| BRD-CFG-001 | Flows MUST use suggest_only autonomy level | P0 |
-| BRD-CFG-002 | Data reading SHOULD have retry configuration | P1 |
-| BRD-CFG-003 | Chart building SHOULD have fallback type | P1 |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version |
+|----|-------------|---------------------------|----------|------------|---------|
+| BRD-CFG-001 | Flows MUST use suggest_only autonomy level | Derived from: INT-DET-002 | P0 | 2026-01-13 | V1.1 |
 
 ---
 

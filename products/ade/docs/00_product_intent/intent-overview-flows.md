@@ -43,14 +43,14 @@ There is no tool that:
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-OVERVIEW-001** | Transform analyst questions into structured, audit-ready outputs | Core product value proposition | — | — | — |
-| **INT-OVERVIEW-002** | Every claim must be traceable to source data | Trust requires evidence | — | — | — |
-| **INT-OVERVIEW-003** | Same inputs must always produce same outputs | Audit and reproducibility requirement | — | — | — |
-| **INT-OVERVIEW-004** | Confidence, assumptions, and limitations must be explicit | Transparency requirement | — | — | — |
-| **INT-OVERVIEW-005** | Plans must require human approval before execution | Human oversight by design | — | — | — |
-| **INT-OVERVIEW-006** | Analyst questions must be semantically interpreted | Enable natural language interaction | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-OVERVIEW-001** | Transform analyst questions into structured, audit-ready outputs — Core product value proposition | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-002** | Every claim must be traceable to source data — Trust requires evidence | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-003** | Same inputs must always produce same outputs — Audit and reproducibility requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-004** | Confidence, assumptions, and limitations must be explicit — Transparency requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-005** | Plans must require human approval before execution — Human oversight by design | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-006** | Analyst questions must be semantically interpreted — Enable natural language interaction | — | 2026-01-13 | V1.1 | — |
 
 ### The One-Liner
 
@@ -60,16 +60,16 @@ There is no tool that:
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-OBJ-001** | 100% of outputs must include evidence references | Evidence-based requirement | — | — | — |
-| **INT-OBJ-002** | Same inputs must always produce same outputs | Reproducibility requirement | — | — | — |
-| **INT-OBJ-003** | All plans must require explicit user approval | Human-in-the-loop requirement | — | — | — |
-| **INT-OBJ-004** | All outputs must include confidence_level, assumptions, limitations | Transparency requirement | — | — | — |
-| **INT-OBJ-005** | Time from question to report should be < 5 minutes | Usability target | — | — | — |
-| **INT-OBJ-006** | 4+ chart types must be available | Visualization richness | — | — | — |
-| **INT-OBJ-007** | Hypothesis checks must be toggleable | Analysis flexibility | — | — | — |
-| **INT-OBJ-008** | Objectives and success criteria SHALL be expressed through schemas and goals, not embedded logic or heuristics | Keep objectives explicit and auditable | — | — | V1.2, 2026-01-18 |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-OBJ-001** | 100% of outputs must include evidence references — Evidence-based requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-002** | Same inputs must always produce same outputs — Reproducibility requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-003** | All plans must require explicit user approval — Human-in-the-loop requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-004** | All outputs must include confidence_level, assumptions, limitations — Transparency requirement | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-005** | Time from question to report should be < 5 minutes — Usability target | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-006** | 4+ chart types must be available — Visualization richness | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-007** | Hypothesis checks must be toggleable — Analysis flexibility | — | 2026-01-13 | V1.1 | — |
+| **INT-OBJ-008** | Objectives and success criteria SHALL be expressed through schemas and goals, not embedded logic or heuristics — Keep objectives explicit and auditable | — | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
 
 ## 1.4 Scope
 
@@ -136,11 +136,11 @@ Compliance and audit teams who verify analytical integrity.
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-FLOWS-001** | Provide two entry points for different analyst use cases | Flexibility for different workflows | — | — | — |
-| **INT-FLOWS-002** | ade_v1 flow: analyst has a question to answer | Question-first workflow | — | — | — |
-| **INT-FLOWS-003** | visualization flow: analyst has a dataset to explore | Dataset-first workflow | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-FLOWS-001** | Provide two entry points for different analyst use cases — Flexibility for different workflows | — | 2026-01-13 | V1.1 | — |
+| **INT-FLOWS-002** | ade_v1 flow: analyst has a question to answer — Question-first workflow | — | 2026-01-13 | V1.1 | — |
+| **INT-FLOWS-003** | visualization flow: analyst has a dataset to explore — Dataset-first workflow | — | 2026-01-13 | V1.1 | — |
 
 ### Flow Summary
 
@@ -160,16 +160,16 @@ Analyst Question → Dataset Selection → Visualization Preferences
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-V1-001** | User must be able to enter free-text questions | Natural language interaction | — | — | — |
-| **INT-V1-002** | System must interpret intent from question | Semantic understanding | — | — | — |
-| **INT-V1-003** | User must select dataset for analysis | Data source specification | — | — | — |
-| **INT-V1-004** | User must configure visualization preferences | Customization | — | — | — |
-| **INT-V1-005** | User must approve plan before execution | Human oversight | — | — | — |
-| **INT-V1-006** | System must produce business report | Primary output | — | — | — |
-| **INT-V1-007** | User should be able to enable/disable hypothesis checks | Analysis flexibility | — | — | — |
-| **INT-V1-008** | User should be able to add notes to analysis | Documentation | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-V1-001** | User must be able to enter free-text questions — Natural language interaction | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-002** | System must interpret intent from question — Semantic understanding | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-003** | User must select dataset for analysis — Data source specification | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-004** | User must configure visualization preferences — Customization | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-005** | User must approve plan before execution — Human oversight | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-006** | System must produce business report — Primary output | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-007** | User should be able to enable/disable hypothesis checks — Analysis flexibility | — | 2026-01-13 | V1.1 | — |
+| **INT-V1-008** | User should be able to add notes to analysis — Documentation | — | 2026-01-13 | V1.1 | — |
 
 ### Inputs
 
@@ -192,28 +192,28 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-VIZ-001** | User must select dataset first | Dataset-first workflow | — | — | — |
-| **INT-VIZ-002** | System must interpret intent from dataset context | Intelligent interpretation | — | — | — |
-| **INT-VIZ-003** | User must provide visualization preferences | Explicit preferences | — | — | — |
-| **INT-VIZ-004** | System must check data sufficiency | Quality gate | — | — | — |
-| **INT-VIZ-005** | User must approve plan before execution | Human oversight | — | — | — |
-| **INT-VIZ-006** | System must produce decision packet | Primary output | — | — | — |
-| **INT-VIZ-007** | System must also produce business report | Secondary output | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-VIZ-001** | User must select dataset first — Dataset-first workflow | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-002** | System must interpret intent from dataset context — Intelligent interpretation | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-003** | User must provide visualization preferences — Explicit preferences | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-004** | System must check data sufficiency — Quality gate | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-005** | User must approve plan before execution — Human oversight | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-006** | System must produce decision packet — Primary output | — | 2026-01-13 | V1.1 | — |
+| **INT-VIZ-007** | System must also produce business report — Secondary output | — | 2026-01-13 | V1.1 | — |
 
 ## 2.4 User Interaction Intent
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-UI-001** | Visualization preferences must include chart_type | User control | — | — | — |
-| **INT-UI-002** | Visualization preferences must include metric_focus | Analysis direction | — | — | — |
-| **INT-UI-003** | Visualization preferences must include hypothesis_enabled flag | Optional analysis | — | — | — |
-| **INT-UI-004** | Plan approval must show plan summary | Informed decision | — | — | — |
-| **INT-UI-005** | Plan approval must allow approve/reject | Human control | — | — | — |
-| **INT-UI-006** | Rejection must trigger replanning | Recovery path | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-UI-001** | Visualization preferences must include chart_type — User control | — | 2026-01-13 | V1.1 | — |
+| **INT-UI-002** | Visualization preferences must include metric_focus — Analysis direction | — | 2026-01-13 | V1.1 | — |
+| **INT-UI-003** | Visualization preferences must include hypothesis_enabled flag — Optional analysis | — | 2026-01-13 | V1.1 | — |
+| **INT-UI-004** | Plan approval must show plan summary — Informed decision | — | 2026-01-13 | V1.1 | — |
+| **INT-UI-005** | Plan approval must allow approve/reject — Human control | — | 2026-01-13 | V1.1 | — |
+| **INT-UI-006** | Rejection must trigger replanning — Recovery path | — | 2026-01-13 | V1.1 | — |
 
 ### Preference Options
 
@@ -228,10 +228,10 @@ Dataset Selection → Intent Interpretation → Visualization Preferences
 
 ### Intent
 
-| ID | Intent (SHALL) | Rationale | Depends on | Source | Notes |
-|----|----------------|-----------|------------|--------|-------|
-| **INT-DET-001** | Flows must be deterministic | Reproducibility | — | — | — |
-| **INT-DET-002** | Flows must use suggest_only autonomy | Framework compliance | — | — | — |
-| **INT-DET-003** | Same inputs must produce same execution | Audit requirement | — | — | — |
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| **INT-DET-001** | Flows must be deterministic — Reproducibility | — | 2026-01-13 | V1.1 | — |
+| **INT-DET-002** | Flows must use suggest_only autonomy — Framework compliance | — | 2026-01-13 | V1.1 | — |
+| **INT-DET-003** | Same inputs must produce same execution — Audit requirement | — | 2026-01-13 | V1.1 | — |
 
 ---
