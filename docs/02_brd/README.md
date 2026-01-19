@@ -1,9 +1,9 @@
 # Business Requirements Documents
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
-> **Version**: 1.1  
+> **Version**: V1.2  
 
-> **Last Updated**: 2026-01-12  
+> **Last Updated**: 2026-01-19  
 > **Status**: V1 Release  
 
 ---
@@ -13,6 +13,7 @@
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.1 | 2026-01-13 | Header version normalization |
+| V1.2 | 2026-01-19 | Updated BRD table schema guidance and removed user-story-first guidance |
 
 ## Overview
 
@@ -21,11 +22,11 @@ This folder contains Business Requirement Documents (BRDs) that define **what** 
 ### Document Hierarchy
 
 ```
-01_vision_and_intent/        ← Strategic direction
+docs/01_vision_and_intent/   ← Strategic direction
     ↓
-02_business_requirements/    ← Business requirements (this folder)
+docs/02_brd/                 ← Business requirements (this folder)
     ↓
-03_technical_specifications/ ← Technical specifications
+docs/03_technical_specifications/ ← Technical specifications
     ↓
 core/, gateway/, products/   ← Implementation
 ```
@@ -132,16 +133,12 @@ Use this routing guide to determine which BRD to update:
 3. **Add a row** to the Business Requirements table:
 
 ```markdown
-| BRD-<THEME>-NNN | <Requirement statement> | P0/P1/P2 | <Business rationale> |
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-<THEME>-NNN | <Requirement statement> | INT-<AREA>-NNN | P0/P1/P2 | YYYY-MM-DD | V1.1 | — |
 ```
 
-4. **Add user story** (optional but recommended):
-
-```markdown
-As a <persona>, I want <capability> so that <business value>.
-```
-
-5. **Update techspec mapping** once technical requirements are defined
+4. **Update techspec mapping** once technical requirements are defined
 
 ---
 
