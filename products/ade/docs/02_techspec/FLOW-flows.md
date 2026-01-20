@@ -1,309 +1,97 @@
-# ADE Flow Requirements
+# ADE Flow Technical Specification
 
 > **Document**: Technical Specification — Flows  
 > **Prefix**: FLOW-*  
-> **Requirements**: ~25
+> **Version**: 1.2  
+> **Last Updated**: 2026-01-20
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-13 | Initial release |
+| 1.1 | 2026-01-17 | Added visualization flow requirements |
+| 1.2 | 2026-01-20 | Normalized ADE techspec tables to canonical TSD format; removed non-derivable sections; cleaned BRD mappings. |
 
 ---
 
 ## 1. Flow Execution (FLOW-EXEC)
 
-### FLOW-EXEC-001: Deterministic Execution
-**Priority**: P0  
-**Description**: Flows MUST execute deterministically — same inputs produce same outputs.
-
-**Acceptance Criteria**:
-- [ ] Running a flow twice with identical payload produces identical artifacts
-- [ ] No random or time-based variations in tool outputs
-- [ ] Timestamps are the only allowed variation
-
----
-
-### FLOW-EXEC-002: Step Sequence
-**Priority**: P0  
-**Description**: Flow steps MUST execute in the defined sequence.
-
-**Acceptance Criteria**:
-- [ ] Steps execute in YAML-defined order
-- [ ] No step executes before its dependencies complete
-- [ ] Artifact references resolve to prior step outputs
-
----
-
-### FLOW-EXEC-003: Autonomy Level
-**Priority**: P1  
-**Description**: All ADE flows MUST use `autonomy_level: "suggest_only"`.
-
-**Acceptance Criteria**:
-- [ ] ade_v1 has autonomy_level: suggest_only
-- [ ] visualization has autonomy_level: suggest_only
-- [ ] Plan approval is required before execution proceeds
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-EXEC-001 | Flows MUST execute deterministically—same inputs produce same outputs; no random or time-based variations except timestamps. | MUST | BRD-DET-001, BRD-DET-002, BRD-DET-003 | 1.1 | 13 Jan 2026 | — |
+| FLOW-EXEC-002 | Flow steps MUST execute in YAML-defined sequence with dependencies completing before dependent steps and artifact references resolving to prior outputs. | MUST | BRD-DET-001 | 1.1 | 13 Jan 2026 | — |
+| FLOW-EXEC-003 | All ADE flows MUST use autonomy_level: "suggest_only" requiring plan approval before execution. | MUST | BRD-CFG-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 2. ade_v1 Flow (FLOW-V1)
 
-### FLOW-V1-001: Step Count
-**Priority**: P1  
-**Description**: ade_v1 flow MUST have exactly 13 steps.
-
-**Acceptance Criteria**:
-- [ ] Step count matches flow definition
-- [ ] All required steps are present
-
----
-
-### FLOW-V1-002: Required Steps
-**Priority**: P0  
-**Description**: ade_v1 MUST include the following steps.
-
-| Step ID | Type | Component |
-|---------|------|-----------|
-| read | tool | data_reader |
-| viz_preferences | user_input | — |
-| compute_business_metrics | tool | compute_business_metrics |
-| sufficiency_eval | agent | sufficiency_evaluator |
-| plan_proposal | plan_proposal | plan_proposal_agent |
-| compute_anomalies | tool | detect_anomalies |
-| build_chart_spec | tool | build_chart_spec |
-| hypothesis_data_outage | tool | hypothesis_test_data_outage |
-| hypothesis_seasonality | tool | hypothesis_test_seasonality |
-| assemble_decision_packet | tool | assemble_decision_packet |
-| assemble_evidence_bundle | tool | assemble_evidence_bundle |
-| assemble_business_report | tool | assemble_business_report |
-| render_business_report_html | tool | render_business_report_html |
-
----
-
-### FLOW-V1-003: Data Reader First
-**Priority**: P0  
-**Description**: data_reader MUST execute before any computation steps.
-
-**Acceptance Criteria**:
-- [ ] data_reader is step 1
-- [ ] All subsequent steps can reference data_reader output
-
----
-
-### FLOW-V1-004: User Input Before Computation
-**Priority**: P1  
-**Description**: viz_preferences MUST execute after data_reader and before compute_business_metrics.
-
-**Acceptance Criteria**:
-- [ ] User can see dataset summary before selecting preferences
-- [ ] Preferences are available for metric computation
-
----
-
-### FLOW-V1-005: Plan Approval Gate
-**Priority**: P0  
-**Description**: plan_proposal MUST execute before hypothesis and assembly steps.
-
-**Acceptance Criteria**:
-- [ ] Execution pauses at plan_proposal for user approval
-- [ ] Rejection triggers appropriate error handling
-- [ ] Approval proceeds to remaining steps
-
----
-
-### BRD-PLAN-007: Plan Objective and Evidence
-**Priority**: P1  
-**Description**: Plan summary MUST include objective and expected evidence.
-
-**Acceptance Criteria**:
-- [ ] Plan summary lists objective
-- [ ] Plan summary lists expected evidence items
-
----
-
-### BRD-PLAN-008: Plan Assumptions and Risks
-**Priority**: P1  
-**Description**: Plan summary MUST include assumptions and risks.
-
-**Acceptance Criteria**:
-- [ ] Assumptions enumerated
-- [ ] Risks enumerated
-
----
-
-### BRD-PLAN-009: Replan Diff
-**Priority**: P1  
-**Description**: Replan output MUST highlight what changed and why.
-
-**Acceptance Criteria**:
-- [ ] Replan notes include change summary
-- [ ] Change rationale documented
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-V1-001 | ade_v1 flow MUST have exactly 13 steps with all required steps present. | MUST | BRD-FLOW-002 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-002 | ade_v1 MUST include steps: read (data_reader), viz_preferences (user_input), compute_business_metrics, sufficiency_eval, plan_proposal, compute_anomalies, build_chart_spec, hypothesis_data_outage, hypothesis_seasonality, assemble_decision_packet, assemble_evidence_bundle, assemble_business_report, render_business_report_html. | MUST | BRD-V1-006 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-003 | data_reader MUST execute as step 1 before any computation steps, with all subsequent steps able to reference its output. | MUST | BRD-V1-003 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-004 | viz_preferences MUST execute after data_reader and before compute_business_metrics so user sees dataset summary before selecting preferences. | MUST | BRD-V1-004 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-005 | plan_proposal MUST execute before hypothesis and assembly steps, pausing for user approval; rejection triggers error handling, approval proceeds to remaining steps. | MUST | BRD-V1-005, BRD-PLAN-004, BRD-PLAN-005 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-006 | Plan summary MUST include objective and expected evidence items. | MUST | BRD-PLAN-007 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-007 | Plan summary MUST include assumptions and risks. | MUST | BRD-PLAN-008 | 1.1 | 13 Jan 2026 | — |
+| FLOW-V1-008 | Replan output MUST highlight what changed and why with change summary and rationale. | MUST | BRD-PLAN-009 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 3. visualization Flow (FLOW-VIZ)
 
-### FLOW-VIZ-001: Step Count
-**Priority**: P1  
-**Description**: visualization flow MUST have exactly 15 steps.
-
----
-
-### FLOW-VIZ-002: Intent First
-**Priority**: P0  
-**Description**: visualization flow MUST start with intent_interpretation agent step.
-
-**Acceptance Criteria**:
-- [ ] planning_agent executes as first step
-- [ ] Intent interpretation happens before data reading
-
----
-
-### FLOW-VIZ-003: Dual Planning
-**Priority**: P1  
-**Description**: visualization flow MUST use planning_agent twice.
-
-**Acceptance Criteria**:
-- [ ] First use: intent_interpretation (step 1)
-- [ ] Second use: planning (step 6, after sufficiency_eval)
-
----
-
-### FLOW-VIZ-004: Decision Packet HTML
-**Priority**: P1  
-**Description**: visualization flow MUST render decision_packet.html.
-
-**Acceptance Criteria**:
-- [ ] render_decision_packet_html step is present
-- [ ] decision_packet.html is produced
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-VIZ-001 | visualization flow MUST have exactly 15 steps. | MUST | BRD-FLOW-003 | 1.1 | 13 Jan 2026 | — |
+| FLOW-VIZ-002 | visualization flow MUST start with intent_interpretation agent step using planning_agent before data reading. | MUST | BRD-VIZ-002 | 1.1 | 13 Jan 2026 | — |
+| FLOW-VIZ-003 | visualization flow MUST use planning_agent twice: first for intent_interpretation (step 1), second for planning (step 6 after sufficiency_eval). | MUST | BRD-VIZ-002, BRD-VIZ-004 | 1.1 | 13 Jan 2026 | — |
+| FLOW-VIZ-004 | visualization flow MUST include render_decision_packet_html step producing decision_packet.html. | MUST | BRD-VIZ-006 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 4. User Input Steps (FLOW-INPUT)
 
-### FLOW-INPUT-001: viz_preferences Schema
-**Priority**: P0  
-**Description**: viz_preferences MUST validate against defined schema.
-
-**Schema**:
-```yaml
-properties:
-  chart_type:
-    type: string
-    enum: [bar, line, area, scatter]
-  metric_focus:
-    type: string
-    enum: [mean, sum, median, growth_rate, anomalies]
-  include_hypothesis_checks:
-    type: boolean
-  notes:
-    type: string
-```
-
----
-
-### FLOW-INPUT-002: Required Fields
-**Priority**: P0  
-**Description**: viz_preferences MUST require chart_type and metric_focus.
-
-**Acceptance Criteria**:
-- [ ] Step fails validation without chart_type
-- [ ] Step fails validation without metric_focus
-- [ ] include_hypothesis_checks and notes are optional
-
----
-
-### FLOW-INPUT-003: Default Values
-**Priority**: P1  
-**Description**: viz_preferences MUST provide sensible defaults.
-
-| Field | ade_v1 Default | visualization Default |
-|-------|----------------|----------------------|
-| chart_type | bar | bar |
-| metric_focus | mean | anomalies |
-| include_hypothesis_checks | true | true |
-| notes | "" | "" |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-INPUT-001 | viz_preferences MUST validate against schema with properties: chart_type (enum: bar/line/area/scatter), metric_focus (enum: mean/sum/median/growth_rate/anomalies), include_hypothesis_checks (boolean), notes (string). | MUST | BRD-PREF-001, BRD-PREF-002, BRD-PREF-003, BRD-PREF-004 | 1.1 | 13 Jan 2026 | — |
+| FLOW-INPUT-002 | viz_preferences MUST require chart_type and metric_focus; include_hypothesis_checks and notes are optional. | MUST | BRD-PREF-001, BRD-PREF-002 | 1.1 | 13 Jan 2026 | — |
+| FLOW-INPUT-003 | viz_preferences MUST provide defaults: chart_type=bar, metric_focus=mean (ade_v1) or anomalies (visualization), include_hypothesis_checks=true, notes="". | MUST | BRD-PREF-001, BRD-PREF-002 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 5. Conditional Execution (FLOW-COND)
 
-### FLOW-COND-001: Hypothesis Toggle
-**Priority**: P1  
-**Description**: Hypothesis tests MUST respect include_hypothesis_checks flag.
-
-**Acceptance Criteria**:
-- [ ] When false, hypothesis tools return status: "skipped"
-- [ ] When true, hypothesis tools execute normally
-- [ ] Skipped tools still produce valid output structure
-
----
-
-### FLOW-COND-002: Enabled Parameter
-**Priority**: P1  
-**Description**: Hypothesis tools MUST receive enabled parameter from user input.
-
-```yaml
-params:
-  enabled: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}"
-```
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-COND-001 | Hypothesis tests MUST respect include_hypothesis_checks flag: when false return status="skipped", when true execute normally, skipped tools produce valid output structure. | MUST | BRD-V1-007, BRD-VIZ-008 | 1.1 | 13 Jan 2026 | — |
+| FLOW-COND-002 | Hypothesis tools MUST receive enabled parameter from user input via artifact reference: "{{artifacts.user_input.viz_preferences.values.include_hypothesis_checks}}". | MUST | BRD-V1-007 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 6. Error Handling (FLOW-ERR)
 
-### FLOW-ERR-001: Retry Configuration
-**Priority**: P1  
-**Description**: data_reader step MUST have retry configuration.
-
-```yaml
-retry:
-  max_attempts: 2
-  backoff_seconds: 1
-```
-
----
-
-### FLOW-ERR-002: Fallback Chart Type
-**Priority**: P1  
-**Description**: build_chart_spec MUST use fallback when user selection is incompatible.
-
-**Acceptance Criteria**:
-- [ ] fallback_chart_type: "bar" is configured
-- [ ] Incompatible selections fall back gracefully
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-ERR-001 | data_reader step MUST have retry configuration with max_attempts: 2 and backoff_seconds: 1. | MUST | BRD-V1-003 | 1.1 | 13 Jan 2026 | — |
+| FLOW-ERR-002 | build_chart_spec MUST use fallback_chart_type="bar" when user selection is incompatible. | MUST | BRD-PREF-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## 7. Artifact References (FLOW-ARTF)
 
-### FLOW-ARTF-001: Tool Output Reference
-**Priority**: P0  
-**Description**: Tool outputs MUST be referenceable via artifact path.
-
-**Syntax**: `{{artifacts.tool.<tool_name>.output.<field>}}`
-
----
-
-### FLOW-ARTF-002: User Input Reference
-**Priority**: P0  
-**Description**: User inputs MUST be referenceable via artifact path.
-
-**Syntax**: `{{artifacts.user_input.<form_id>.values.<field>}}`
-
----
-
-### FLOW-ARTF-003: Agent Output Reference
-**Priority**: P0  
-**Description**: Agent outputs MUST be referenceable via artifact path.
-
-**Syntax**: `{{artifacts.agent.<agent_name>.output.<field>}}`
-
----
-
-### FLOW-ARTF-004: Payload Reference
-**Priority**: P0  
-**Description**: Payload fields MUST be referenceable directly.
-
-**Syntax**: `{{payload.<field>}}`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| FLOW-ARTF-001 | Tool outputs MUST be referenceable via syntax: {{artifacts.tool.<tool_name>.output.<field>}}. | MUST | BRD-DET-001 | 1.1 | 13 Jan 2026 | — |
+| FLOW-ARTF-002 | User inputs MUST be referenceable via syntax: {{artifacts.user_input.<form_id>.values.<field>}}. | MUST | BRD-V1-004, BRD-VIZ-003 | 1.1 | 13 Jan 2026 | — |
+| FLOW-ARTF-003 | Agent outputs MUST be referenceable via syntax: {{artifacts.agent.<agent_name>.output.<field>}}. | MUST | BRD-VIZ-002 | 1.1 | 13 Jan 2026 | — |
+| FLOW-ARTF-004 | Payload fields MUST be referenceable via syntax: {{payload.<field>}}. | MUST | BRD-V1-001, BRD-VIZ-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## Cross-References
 
-- **System Design**: [flows.md](../04_systemdesign/flows.md)
 - **BRD**: [BRD-flows.md](../01_brd/BRD-flows.md)

@@ -1,16 +1,17 @@
 # Acceptance Criteria Technical Specification
 
 > **Document ID**: ACC  
-> **Version**: 1.1  
+> **Version**: V1.2  
 > **Status**: V1 Release  
 > **Last Updated**: 2026-01-13  
 
-### Version History
+## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-01-12 | Initial V1 specification |
 | 1.1.0 | 2026-01-13 | Added: §2.6 Semantic Phase Coverage, §2.7 Architecture Invariant Tests, §12.1 Explicit Non-Goals, §16 BRD Requirement Mapping |
+| V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 
 ---
 
@@ -20,228 +21,88 @@ This specification defines acceptance criteria for the master agentic platform. 
 requirements in other techspec documents are considered accepted when corresponding 
 tests pass at the specified coverage levels.
 
-### 1.1 Implementation References
-
-| Component | File |
-|-----------|------|
-| Test Configuration | `pytest.ini` |
-| Test Fixtures | `tests/conftest.py` |
-| Unit Tests | `tests/unit/` |
-| Integration Tests | `tests/integration/` |
-| Architecture Tests | `tests/architecture/` |
-| Acceptance Tests | `tests/acceptance_intelligence/` |
-
----
-
 ## 2. Test Categories
 
 ### 2.1 Unit Tests
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-UNIT-001** | [V1] Unit tests MUST test individual functions/methods in isolation | MUST |
-| **ACC-UNIT-002** | [V1] Unit tests MUST mock all external dependencies | MUST |
-| **ACC-UNIT-003** | [V1] Unit tests MUST be located in `tests/unit/` directory | MUST |
-| **ACC-UNIT-004** | [V1] Unit test files MUST follow pattern `test_<module>.py` | MUST |
-| **ACC-UNIT-005** | [V1] Unit test functions MUST follow pattern `test_<behavior>` | MUST |
-| **ACC-UNIT-006** | [V1] Unit tests MUST complete within 1 second per test | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-UNIT-001 | Unit tests MUST test individual functions/methods in isolation | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-UNIT-002 | Unit tests MUST mock all external dependencies | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-UNIT-003 | Unit tests MUST be located in `tests/unit/` directory | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-UNIT-004 | Unit test files MUST follow pattern `test_<module>.py` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-UNIT-005 | Unit test functions MUST follow pattern `test_<behavior>` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-UNIT-006 | Unit tests MUST complete within 1 second per test | SHOULD | BRD-OPS-033 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/unit/`
 
 ### 2.2 Integration Tests
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-INT-001** | [V1] Integration tests MUST test component interactions | MUST |
-| **ACC-INT-002** | [V1] Integration tests MAY use real dependencies (DB, filesystem) | MAY |
-| **ACC-INT-003** | [V1] Integration tests MUST be located in `tests/integration/` directory | MUST |
-| **ACC-INT-004** | [V1] Integration tests MUST clean up resources after execution | MUST |
-| **ACC-INT-005** | [V1] Integration tests SHOULD use test fixtures for setup/teardown | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-INT-001 | Integration tests MUST test component interactions | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INT-002 | Integration tests MAY use real dependencies (DB, filesystem) | MAY | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INT-003 | Integration tests MUST be located in `tests/integration/` directory | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INT-004 | Integration tests MUST clean up resources after execution | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INT-005 | Integration tests SHOULD use test fixtures for setup/teardown | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/integration/`
 
 ### 2.3 Architecture Tests
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-ARCH-001** | [V1] Architecture tests MUST verify layer boundaries | MUST |
-| **ACC-ARCH-002** | [V1] Architecture tests MUST verify import restrictions | MUST |
-| **ACC-ARCH-003** | [V1] Architecture tests MUST verify contract compliance | MUST |
-| **ACC-ARCH-004** | [V1] Architecture tests MUST be located in `tests/architecture/` directory | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-ARCH-001 | Architecture tests MUST verify layer boundaries | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-ARCH-002 | Architecture tests MUST verify import restrictions | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-ARCH-003 | Architecture tests MUST verify contract compliance | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-ARCH-004 | Architecture tests MUST be located in `tests/architecture/` directory | MUST | BRD-OPS-ARCH-006 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/architecture/`
 
 ### 2.5 Semantic Interpretation Tests
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-SEM-001** | [V1] `test_semantic_phase_is_mandatory` MUST verify pipeline always calls semantic phase before step execution | MUST |
-| **ACC-SEM-002** | [V1] `test_stop_blocks_execution` MUST verify `ASK_USER`/`ABORT` prevents planning/tool execution | MUST |
-| **ACC-SEM-003** | [V1] `test_product_adapter_isolated` MUST verify: products supply interpret/validate; core never imports product domain code; products never import core execution internals | MUST |
-| **ACC-SEM-004** | [V1] Semantic tests MUST be located in `tests/architecture/test_semantic_isolation.py` | MUST |
-| **ACC-SEM-005** | [V1] Semantic tests MUST use mock products to verify adapter interface contract | MUST |
-
-**Test Specifications**:
-
-```python
-# tests/architecture/test_semantic_isolation.py
-
-def test_semantic_phase_is_mandatory():
-    """
-    Verifies: ORC-SEM-001, ORC-SEM-003
-    
-    Ensures that the orchestrator always executes semantic_interpretation
-    phase before any step execution, unless explicitly skipped via config.
-    """
-    ...
-
-def test_stop_blocks_execution():
-    """
-    Verifies: ORC-SEM-STOP-001, ORC-SEM-STOP-004, ORC-SEM-STOP-007
-    
-    Ensures that NextAction=ASK_USER or ABORT prevents planning and tool
-    execution. Run must pause or fail with structured response.
-    """
-    ...
-
-def test_product_adapter_isolated():
-    """
-    Verifies: PROD-SEM-INT-005, PROD-SEM-INT-006, PROD-SEM-VAL-005, PROD-SEM-VAL-006
-    
-    Ensures:
-    1. Product adapters supply interpret() and validate() hooks
-    2. Core orchestrator never imports product domain code
-    3. Product adapters never import core/orchestrator/* internals
-    """
-    ...
-```
-
-**Implementation**: `tests/architecture/test_semantic_isolation.py`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-SEM-001 | `test_semantic_phase_is_mandatory` MUST verify pipeline always calls semantic phase before step execution | MUST | BRD-OPS-ARCH-001 | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-002 | `test_stop_blocks_execution` MUST verify `ASK_USER`/`ABORT` prevents planning/tool execution | MUST | BRD-OPS-ARCH-002, BRD-OPS-ARCH-003 | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-003 | `test_product_adapter_isolated` MUST verify: products supply interpret/validate; core never imports product domain code; products never import core execution internals | MUST | BRD-OPS-ARCH-004, BRD-OPS-ARCH-005 | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-004 | Semantic tests MUST be located in `tests/architecture/test_semantic_isolation.py` | MUST | BRD-OPS-ARCH-006 | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-005 | Semantic tests MUST use mock products to verify adapter interface contract | MUST | BRD-OPS-ARCH-007 | 1.1 | 13 Jan 2026 | — |
 
 ### 2.4 Acceptance/Intelligence Tests
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-AI-001** | [V1] Acceptance tests MUST verify end-to-end behavior | MUST |
-| **ACC-AI-002** | [V1] Acceptance tests MUST cover critical user journeys | MUST |
-| **ACC-AI-003** | [V1] Acceptance tests MUST be located in `tests/acceptance_intelligence/` directory | MUST |
-| **ACC-AI-004** | [V1] Acceptance tests SHOULD use real product flows | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-AI-001 | Acceptance tests MUST verify end-to-end behavior | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-AI-002 | Acceptance tests MUST cover critical user journeys | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-AI-003 | Acceptance tests MUST be located in `tests/acceptance_intelligence/` directory | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-AI-004 | Acceptance tests SHOULD use real product flows | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/acceptance_intelligence/`
 
 ### 2.6 Semantic Phase Coverage Tests (Added: 2026-01-13)
 
 > **Source**: BRD-OPS-ARCH-001...007, INV-1, INV-3
 
-| ID | Requirement | Level | Ver |
-|----|-------------|-------|-----|
-| **ACC-SEM-COV-001** | [V1] `test_semantic_envelope_all_fields` MUST verify all SemanticEnvelope fields are populated | MUST | 1.1 |
-| **ACC-SEM-COV-002** | [V1] `test_confidence_threshold_enforced` MUST verify low confidence blocks execution | MUST | 1.1 |
-| **ACC-SEM-COV-003** | [V1] `test_ask_user_produces_clarification` MUST verify ClarificationRequest is generated | MUST | 1.1 |
-| **ACC-SEM-COV-004** | [V1] `test_abort_produces_artifact` MUST verify AbortArtifact is generated | MUST | 1.1 |
-| **ACC-SEM-COV-005** | [V1] `test_semantic_events_emitted` MUST verify all required trace events are emitted | MUST | 1.1 |
-| **ACC-SEM-COV-006** | [V1] `test_entity_extraction_coverage` MUST verify entities are extracted correctly | MUST | 1.1 |
-| **ACC-SEM-COV-007** | [V1] `test_ambiguity_detection_coverage` MUST verify ambiguities are detected | MUST | 1.1 |
-
-**Test Specifications**:
-
-```python
-# tests/architecture/test_semantic_coverage.py
-
-def test_semantic_envelope_all_fields():
-    """
-    Verifies: ORC-SEM-002, ORC-SEM-ENV-001...007
-    
-    Ensures that SemanticEnvelope has all required fields populated
-    after semantic interpretation phase completes.
-    """
-    ...
-
-def test_confidence_threshold_enforced():
-    """
-    Verifies: GOV-SEM-CONF-001...007
-    
-    Ensures that confidence below threshold blocks execution
-    and returns appropriate error response.
-    """
-    ...
-
-def test_ask_user_produces_clarification():
-    """
-    Verifies: INT-EXIT-001...002, INT-EXIT-ART-001...004
-    
-    Ensures that ASK_USER exit produces a properly structured
-    ClarificationRequest with question and options.
-    """
-    ...
-
-def test_abort_produces_artifact():
-    """
-    Verifies: INT-EXIT-003...005, ORC-SEM-STOP-004
-    
-    Ensures that ABORT exit produces a properly structured
-    AbortArtifact with reason and partial_work.
-    """
-    ...
-```
-
-**Implementation**: `tests/architecture/test_semantic_coverage.py`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-SEM-COV-001 | `test_semantic_envelope_all_fields` MUST verify all SemanticEnvelope fields are populated | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-002 | `test_confidence_threshold_enforced` MUST verify low confidence blocks execution | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-003 | `test_ask_user_produces_clarification` MUST verify ClarificationRequest is generated | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-004 | `test_abort_produces_artifact` MUST verify AbortArtifact is generated | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-005 | `test_semantic_events_emitted` MUST verify all required trace events are emitted | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-006 | `test_entity_extraction_coverage` MUST verify entities are extracted correctly | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEM-COV-007 | `test_ambiguity_detection_coverage` MUST verify ambiguities are detected | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ### 2.7 Architecture Invariant Tests (Added: 2026-01-13)
 
 > **Source**: BRD-OPS-ARCH-001...007, INV-1...INV-10
 
-| ID | Requirement | Level | Ver |
-|----|-------------|-------|-----|
-| **ACC-INV-001** | [V1] `test_inv1_reasoning_as_primitive` MUST verify agents provide reasoning, not truth | MUST | 1.1 |
-| **ACC-INV-002** | [V1] `test_inv2_critic_non_controlling` MUST verify critics suggest, don't command | MUST | 1.1 |
-| **ACC-INV-003** | [V1] `test_inv3_probabilistic_semantics` MUST verify all interpretations have confidence | MUST | 1.1 |
-| **ACC-INV-004** | [V1] `test_inv4_auditable_decisions` MUST verify all decisions produce artifacts | MUST | 1.1 |
-| **ACC-INV-005** | [V1] `test_inv5_orchestrator_control` MUST verify iteration is orchestrator-owned | MUST | 1.1 |
-| **ACC-INV-006** | [V1] `test_inv6_explicit_platform_laws` MUST verify governance cannot be bypassed | MUST | 1.1 |
-| **ACC-INV-007** | [V1] `test_inv7_reasoning_observability` MUST verify all reasoning is traced | MUST | 1.1 |
-
-**Test Specifications**:
-
-```python
-# tests/architecture/test_invariants.py
-
-def test_inv2_critic_non_controlling():
-    """
-    Verifies: INV-2 - Bounded Critique
-    
-    Ensures that CriticEvaluator outputs are suggestions that
-    the orchestrator can ignore, not commands that must be followed.
-    """
-    critic_output = {"recommendation": "FETCH_MORE_EVIDENCE"}
-    # Orchestrator must be able to override
-    assert orchestrator.can_ignore_recommendation(critic_output)
-
-def test_inv3_probabilistic_semantics():
-    """
-    Verifies: INV-3 - Probabilistic Semantics
-    
-    Ensures that all LLM-derived interpretations carry confidence
-    scores and are never treated as deterministic facts.
-    """
-    envelope = semantic_interpret(user_input)
-    assert 0.0 <= envelope.confidence <= 1.0
-    assert envelope.proposed_next_action != "EXECUTE_BLINDLY"
-
-def test_inv6_explicit_platform_laws():
-    """
-    Verifies: INV-6 - Explicit Platform Laws
-    
-    Ensures that governance hooks cannot be bypassed by any code path
-    and that all hooks are called in the correct order.
-    """
-    # Verify hook chain is complete
-    assert all_hooks_called(run_context)
-    # Verify no bypass flags exist
-    assert not hasattr(settings, 'skip_governance')
-```
-
-**Implementation**: `tests/architecture/test_invariants.py`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-INV-001 | `test_inv1_reasoning_as_primitive` MUST verify agents provide reasoning, not truth | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-002 | `test_inv2_critic_non_controlling` MUST verify critics suggest, don't command | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-003 | `test_inv3_probabilistic_semantics` MUST verify all interpretations have confidence | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-004 | `test_inv4_auditable_decisions` MUST verify all decisions produce artifacts | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-005 | `test_inv5_orchestrator_control` MUST verify iteration is orchestrator-owned | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-006 | `test_inv6_explicit_platform_laws` MUST verify governance cannot be bypassed | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-INV-007 | `test_inv7_reasoning_observability` MUST verify all reasoning is traced | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -249,36 +110,36 @@ def test_inv6_explicit_platform_laws():
 
 ### 3.1 Overall Coverage
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-COV-001** | [V1] Overall line coverage MUST be ≥80% | MUST |
-| **ACC-COV-002** | [V1] Overall branch coverage SHOULD be ≥70% | SHOULD |
-| **ACC-COV-003** | [V1] Coverage reports MUST be generated on CI runs | MUST |
-| **ACC-COV-004** | [V1] Coverage MUST NOT decrease without justification | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-COV-001 | Overall line coverage MUST be ≥80% | MUST | BRD-OPS-030 | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-002 | Overall branch coverage SHOULD be ≥70% | SHOULD | BRD-OPS-031 | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-003 | Coverage reports MUST be generated on CI runs | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-004 | Coverage MUST NOT decrease without justification | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ### 3.2 Module-Specific Coverage
 
-| ID | Module | Minimum Coverage | Level |
-|----|--------|-----------------|-------|
-| **ACC-COV-010** | `core/orchestrator/` | 85% | MUST |
-| **ACC-COV-011** | `core/agents/` | 80% | MUST |
-| **ACC-COV-012** | `core/tools/` | 80% | MUST |
-| **ACC-COV-013** | `core/governance/` | 85% | MUST |
-| **ACC-COV-014** | `core/memory/` | 80% | MUST |
-| **ACC-COV-015** | `core/knowledge/` | 75% | SHOULD |
-| **ACC-COV-016** | `core/contracts/` | 90% | MUST |
-| **ACC-COV-017** | `gateway/api/` | 80% | MUST |
-| **ACC-COV-018** | `gateway/cli/` | 75% | SHOULD |
-| **ACC-COV-019** | `gateway/ui/` | 60% | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-COV-010 | Module `core/orchestrator/` MUST maintain ≥85% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-011 | Module `core/agents/` MUST maintain ≥80% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-012 | Module `core/tools/` MUST maintain ≥80% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-013 | Module `core/governance/` MUST maintain ≥85% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-014 | Module `core/memory/` MUST maintain ≥80% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-015 | Module `core/knowledge/` SHOULD maintain ≥75% coverage | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-016 | Module `core/contracts/` MUST maintain ≥90% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-017 | Module `gateway/api/` MUST maintain ≥80% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-018 | Module `gateway/cli/` SHOULD maintain ≥75% coverage | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-019 | Module `gateway/ui/` SHOULD maintain ≥60% coverage | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ### 3.3 Critical Path Coverage
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-COV-020** | [V1] Run lifecycle (start → complete) MUST have 100% path coverage | MUST |
-| **ACC-COV-021** | [V1] Error handling paths MUST have ≥90% coverage | MUST |
-| **ACC-COV-022** | [V1] Security-sensitive code MUST have 100% coverage | MUST |
-| **ACC-COV-023** | [V1] Governance hooks MUST have 100% coverage | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-COV-020 | Run lifecycle (start → complete) MUST have 100% path coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-021 | Error handling paths MUST have ≥90% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-022 | Security-sensitive code MUST have 100% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-COV-023 | Governance hooks MUST have 100% coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -286,27 +147,25 @@ def test_inv6_explicit_platform_laws():
 
 ### 4.1 Common Fixtures
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-FIX-001** | [V1] `conftest.py` MUST provide `mock_settings` fixture | MUST |
-| **ACC-FIX-002** | [V1] `conftest.py` MUST provide `mock_memory_backend` fixture | MUST |
-| **ACC-FIX-003** | [V1] `conftest.py` MUST provide `mock_tracer` fixture | MUST |
-| **ACC-FIX-004** | [V1] `conftest.py` MUST provide `temp_observability_dir` fixture | MUST |
-| **ACC-FIX-005** | [V1] `conftest.py` MUST provide `sample_run_context` fixture | MUST |
-| **ACC-FIX-006** | [V1] `conftest.py` MUST provide `sample_flow` fixture | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-FIX-001 | `conftest.py` MUST provide `mock_settings` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-002 | `conftest.py` MUST provide `mock_memory_backend` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-003 | `conftest.py` MUST provide `mock_tracer` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-004 | `conftest.py` MUST provide `temp_observability_dir` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-005 | `conftest.py` MUST provide `sample_run_context` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-006 | `conftest.py` MUST provide `sample_flow` fixture | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/conftest.py`
 
 ### 4.2 Fixture Isolation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-FIX-010** | [V1] Fixtures MUST NOT share mutable state between tests | MUST |
-| **ACC-FIX-011** | [V1] Database fixtures MUST use separate test databases | MUST |
-| **ACC-FIX-012** | [V1] File fixtures MUST use temporary directories | MUST |
-| **ACC-FIX-013** | [V1] All fixtures MUST clean up resources on teardown | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-FIX-010 | Fixtures MUST NOT share mutable state between tests | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-011 | Database fixtures MUST use separate test databases | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-012 | File fixtures MUST use temporary directories | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-FIX-013 | All fixtures MUST clean up resources on teardown | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/conftest.py`
 
 ---
 
@@ -314,25 +173,23 @@ def test_inv6_explicit_platform_laws():
 
 ### 5.1 Contract Validation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-VAL-001** | [V1] All Pydantic models MUST have validation tests | MUST |
-| **ACC-VAL-002** | [V1] Schema validation tests MUST cover valid inputs | MUST |
-| **ACC-VAL-003** | [V1] Schema validation tests MUST cover invalid inputs | MUST |
-| **ACC-VAL-004** | [V1] Schema validation tests MUST verify error messages | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-VAL-001 | All Pydantic models MUST have validation tests | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-002 | Schema validation tests MUST cover valid inputs | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-003 | Schema validation tests MUST cover invalid inputs | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-004 | Schema validation tests MUST verify error messages | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/unit/core/contracts/`
 
 ### 5.2 API Validation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-VAL-010** | [V1] All API endpoints MUST have request validation tests | MUST |
-| **ACC-VAL-011** | [V1] All API endpoints MUST have response validation tests | MUST |
-| **ACC-VAL-012** | [V1] API error responses MUST match error schema | MUST |
-| **ACC-VAL-013** | [V1] API validation MUST test boundary conditions | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-VAL-010 | All API endpoints MUST have request validation tests | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-011 | All API endpoints MUST have response validation tests | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-012 | API error responses MUST match error schema | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-VAL-013 | API validation MUST test boundary conditions | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/integration/gateway/`
 
 ---
 
@@ -340,20 +197,20 @@ def test_inv6_explicit_platform_laws():
 
 ### 6.1 Test Performance
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-PERF-001** | [V1] Full test suite MUST complete within 10 minutes | MUST |
-| **ACC-PERF-002** | [V1] Unit test suite MUST complete within 2 minutes | MUST |
-| **ACC-PERF-003** | [V1] Integration test suite MUST complete within 5 minutes | SHOULD |
-| **ACC-PERF-004** | [V1] Individual tests MUST NOT exceed 30 seconds | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-PERF-001 | Full test suite MUST complete within 10 minutes | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-PERF-002 | Unit test suite MUST complete within 2 minutes | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-PERF-003 | Integration test suite MUST complete within 5 minutes | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-PERF-004 | Individual tests MUST NOT exceed 30 seconds | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ### 6.2 Benchmarks
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-PERF-010** | [V1.1] Critical operations SHOULD have benchmark tests | SHOULD |
-| **ACC-PERF-011** | [V1.1] Benchmark results SHOULD be tracked over time | SHOULD |
-| **ACC-PERF-012** | [V1.1] Performance regressions SHOULD fail CI | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-PERF-010 | Critical operations SHOULD have benchmark tests | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-PERF-011 | Benchmark results SHOULD be tracked over time | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-PERF-012 | Performance regressions SHOULD fail CI | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -361,24 +218,23 @@ def test_inv6_explicit_platform_laws():
 
 ### 7.1 Continuous Integration
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-CI-001** | [V1] All tests MUST pass before merge | MUST |
-| **ACC-CI-002** | [V1] Tests MUST run on Python 3.11+ | MUST |
-| **ACC-CI-003** | [V1] Tests MUST run on both Linux and macOS | SHOULD |
-| **ACC-CI-004** | [V1] Type checking (mypy/pyright) MUST pass | SHOULD |
-| **ACC-CI-005** | [V1] Linting (ruff) MUST pass | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-CI-001 | All tests MUST pass before merge | MUST | BRD-OPS-032, BRD-OPS-ARCH-007 | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-002 | Tests MUST run on Python 3.11+ | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-003 | Tests MUST run on both Linux and macOS | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-004 | Type checking (mypy/pyright) MUST pass | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-005 | Linting (ruff) MUST pass | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ### 7.2 Test Execution
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-CI-010** | [V1] Tests MUST be run via pytest | MUST |
-| **ACC-CI-011** | [V1] Test markers MUST be used for categorization | MUST |
-| **ACC-CI-012** | [V1] Slow tests MUST be marked with `@pytest.mark.slow` | MUST |
-| **ACC-CI-013** | [V1] Tests requiring external services MUST be marked with `@pytest.mark.integration` | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-CI-010 | Tests MUST be run via pytest | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-011 | Test markers MUST be used for categorization | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-012 | Slow tests MUST be marked with `@pytest.mark.slow` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-CI-013 | Tests requiring external services MUST be marked with `@pytest.mark.integration` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `pytest.ini`
 
 ---
 
@@ -386,15 +242,14 @@ def test_inv6_explicit_platform_laws():
 
 ### 8.1 Security Validation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-SEC-001** | [V1] Redaction logic MUST have dedicated tests | MUST |
-| **ACC-SEC-002** | [V1] Path traversal prevention MUST be tested | MUST |
-| **ACC-SEC-003** | [V1] Input sanitization MUST be tested | MUST |
-| **ACC-SEC-004** | [V1] Payload size limits MUST be tested | MUST |
-| **ACC-SEC-005** | [V1] Sensitive data MUST NOT appear in test logs | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-SEC-001 | Redaction logic MUST have dedicated tests | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEC-002 | Path traversal prevention MUST be tested | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEC-003 | Input sanitization MUST be tested | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEC-004 | Payload size limits MUST be tested | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-SEC-005 | Sensitive data MUST NOT appear in test logs | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `tests/unit/core/governance/test_security.py`
 
 ---
 
@@ -402,11 +257,11 @@ def test_inv6_explicit_platform_laws():
 
 ### 9.1 Documentation Validation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-DOC-001** | [V1] README examples SHOULD be executable | SHOULD |
-| **ACC-DOC-002** | [V1] API documentation SHOULD match implementation | SHOULD |
-| **ACC-DOC-003** | [V1] Configuration examples SHOULD be valid | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-DOC-001 | README examples SHOULD be executable | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-DOC-002 | API documentation SHOULD match implementation | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-DOC-003 | Configuration examples SHOULD be valid | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -414,25 +269,11 @@ def test_inv6_explicit_platform_laws():
 
 ### 10.1 Traceability Rules
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-TRACE-001** | [V1] Each techspec requirement MUST have corresponding test(s) | MUST |
-| **ACC-TRACE-002** | [V1] Test docstrings SHOULD reference requirement IDs | SHOULD |
-| **ACC-TRACE-003** | [V1] Traceability matrix MUST be maintained in techspec documents | MUST |
-
-### 10.2 Mapping Format
-
-Tests SHOULD reference requirements in docstrings:
-
-```python
-def test_run_lifecycle_start():
-    """
-    Verifies: ORC-RUN-001, ORC-RUN-002
-    
-    Ensures that run creation follows the lifecycle contract.
-    """
-    ...
-```
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-TRACE-001 | Each techspec requirement MUST have corresponding test(s) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-TRACE-002 | Test docstrings SHOULD reference requirement IDs | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-TRACE-003 | Traceability matrix MUST be maintained in `TS-COVERAGE.md` for techspec-to-BRD coverage | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -440,29 +281,16 @@ def test_run_lifecycle_start():
 
 ### 11.1 Test Data Management
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **ACC-DATA-001** | [V1] Test data MUST be version controlled | MUST |
-| **ACC-DATA-002** | [V1] Test data MUST NOT contain sensitive information | MUST |
-| **ACC-DATA-003** | [V1] Test data SHOULD be minimal but representative | SHOULD |
-| **ACC-DATA-004** | [V1] Large test datasets SHOULD use fixtures, not files | SHOULD |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-DATA-001 | Test data MUST be version controlled | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-DATA-002 | Test data MUST NOT contain sensitive information | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-DATA-003 | Test data SHOULD be minimal but representative | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| ACC-DATA-004 | Large test datasets SHOULD use fixtures, not files | SHOULD | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-## 12. Acceptance Criteria Summary
-
-| Domain | Spec Document | Requirement Count | Test Coverage |
-|--------|---------------|-------------------|---------------|
-| Orchestration | ORC-orchestration.md | ~100 | ≥85% |
-| Agents/Tools | AGT-agents-tools.md | ~100 | ≥80% |
-| Governance | GOV-governance.md | ~140 | ≥85% |
-| Memory | MEM-memory.md | ~65 | ≥80% |
-| Intelligence | INT-intelligence.md | ~130 | ≥75% |
-| Gateway | GW-gateway.md | ~145 | ≥75% |
-| Products | PROD-products.md | ~95 | ≥80% |
-| **Total** | **All** | **~775** | **≥80%** |
-
-### 12.1 Explicit Non-Goals (Added: 2026-01-13)
+## 12. Explicit Non-Goals (Added: 2026-01-13)
 
 > **Acceptance Tests MUST NOT**:
 
@@ -476,53 +304,3 @@ def test_run_lifecycle_start():
 | Performance as acceptance | Performance is SLO, not acceptance | Test fails if >500ms |
 
 ---
-
-## 13. Future Considerations
-
-### 13.1 V1.1 Enhancements
-
-| ID | Feature | Description |
-|----|---------|-------------|
-| **ACC-FUTURE-001** | Mutation testing | Validate test quality |
-| **ACC-FUTURE-002** | Property-based testing | Hypothesis integration |
-| **ACC-FUTURE-003** | Load testing | K6/Locust integration |
-
-### 13.2 V2 Features
-
-| ID | Feature | Description |
-|----|---------|-------------|
-| **ACC-FUTURE-010** | Contract testing | Pact for API contracts |
-| **ACC-FUTURE-011** | Chaos testing | Fault injection |
-| **ACC-FUTURE-012** | Visual regression | UI screenshot testing |
-
----
-
-## 14. Traceability Matrix
-
-| Requirement | Implementation | Test | BRD Source |
-|-------------|----------------|------|------------|
-| ACC-UNIT-001 | `tests/unit/` | Self-validated | BRD-OPS-ARCH-001 |
-| ACC-INT-001 | `tests/integration/` | Self-validated | BRD-OPS-ARCH-002 |
-| ACC-COV-001 | `pytest.ini` | CI coverage report | BRD-OPS-ARCH-003 |
-| ACC-FIX-001 | `tests/conftest.py` | Self-validated | BRD-OPS-ARCH-004 |
-| ACC-CI-001 | CI configuration | CI pipeline | BRD-OPS-ARCH-005 |
-| ACC-SEM-001 | `tests/architecture/test_semantic_isolation.py` | `test_semantic_phase_is_mandatory` | BRD-OPS-ARCH-006 |
-| ACC-SEM-002 | `tests/architecture/test_semantic_isolation.py` | `test_stop_blocks_execution` | BRD-OPS-ARCH-006 |
-| ACC-SEM-003 | `tests/architecture/test_semantic_isolation.py` | `test_product_adapter_isolated` | BRD-OPS-ARCH-007 |
-| ACC-SEM-COV-001...007 | `tests/architecture/test_semantic_coverage.py` | Various | BRD-OPS-ARCH-006 |
-| ACC-INV-001...007 | `tests/architecture/test_invariants.py` | Various | BRD-OPS-ARCH-007 |
-
----
-
-## 15. BRD Requirement Mapping (Added: 2026-01-13)
-
-| BRD Requirement | Techspec Requirement(s) | Status |
-|-----------------|-------------------------|--------|
-| BRD-OPS-ARCH-001 | ACC-UNIT-001...006, ACC-COV-001...023 | Mapped |
-| BRD-OPS-ARCH-002 | ACC-INT-001...005 | Mapped |
-| BRD-OPS-ARCH-003 | ACC-ARCH-001...004 | Mapped |
-| BRD-OPS-ARCH-004 | ACC-FIX-001...013 | Mapped |
-| BRD-OPS-ARCH-005 | ACC-CI-001...007 | Mapped |
-| BRD-OPS-ARCH-006 | ACC-SEM-001...005, ACC-SEM-COV-001...007 | Mapped |
-| BRD-OPS-ARCH-007 | ACC-INV-001...007 | Mapped |
-| BRD-OPS-010...049 | ACC-TRACE-001...003, ACC-DATA-001...004 | Existing |

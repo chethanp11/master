@@ -1,9 +1,18 @@
 # TechSpec Coverage Matrix
 
 > **Document ID**: TS-COVERAGE  
-> **Version**: 1.1  
+> **Version**: V1.2  
 > **Last Updated**: 2026-01-13  
 > **Status**: V1 Release  
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1 | 2026-01-13 | Initial coverage mapping |
+| V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 
 ---
 

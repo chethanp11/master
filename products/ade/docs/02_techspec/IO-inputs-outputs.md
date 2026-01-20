@@ -1,478 +1,145 @@
-# ADE Input/Output Requirements
+# ADE Input/Output Technical Specification
 
 > **Document**: Technical Specification — Inputs and Outputs  
 > **Prefix**: IO-*  
-> **Requirements**: ~20
+> **Version**: 1.2  
+> **Last Updated**: 2026-01-20
 
 ---
 
-## Product Objectives
+## Version History
 
-### OBJ-001: Evidence References
-**Priority**: P0  
-**Description**: 100% of outputs MUST include evidence references.
-
----
-
-### OBJ-002: Reproducibility
-**Priority**: P0  
-**Description**: Same inputs MUST always produce same outputs.
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-01-13 | Initial release |
+| 1.1 | 2026-01-17 | Added evidence and artifact requirements |
+| 1.2 | 2026-01-20 | Normalized ADE techspec tables to canonical TSD format; removed non-derivable sections; cleaned BRD mappings. |
 
 ---
 
-### OBJ-003: Plan Approval
-**Priority**: P0  
-**Description**: All plans MUST require explicit user approval.
+## 1. Product Objectives
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-OBJ-001 | The ADE system MUST include evidence references in 100% of outputs. | MUST | BRD-OBJ-001 | 1.1 | 13 Jan 2026 | Maps to OBJ-001 |
+| IO-OBJ-002 | The ADE system MUST produce identical outputs for identical inputs. | MUST | BRD-OBJ-002 | 1.1 | 13 Jan 2026 | Reproducibility requirement |
+| IO-OBJ-003 | The ADE system MUST require explicit user approval for all plans before execution. | MUST | BRD-OBJ-003 | 1.1 | 13 Jan 2026 | — |
+| IO-OBJ-004 | The ADE system MUST include confidence_level, assumptions, and limitations in all outputs. | MUST | BRD-OBJ-004 | 1.1 | 13 Jan 2026 | Transparency fields |
+| IO-OBJ-005 | The ADE system SHOULD produce a report within 5 minutes of question submission. | SHOULD | BRD-OBJ-005 | 1.1 | 13 Jan 2026 | Time-to-report target |
+| IO-OBJ-006 | The ADE system MUST support at least 4 chart types (bar, line, area, scatter). | MUST | BRD-OBJ-006 | 1.1 | 13 Jan 2026 | — |
+| IO-OBJ-007 | The ADE system MUST allow users to toggle hypothesis checks on or off. | MUST | BRD-OBJ-007 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### OBJ-004: Transparency Fields
-**Priority**: P0  
-**Description**: Outputs MUST include confidence_level, assumptions, and limitations.
+## 2. Input Payload Requirements (IO-IN)
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-IN-001 | The ADE payload MUST include a dataset field. | MUST | BRD-FMT-001 | 1.1 | 13 Jan 2026 | Required for both flows |
+| IO-IN-002 | The ade_v1 flow MUST accept payload fields: dataset (required), prompt (optional), intent (optional), question (optional), instructions (optional). | MUST | BRD-V1-001, BRD-V1-003 | 1.1 | 13 Jan 2026 | — |
+| IO-IN-003 | The visualization flow MUST accept payload fields: dataset (required), prompt (optional). | MUST | BRD-VIZ-001 | 1.1 | 13 Jan 2026 | — |
+| IO-IN-004 | The ade_v1 flow MUST accept intent from alternate fields in priority order: prompt, intent, question, instructions. | MUST | BRD-V1-001, BRD-V1-002 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### OBJ-005: Time-to-Report
-**Priority**: P1  
-**Description**: Time from question to report SHOULD be under 5 minutes.
+## 3. Dataset Requirements (IO-DATA)
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-DATA-001 | The ADE system MUST accept datasets in CSV format with comma delimiter. | MUST | BRD-FMT-001 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-002 | The ADE system MUST treat the first row of CSV files as the header row. | MUST | BRD-FMT-003 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-003 | The ADE system MUST support UTF-8 encoding for dataset files. | MUST | BRD-FMT-002 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-004 | The ADE system MUST read user datasets from products/ade/staging/input/. | MUST | BRD-LOC-001 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-005 | The ADE system MUST read built-in datasets from products/ade/data/. | MUST | BRD-LOC-002 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-006 | The ADE system MUST provide the branded_cards_transactions dataset as a built-in dataset. | MUST | BRD-BUILTIN-001 | 1.1 | 13 Jan 2026 | Location: products/ade/data/branded_cards_transactions.csv |
+| IO-DATA-007 | The ADE system MUST resolve dataset names to file paths using case-sensitive matching. | MUST | BRD-LOC-003 | 1.1 | 13 Jan 2026 | — |
+| IO-DATA-008 | The ADE system MUST produce a clear error when a dataset file is missing. | MUST | BRD-LOC-004 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### OBJ-006: Chart Types
-**Priority**: P1  
-**Description**: At least 4 chart types MUST be available.
+## 4. User Input Requirements (IO-USER)
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-USER-001 | The viz_preferences user input MUST validate against a schema with properties: chart_type (enum: bar, line, area, scatter), metric_focus (enum: mean, sum, median, growth_rate, anomalies), include_hypothesis_checks (boolean), notes (string). | MUST | BRD-PREF-001, BRD-PREF-002, BRD-PREF-003 | 1.1 | 13 Jan 2026 | — |
+| IO-USER-002 | The viz_preferences user input MUST require chart_type and metric_focus fields. | MUST | BRD-PREF-001, BRD-PREF-002 | 1.1 | 13 Jan 2026 | — |
+| IO-USER-003 | The ade_v1 flow MUST use default values: chart_type=bar, metric_focus=mean, include_hypothesis_checks=true. | MUST | BRD-PREF-001, BRD-PREF-002 | 1.1 | 13 Jan 2026 | — |
+| IO-USER-004 | The visualization flow MUST use default values: chart_type=bar, metric_focus=anomalies, include_hypothesis_checks=true. | MUST | BRD-PREF-001, BRD-PREF-002 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### OBJ-007: Hypothesis Toggle
-**Priority**: P1  
-**Description**: Hypothesis checks MUST be toggleable.
+## 5. Output Requirements (IO-OUT)
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-OUT-001 | The ADE system MUST produce business_report.html as a primary output. | MUST | BRD-OUT-001 | 1.1 | 13 Jan 2026 | — |
+| IO-OUT-002 | The visualization flow MUST produce decision_packet.html as an additional output. | MUST | BRD-OUT-010 | 1.1 | 13 Jan 2026 | — |
+| IO-OUT-003 | The ADE system MUST write outputs to products/ade/staging/output/. | MUST | BRD-LOC-001 | 1.1 | 13 Jan 2026 | — |
+| IO-OUT-004 | The ADE system MUST produce HTML outputs that are valid HTML5 with DOCTYPE declaration. | MUST | BRD-OUT-002, BRD-OUT-011 | 1.1 | 13 Jan 2026 | — |
+| IO-OUT-005 | The ADE system MUST produce well-formed HTML with no unclosed tags. | MUST | BRD-HTML-003 | 1.1 | 13 Jan 2026 | — |
+| IO-OUT-006 | The export_pdf tool MAY produce ade.pdf, ade.html, and ade_stub.json as optional outputs. | MAY | BRD-PDF-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-## 1. Input Payload Requirements (IO-IN)
+## 6. Output Quality Requirements (IO-QUAL)
 
-### IO-IN-001: Dataset Required
-**Priority**: P0  
-**Description**: Payload MUST include dataset field.
-
-**Acceptance Criteria**:
-- [ ] dataset is required for both flows
-- [ ] Missing dataset causes validation error
-- [ ] Dataset name maps to CSV file
-
----
-
-### IO-IN-002: ade_v1 Payload Schema
-**Priority**: P0  
-**Description**: ade_v1 MUST accept defined payload fields.
-
-**Fields**:
-```json
-{
-  "dataset": "required",
-  "prompt": "optional",
-  "intent": "optional",
-  "question": "optional",
-  "instructions": "optional"
-}
-```
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-QUAL-001 | The ADE system MUST produce non-empty executive summaries that reflect key findings. | MUST | BRD-QUAL-001, BRD-QUAL-002 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-002 | The ADE system MUST produce key findings that include implications and map to evidence. | MUST | BRD-QUAL-001 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-003 | The ADE system SHOULD produce recommendations that include concrete actions when present. | SHOULD | BRD-QUAL-003 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-004 | The ADE system MUST produce narratives in human-readable plain-language text. | MUST | BRD-NARR-002 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-005 | The ADE system MUST render charts using valid Vega-Lite specifications. | MUST | BRD-QUAL-010, BRD-CHART-007 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-006 | The ADE system MUST render tables with visible column headers and no overflow clipping. | MUST | BRD-QUAL-011 | 1.1 | 13 Jan 2026 | — |
+| IO-QUAL-007 | The ADE system MUST produce HTML that renders correctly in Chrome, Firefox, and Safari. | MUST | BRD-QUAL-012 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### IO-IN-003: visualization Payload Schema
-**Priority**: P0  
-**Description**: visualization MUST accept defined payload fields.
+## 7. Version Transparency Requirements (IO-VER)
 
-**Fields**:
-```json
-{
-  "dataset": "required",
-  "prompt": "optional"
-}
-```
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-VER-001 | The ADE system MUST include product, flow, and schema versions in output metadata. | MUST | BRD-VER-001 | 1.1 | 13 Jan 2026 | — |
+| IO-VER-002 | The ADE system SHOULD record dataset_hash and input_hash in outputs. | SHOULD | BRD-VER-002 | 1.1 | 13 Jan 2026 | — |
+| IO-VER-003 | The ADE system MUST version-pin or disallow non-deterministic dependencies. | MUST | BRD-VER-003 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### IO-IN-004: Alternate Intent Fields
-**Priority**: P1  
-**Description**: ade_v1 MUST accept intent from multiple fields.
+## 8. Decision Authority Boundary (IO-DAB)
 
-**Priority Order**:
-1. `prompt` (primary)
-2. `intent`
-3. `question`
-4. `instructions`
-
----
-
-## 2. Dataset Requirements (IO-DATA)
-
-### IO-DATA-001: CSV Format
-**Priority**: P0  
-**Description**: Datasets MUST be CSV format.
-
-**Acceptance Criteria**:
-- [ ] Standard CSV with comma delimiter
-- [ ] First row is header
-- [ ] UTF-8 encoding
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-DAB-001 | The ADE system MUST label outputs as recommendations/findings, not decisions. | MUST | BRD-DAB-001 | 1.1 | 13 Jan 2026 | — |
+| IO-DAB-002 | The ADE decision packets MUST clarify that human authority is required for final decisions. | MUST | BRD-DAB-002 | 1.1 | 13 Jan 2026 | — |
+| IO-DAB-003 | The ADE outputs MUST NOT trigger downstream actions without explicit approval. | MUST | BRD-DAB-003 | 1.1 | 13 Jan 2026 | — |
+| IO-DAB-004 | The ADE system SHOULD use confidence language that avoids implying autonomous decisions. | SHOULD | BRD-DAB-004 | 1.1 | 13 Jan 2026 | — |
+| IO-DAB-005 | The ADE system MUST present recommendations as advisory. | MUST | BRD-DAB-005 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### IO-DATA-002: Dataset Location
-**Priority**: P0  
-**Description**: Datasets MUST be in defined locations.
+## 9. Evidence Requirements (IO-EVID)
 
-**Locations**:
-- [ ] `products/ade/staging/input/` (user datasets)
-- [ ] `products/ade/data/` (built-in datasets)
-
----
-
-### IO-DATA-003: Built-in Dataset
-**Priority**: P1  
-**Description**: branded_cards_transactions MUST be available.
-
-**Location**: `products/ade/data/branded_cards_transactions.csv`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-EVID-001 | The ADE system MUST include evidence_refs in all claims (DecisionSection and Finding). | MUST | BRD-EVREF-001 | 1.1 | 13 Jan 2026 | — |
+| IO-EVID-002 | The evidence_refs MUST include dataset_id and columns fields. | MUST | BRD-EVREF-002, BRD-EVREF-003 | 1.1 | 13 Jan 2026 | — |
+| IO-EVID-003 | The DecisionPacket MUST include trace_refs with step_id references and user_inputs. | MUST | BRD-TRACE-001, BRD-TRACE-002, BRD-TRACE-003 | 1.1 | 13 Jan 2026 | — |
+| IO-EVID-004 | The tools compute_business_metrics, detect_anomalies, hypothesis_test_data_outage, and hypothesis_test_seasonality MUST produce evidence_items. | MUST | BRD-ITEM-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
-### IO-DATA-004: Dataset Name Resolution
-**Priority**: P0  
-**Description**: Dataset names MUST resolve to file paths.
-
-**Acceptance Criteria**:
-- [ ] Name without extension maps to .csv file
-- [ ] Case-sensitive matching
-- [ ] Missing file causes clear error
-
----
-
-## 3. User Input Requirements (IO-USER)
-
-### IO-USER-001: viz_preferences Validation
-**Priority**: P0  
-**Description**: viz_preferences MUST validate against schema.
-
-**Schema Properties**:
-```json
-{
-  "chart_type": {"type": "string", "enum": ["bar", "line", "area", "scatter"]},
-  "metric_focus": {"type": "string", "enum": ["mean", "sum", "median", "growth_rate", "anomalies"]},
-  "include_hypothesis_checks": {"type": "boolean"},
-  "notes": {"type": "string"}
-}
-```
-
----
-
-### IO-USER-002: Required User Fields
-**Priority**: P0  
-**Description**: chart_type and metric_focus MUST be required.
-
-**Acceptance Criteria**:
-- [ ] Missing chart_type fails validation
-- [ ] Missing metric_focus fails validation
-- [ ] Defaults are applied if not provided
-
----
-
-### IO-USER-003: Default Values
-**Priority**: P1  
-**Description**: User inputs MUST have defaults.
-
-| Flow | chart_type | metric_focus | include_hypothesis_checks |
-|------|------------|--------------|---------------------------|
-| ade_v1 | bar | mean | true |
-| visualization | bar | anomalies | true |
-
----
-
-## 4. Output Requirements (IO-OUT)
-
-### IO-OUT-001: Primary Outputs
-**Priority**: P0  
-**Description**: Flows MUST produce primary outputs.
-
-**Required Outputs**:
-- [ ] business_report.html
-- [ ] decision_packet.html (visualization flow only)
-
----
-
-### IO-OUT-002: Output Location
-**Priority**: P0  
-**Description**: Outputs MUST be written to staging/output/.
-
-**Location**: `products/ade/staging/output/`
-
----
-
-### IO-OUT-003: Valid HTML
-**Priority**: P0  
-**Description**: HTML outputs MUST be valid HTML5.
-
-**Acceptance Criteria**:
-- [ ] DOCTYPE declaration present
-- [ ] Well-formed HTML structure
-- [ ] No unclosed tags
-
----
-
-### IO-OUT-004: Optional Exports
-**Priority**: P2  
-**Description**: export_pdf MAY produce additional outputs.
-
-**Optional Outputs**:
-- [ ] ade.pdf
-- [ ] ade.html
-- [ ] ade_stub.json
-
----
-
-## 4.1 Output Quality Requirements
-
-### BRD-QUAL-001: Executive Summary Quality
-**Priority**: P0  
-**Description**: Executive summary MUST be meaningful.
-
-**Acceptance Criteria**:
-- [ ] Executive summary is non-empty
-- [ ] Summary reflects key findings
-
----
-
-### BRD-QUAL-002: Actionable Key Findings
-**Priority**: P0  
-**Description**: Key findings MUST be actionable.
-
-**Acceptance Criteria**:
-- [ ] Findings include implications
-- [ ] Findings map to evidence
-
----
-
-### BRD-QUAL-003: Specific Recommendations
-**Priority**: P1  
-**Description**: Recommendations MUST be specific when present.
-
-**Acceptance Criteria**:
-- [ ] Recommendations include concrete actions
-
----
-
-### BRD-QUAL-004: Human-Readable Narratives
-**Priority**: P0  
-**Description**: Narratives MUST be human-readable.
-
-**Acceptance Criteria**:
-- [ ] Plain-language text
-- [ ] Avoids raw data dumps
-
----
-
-### BRD-QUAL-010: Chart Rendering
-**Priority**: P0  
-**Description**: Charts MUST render correctly.
-
-**Acceptance Criteria**:
-- [ ] Vega-Lite spec validates
-
----
-
-### BRD-QUAL-011: Table Readability
-**Priority**: P0  
-**Description**: Tables MUST be readable.
-
-**Acceptance Criteria**:
-- [ ] Column headers visible
-- [ ] No overflow clipping
-
----
-
-### BRD-QUAL-012: Browser Compatibility
-**Priority**: P0  
-**Description**: HTML MUST display in modern browsers.
-
-**Acceptance Criteria**:
-- [ ] Renders in Chrome/Firefox/Safari
-
----
-
-## 4.2 Version Transparency Requirements
-
-### BRD-VER-001: Output Version Metadata
-**Priority**: P0  
-**Description**: Outputs MUST include product, flow, and schema versions.
-
-**Acceptance Criteria**:
-- [ ] Version metadata present in output payload
-
----
-
-### BRD-VER-002: Input Hashing
-**Priority**: P1  
-**Description**: Outputs MUST record dataset hash and input parameter hash.
-
-**Acceptance Criteria**:
-- [ ] dataset_hash present
-- [ ] input_hash present
-
----
-
-### BRD-VER-003: Dependency Pinning
-**Priority**: P0  
-**Description**: Non-deterministic dependencies MUST be version-pinned or disallowed.
-
-**Acceptance Criteria**:
-- [ ] Dependency versions recorded
-- [ ] Non-pinned dependencies rejected
-
----
-
-## 4.3 Decision Authority Boundary
-
-### BRD-DAB-001: Recommendation Labeling
-**Priority**: P0  
-**Description**: Outputs MUST be labeled as recommendations/findings, not decisions.
-
-**Acceptance Criteria**:
-- [ ] Output labels avoid \"decision\" language
-
----
-
-### BRD-DAB-002: Human Authority
-**Priority**: P0  
-**Description**: Decision packets MUST clarify human authority for final decisions.
-
-**Acceptance Criteria**:
-- [ ] Human authority statement included
-
----
-
-### BRD-DAB-003: No Automatic Actions
-**Priority**: P0  
-**Description**: Outputs MUST NOT trigger downstream actions without explicit approval.
-
-**Acceptance Criteria**:
-- [ ] Outputs marked as advisory-only
-
----
-
-### BRD-DAB-004: Confidence Language
-**Priority**: P1  
-**Description**: Confidence language MUST avoid implying autonomous decisions.
-
-**Acceptance Criteria**:
-- [ ] Language uses recommendation framing
-
----
-
-### BRD-DAB-005: Advisory Presentation
-**Priority**: P0  
-**Description**: Recommendations MUST be presented as advisory.
-
-**Acceptance Criteria**:
-- [ ] Recommendation section labeled advisory
-
----
-
-## 5. Evidence Requirements (IO-EVID)
-
-### IO-EVID-001: Evidence References Required
-**Priority**: P0  
-**Description**: All claims MUST have evidence_refs.
-
-**Acceptance Criteria**:
-- [ ] DecisionSection has evidence_refs
-- [ ] Finding has evidence_refs
-- [ ] References are traceable
-
----
-
-### IO-EVID-002: Evidence Reference Structure
-**Priority**: P0  
-**Description**: evidence_refs MUST include required fields.
-
-**Required Fields**:
-```python
-{
-  "dataset_id": str,
-  "columns": List[str]
-}
-```
-
----
-
-### IO-EVID-003: Trace References Required
-**Priority**: P0  
-**Description**: DecisionPacket MUST include trace_refs.
-
-**Acceptance Criteria**:
-- [ ] trace_refs includes step_id references
-- [ ] trace_refs includes user_inputs
-- [ ] All referenced steps exist
-
----
-
-### IO-EVID-004: Evidence Items
-**Priority**: P1  
-**Description**: Tools MUST produce evidence_items.
-
-**Tools Producing Evidence Items**:
-- [ ] compute_business_metrics
-- [ ] detect_anomalies
-- [ ] hypothesis_test_data_outage
-- [ ] hypothesis_test_seasonality
-
----
-
-## 6. Artifact Reference Requirements (IO-ARTF)
-
-### IO-ARTF-001: Tool Output Syntax
-**Priority**: P0  
-**Description**: Tool outputs MUST be referenceable.
-
-**Syntax**: `{{artifacts.tool.<tool_name>.output.<field>}}`
-
----
-
-### IO-ARTF-002: User Input Syntax
-**Priority**: P0  
-**Description**: User inputs MUST be referenceable.
-
-**Syntax**: `{{artifacts.user_input.<form_id>.values.<field>}}`
-
----
-
-### IO-ARTF-003: Agent Output Syntax
-**Priority**: P0  
-**Description**: Agent outputs MUST be referenceable.
-
-**Syntax**: `{{artifacts.agent.<agent_name>.output.<field>}}`
-
----
-
-### IO-ARTF-004: Payload Syntax
-**Priority**: P0  
-**Description**: Payload fields MUST be referenceable.
-
-**Syntax**: `{{payload.<field>}}`
-
----
-
-### IO-ARTF-005: Reference Resolution
-**Priority**: P0  
-**Description**: All artifact references MUST resolve at runtime.
-
-**Acceptance Criteria**:
-- [ ] Missing references cause clear errors
-- [ ] Resolved values are correct types
-- [ ] Nested references are supported
+## 10. Artifact Reference Requirements (IO-ARTF)
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|------------------------|-------|---------------------|---------|------------|-------|
+| IO-ARTF-001 | The ADE system MUST support tool output references using syntax {{artifacts.tool.<tool_name>.output.<field>}}. | MUST | BRD-TRACE-002 | 1.1 | 13 Jan 2026 | — |
+| IO-ARTF-002 | The ADE system MUST support user input references using syntax {{artifacts.user_input.<form_id>.values.<field>}}. | MUST | BRD-TRACE-003 | 1.1 | 13 Jan 2026 | — |
+| IO-ARTF-003 | The ADE system MUST support agent output references using syntax {{artifacts.agent.<agent_name>.output.<field>}}. | MUST | BRD-TRACE-002 | 1.1 | 13 Jan 2026 | — |
+| IO-ARTF-004 | The ADE system MUST support payload references using syntax {{payload.<field>}}. | MUST | BRD-V1-001, BRD-VIZ-001 | 1.1 | 13 Jan 2026 | — |
+| IO-ARTF-005 | The ADE system MUST resolve all artifact references at runtime and produce clear errors for missing references. | MUST | BRD-TRACE-004 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
 ## Cross-References
 
-- **System Design**: [inputs-and-outputs.md](../04_systemdesign/inputs-and-outputs.md)
-- **BRD**: [BRD-data.md](../01_brd/BRD-data.md), [BRD-outputs.md](../01_brd/BRD-outputs.md)
+- **BRD**: [BRD-data.md](../01_brd/BRD-data.md), [BRD-outputs.md](../01_brd/BRD-outputs.md), [BRD-overview.md](../01_brd/BRD-overview.md)

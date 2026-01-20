@@ -2,10 +2,17 @@
 
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Version**: 1.0.0  
-> **Last Updated**: 2026-01-12
+> **Version**: V1.2  
+> **Last Updated**: 2026-01-19
 
 ---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-01-13 | Initial release |
+| V1.2 | 2026-01-19 | Updated BRD table schema guidance and aligned scope placement |
 
 ## Document Index
 
@@ -26,31 +33,40 @@
 
 ADE accepts analyst questions and CSV datasets to produce **audit-ready analytical decisions** with evidence, confidence, and traceability.
 
-### In Scope
+### Scope
 
-- Free-text analyst workflow (`ade_v1`)
-- Dataset-first visualization workflow (`visualization`)
-- CSV dataset processing
-- Business reports and decision packets
-- Plan approval workflow
-- Semantic interpretation of analyst questions
-
-### Out of Scope
-
-- Live database connectors or streaming inputs
-- Multi-dataset joins
-- Automatic tool discovery
-- BI dashboarding as primary product surface
+See section 7 for the full scope tables.
 
 ---
 
-## Traceability
+## How to Add a Requirement
 
-| BRD | Techspec | System Design |
-|-----|----------|---------------|
-| BRD-overview.md | — | architecture.md |
-| BRD-flows.md | FLOW-flows.md | flows.md |
-| BRD-agents.md | AGENT-agents.md, SEM-semantic.md | agents-and-tools.md |
-| BRD-tools.md | TOOL-tools.md | agents-and-tools.md |
-| BRD-data.md | SCHEMA-schemas.md, IO-inputs-outputs.md | schemas.md, inputs-and-outputs.md |
-| BRD-outputs.md | IO-inputs-outputs.md | inputs-and-outputs.md |
+Use the required BRD table structure in each BRD file:
+
+```markdown
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-<THEME>-NNN | <Requirement statement> | INT-<AREA>-NNN | P0/P1/P2 | YYYY-MM-DD | V1.1 | — |
+```
+
+## 7. Scope (From BRD-overview.md)
+
+### 7.1 In Scope
+
+| Category | Items |
+|----------|-------|
+| **Workflows** | Question-first and dataset-first workflows |
+| **Inputs** | Analyst questions and CSV datasets |
+| **Outputs** | Business reports and decision packets |
+| **User Interactions** | Visualization preferences and plan approval |
+| **Analysis** | Anomaly detection, hypothesis testing, metric computation |
+
+### 7.2 Out of Scope
+
+| Category | Exclusion | Rationale |
+|----------|-----------|-----------|
+| **Data Sources** | Live database connectors | CSV focus for MVP |
+| **Data Sources** | Streaming inputs | Batch processing only |
+| **Data Operations** | Multi-dataset joins | Single dataset per run |
+| **System Behavior** | Dynamic flow mutation | Deterministic flows only |
+| **Product Surface** | BI dashboarding | Decision packets are primary |

@@ -1,10 +1,9 @@
 # Technical Specifications Index
 
-> **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
-> **Version**: 1.1  
-
-> **Document Status**: V1 Release  
-> **Last Updated**: 2026-01-12  
+> **Document ID**: TS-README  
+> **Version**: V1.2  
+> **Status**: V1 Release  
+> **Last Updated**: 2026-01-13  
 
 ## Purpose
 
@@ -13,17 +12,17 @@ Requirements use RFC 2119 language (MUST, SHALL, SHOULD, MAY) to indicate obliga
 
 Each specification document includes:
 - **Requirement IDs** for traceability (e.g., `ORC-001`, `GOV-HOOK-010`)
-- **Implementation references** linking to source files
-- **V1 scope markers** distinguishing current vs future requirements
-- **Rationale** explaining design decisions where applicable
+- **Canonical TSD tables** with BRD mappings
+- **RFC 2119 language** for obligation levels
 
 ---
 
-## Version Control
+## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.1 | 2026-01-13 | Header version normalization |
+| V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 
 ## Specification Documents
 
@@ -46,9 +45,7 @@ Each specification document includes:
 
 Each requirement has a unique identifier following this pattern:
 
-```
-<PREFIX>-<CATEGORY>-<NUMBER>
-```
+`<PREFIX>-<CATEGORY>-<NUMBER>`
 
 | Prefix | Domain |
 |--------|--------|
@@ -80,32 +77,13 @@ These specifications use RFC 2119 terminology:
 
 ---
 
-## V1 Scope vs Future Considerations
+## Requirements Table Format
 
-Requirements are tagged with scope indicators:
+All technical specifications use the canonical TSD table structure:
 
-- **[V1]** — Required for V1 release
-- **[V1.1]** — Planned for V1.1 release (post-launch enhancement)
-- **[V2]** — Future consideration (not committed)
-- **[DEFERRED]** — Explicitly removed from V1 scope
-
----
-
-## Traceability Matrix
-
-Each requirement links to:
-
-1. **Implementation File(s)** — Source code implementing the requirement
-2. **Test File(s)** — Tests validating the requirement
-3. **Documentation** — Related user/developer documentation
-
-Example:
-```
-ORC-RUN-001: Run initialization MUST generate unique run ID
-├── Implementation: core/orchestrator/run_lifecycle.py#L45-60
-├── Test: tests/unit/test_run_lifecycle.py::test_run_id_format
-└── Documentation: docs/core_architecture.md#run-lifecycle
-```
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-RUN-001 | The orchestrator MUST generate a unique run ID | MUST | BRD-OPS-001 | 1.1 | 13 Jan 2026 | — |
 
 ---
 

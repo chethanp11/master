@@ -1,16 +1,17 @@
 # Product System Technical Specification
 
 > **Document ID**: PROD  
-> **Version**: 1.1  
+> **Version**: V1.2  
 > **Status**: V1 Release  
 > **Last Updated**: 2026-01-13  
 
-### Version History
+## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-01-12 | Initial V1 specification |
 | 1.1.0 | 2026-01-13 | Added: §12.3 Semantic Adapter Isolation, §13 Explicit Non-Goals, §16 BRD Requirement Mapping |
+| V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 
 ---
 
@@ -20,55 +21,19 @@ The product system provides a modular architecture for packaging domain-specific
 tools, flows, and configurations into self-contained units. Products are auto-discovered 
 and registered through a standardized manifest and registry pattern.
 
-### 1.1 Implementation References
-
-| Component | File |
-|-----------|------|
-| Product Schema | `core/contracts/flow_schema.py` |
-| Product Catalog | `core/orchestrator/product_catalog.py` |
-| Product Loader | `core/orchestrator/product_loader.py` |
-| Product Runner | `core/orchestrator/product_runner.py` |
-| Example: ADE | `products/ade/` |
-| Example: Hello World | `products/hello_world/` |
-
----
-
 ## 2. Directory Structure Requirements
 
 ### 2.1 Product Directory Layout
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-DIR-001** | [V1] Each product MUST reside in `products/<product_name>/` directory | MUST |
-| **PROD-DIR-002** | [V1] Product directory name MUST be lowercase with underscores (snake_case) | MUST |
-| **PROD-DIR-003** | [V1] Product MUST contain a `manifest.yaml` file at root level | MUST |
-| **PROD-DIR-004** | [V1] Product MUST contain a `registry.py` file at root level | MUST |
-| **PROD-DIR-005** | [V1] Product MAY contain a `config/` directory for product-specific configuration | MAY |
-| **PROD-DIR-006** | [V1] Product MAY contain a `data/` directory for sample data | MAY |
-| **PROD-DIR-007** | [V1] Product MAY contain subdirectories for organization (agents, tools, prompts) | MAY |
-
-**Example Structure**:
-```
-products/
-└── ade/
-    ├── manifest.yaml
-    ├── registry.py
-    ├── __init__.py
-    ├── config/
-    │   └── settings.yaml
-    ├── agents/
-    │   ├── __init__.py
-    │   ├── planner.py
-    │   └── executor.py
-    ├── tools/
-    │   ├── __init__.py
-    │   ├── file_ops.py
-    │   └── code_gen.py
-    └── prompts/
-        └── templates.yaml
-```
-
-**Implementation**: `products/*/`
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-DIR-001 | Each product MUST reside in `products/<product_name>/` directory | MUST | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-002 | Product directory name MUST be lowercase with underscores (snake_case) | MUST | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-003 | Product MUST contain a `manifest.yaml` file at root level | MUST | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-004 | Product MUST contain a `registry.py` file at root level | MUST | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-005 | Product MAY contain a `config/` directory for product-specific configuration | MAY | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-006 | Product MAY contain a `data/` directory for sample data | MAY | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
+| PROD-DIR-007 | Product MAY contain subdirectories for organization (agents, tools, prompts) | MAY | BRD-EXP-030 | 1.1 | 13 Jan 2026 | — |
 
 ---
 
@@ -76,65 +41,60 @@ products/
 
 ### 3.1 Core Manifest Schema
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-MAN-001** | [V1] Manifest MUST be a valid YAML file | MUST |
-| **PROD-MAN-002** | [V1] Manifest MUST define `name` field (string, lowercase, matches directory) | MUST |
-| **PROD-MAN-003** | [V1] Manifest MUST define `display_name` field (string, human-readable) | MUST |
-| **PROD-MAN-004** | [V1] Manifest MUST define `version` field (string, semver format) | MUST |
-| **PROD-MAN-005** | [V1] Manifest MUST define `description` field (string, product description) | MUST |
-| **PROD-MAN-006** | [V1] Manifest MUST define `flows` list (at least one flow) | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-MAN-001 | Manifest MUST be a valid YAML file | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-002 | Manifest MUST define `name` field (string, lowercase, matches directory) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-003 | Manifest MUST define `display_name` field (string, human-readable) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-004 | Manifest MUST define `version` field (string, semver format) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-005 | Manifest MUST define `description` field (string, product description) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-006 | Manifest MUST define `flows` list (at least one flow) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/manifest.yaml`
 
 ### 3.2 Flow Definition
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-MAN-010** | [V1] Each flow MUST define `name` field (unique within product) | MUST |
-| **PROD-MAN-011** | [V1] Each flow MUST define `display_name` field | MUST |
-| **PROD-MAN-012** | [V1] Each flow MUST define `entry_point` field (path to flow YAML) | MUST |
-| **PROD-MAN-013** | [V1] Each flow MAY define `description` field | MAY |
-| **PROD-MAN-014** | [V1] Each flow MAY define `default: true` (exactly one per product) | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-MAN-010 | Each flow MUST define `name` field (unique within product) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-011 | Each flow MUST define `display_name` field | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-012 | Each flow MUST define `entry_point` field (path to flow YAML) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-013 | Each flow MAY define `description` field | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-014 | Each flow MAY define `default: true` (exactly one per product) | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/manifest.yaml`
 
 ### 3.3 API Exposure
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-MAN-020** | [V1] Manifest MAY define `exposed_api` section | MAY |
-| **PROD-MAN-021** | [V1] `exposed_api.enabled` MUST be boolean (default: true) | MUST |
-| **PROD-MAN-022** | [V1] `exposed_api.require_auth` MAY specify authentication requirement | MAY |
-| **PROD-MAN-023** | [V1] `exposed_api.rate_limit` MAY specify requests per minute limit | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-MAN-020 | Manifest MAY define `exposed_api` section | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-021 | `exposed_api.enabled` MUST be boolean (default: true) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-022 | `exposed_api.require_auth` MAY specify authentication requirement | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-023 | `exposed_api.rate_limit` MAY specify requests per minute limit | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/manifest.yaml`
 
 ### 3.4 UI Configuration
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-MAN-030** | [V1] Manifest MAY define `ui` section for Streamlit customization | MAY |
-| **PROD-MAN-031** | [V1] `ui.enabled` MUST be boolean (default: true) | MUST |
-| **PROD-MAN-032** | [V1] `ui.intent_driven` MAY enable free-text intent input mode | MAY |
-| **PROD-MAN-033** | [V1] `ui.intent_field` MUST specify payload field for intent (when intent_driven=true) | MUST |
-| **PROD-MAN-034** | [V1] `ui.inputs` MAY define file upload configuration | MAY |
-| **PROD-MAN-035** | [V1] `ui.inputs.enabled` MUST be boolean to enable file uploads | MUST |
-| **PROD-MAN-036** | [V1] `ui.inputs.max_files` MAY limit number of uploadable files | MAY |
-| **PROD-MAN-037** | [V1] `ui.inputs.allowed_extensions` MAY restrict allowed file types | MAY |
-| **PROD-MAN-038** | [V1] `ui.dataset_candidates` MAY define paths to scan for data files | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-MAN-030 | Manifest MAY define `ui` section for Streamlit customization | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-031 | `ui.enabled` MUST be boolean (default: true) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-032 | `ui.intent_driven` MAY enable free-text intent input mode | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-033 | `ui.intent_field` MUST specify payload field for intent (when intent_driven=true) | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-034 | `ui.inputs` MAY define file upload configuration | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-035 | `ui.inputs.enabled` MUST be boolean to enable file uploads | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-036 | `ui.inputs.max_files` MAY limit number of uploadable files | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-037 | `ui.inputs.allowed_extensions` MAY restrict allowed file types | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-038 | `ui.dataset_candidates` MAY define paths to scan for data files | MAY | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/manifest.yaml`
 
 ### 3.5 Manifest Schema Validation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-MAN-040** | [V1] Manifest MUST be validated against `ProductManifest` Pydantic model | MUST |
-| **PROD-MAN-041** | [V1] Invalid manifest MUST result in product load failure | MUST |
-| **PROD-MAN-042** | [V1] Validation errors MUST include field path and error message | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-MAN-040 | Manifest MUST be validated against `ProductManifest` Pydantic model | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-041 | Invalid manifest MUST result in product load failure | MUST | BRD-EXP-031 | 1.1 | 13 Jan 2026 | — |
+| PROD-MAN-042 | Validation errors MUST include field path and error message | MUST | BRD-EXP-031, BRD-EXP-052 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/contracts/flow_schema.py`
 
 ---
 
@@ -142,39 +102,36 @@ products/
 
 ### 4.1 Registry Module
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-REG-001** | [V1] Each product MUST have a `registry.py` module | MUST |
-| **PROD-REG-002** | [V1] Registry module MUST export `AgentRegistry` variable | MUST |
-| **PROD-REG-003** | [V1] Registry module MUST export `ToolRegistry` variable | MUST |
-| **PROD-REG-004** | [V1] Registries MUST be Dict[str, Callable] mapping names to factories | MUST |
-| **PROD-REG-005** | [V1] Registries MUST NOT contain instantiated agents/tools (factories only) | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-REG-001 | Each product MUST have a `registry.py` module | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-002 | Registry module MUST export `AgentRegistry` variable | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-003 | Registry module MUST export `ToolRegistry` variable | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-004 | Registries MUST be Dict[str, Callable] mapping names to factories | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-005 | Registries MUST NOT contain instantiated agents/tools (factories only) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/registry.py`
 
 ### 4.2 Auto-Discovery
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-REG-010** | [V1] ProductCatalog MUST auto-discover products in `products/` directory | MUST |
-| **PROD-REG-011** | [V1] Discovery MUST skip directories without `manifest.yaml` | MUST |
-| **PROD-REG-012** | [V1] Discovery MUST skip directories without `registry.py` | MUST |
-| **PROD-REG-013** | [V1] Discovery MUST skip directories starting with `_` or `.` | MUST |
-| **PROD-REG-014** | [V1] Discovery MUST respect `products.yaml` enabled/disabled settings | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-REG-010 | ProductCatalog MUST auto-discover products in `products/` directory | MUST | BRD-AUTO-ADAPT-007, BRD-EXP-032 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-011 | Discovery MUST skip directories without `manifest.yaml` | MUST | BRD-AUTO-ADAPT-007, BRD-EXP-032 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-012 | Discovery MUST skip directories without `registry.py` | MUST | BRD-AUTO-ADAPT-007, BRD-EXP-032 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-013 | Discovery MUST skip directories starting with `_` or `.` | MUST | BRD-AUTO-ADAPT-007, BRD-EXP-032 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-014 | Discovery MUST respect `products.yaml` enabled/disabled settings | MUST | BRD-AUTO-ADAPT-007, BRD-EXP-032 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_catalog.py`
 
 ### 4.3 Registry Pattern
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-REG-020** | [V1] Agent factories MUST return subclass of `BaseAgent` | MUST |
-| **PROD-REG-021** | [V1] Tool factories MUST return subclass of `BaseTool` | MUST |
-| **PROD-REG-022** | [V1] Factory functions MUST accept no arguments or have default values | MUST |
-| **PROD-REG-023** | [V1] Factory functions MUST be idempotent (safe to call multiple times) | MUST |
-| **PROD-REG-024** | [V1] Factory functions MAY accept configuration Dict as optional argument | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-REG-020 | Agent factories MUST return subclass of `BaseAgent` | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-021 | Tool factories MUST return subclass of `BaseTool` | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-022 | Factory functions MUST accept no arguments or have default values | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-023 | Factory functions MUST be idempotent (safe to call multiple times) | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-REG-024 | Factory functions MAY accept configuration Dict as optional argument | MAY | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/registry.py`
 
 ---
 
@@ -182,27 +139,25 @@ products/
 
 ### 5.1 Agent Decorator
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-DEC-001** | [V1] `@agent(name="...")` decorator MUST register agent factory | MUST |
-| **PROD-DEC-002** | [V1] Decorated class MUST be subclass of `BaseAgent` | MUST |
-| **PROD-DEC-003** | [V1] Decorator MUST support `name` parameter for registry key | MUST |
-| **PROD-DEC-004** | [V1] Decorator MUST support `description` parameter | MAY |
-| **PROD-DEC-005** | [V1] Decorator MUST support `tags` parameter (list of strings) | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-DEC-001 | `@agent(name="...")` decorator MUST register agent factory | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-002 | Decorated class MUST be subclass of `BaseAgent` | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-003 | Decorator MUST support `name` parameter for registry key | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-004 | Decorator MUST support `description` parameter | MAY | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-005 | Decorator MUST support `tags` parameter (list of strings) | MAY | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/agents/base.py`
 
 ### 5.2 Tool Decorator
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-DEC-010** | [V1] `@tool(name="...")` decorator MUST register tool factory | MUST |
-| **PROD-DEC-011** | [V1] Decorated class MUST be subclass of `BaseTool` | MUST |
-| **PROD-DEC-012** | [V1] Decorator MUST support `name` parameter for registry key | MUST |
-| **PROD-DEC-013** | [V1] Decorator MAY support `category` parameter for grouping | MAY |
-| **PROD-DEC-014** | [V1] Decorator MAY support `requires_approval` parameter | MAY |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-DEC-010 | `@tool(name="...")` decorator MUST register tool factory | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-011 | Decorated class MUST be subclass of `BaseTool` | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-012 | Decorator MUST support `name` parameter for registry key | MUST | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-013 | Decorator MAY support `category` parameter for grouping | MAY | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
+| PROD-DEC-014 | Decorator MAY support `requires_approval` parameter | MAY | BRD-EXP-036 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/tools/base.py`
 
 ---
 
@@ -210,36 +165,33 @@ products/
 
 ### 6.1 Catalog Operations
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-CAT-001** | [V1] ProductCatalog MUST provide `list_products()` returning all discovered products | MUST |
-| **PROD-CAT-002** | [V1] ProductCatalog MUST provide `get_product(name)` returning single product | MUST |
-| **PROD-CAT-003** | [V1] ProductCatalog MUST provide `get_flows(product)` returning product flows | MUST |
-| **PROD-CAT-004** | [V1] ProductCatalog MUST provide `get_agent_registry(product)` returning agents | MUST |
-| **PROD-CAT-005** | [V1] ProductCatalog MUST provide `get_tool_registry(product)` returning tools | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-CAT-001 | ProductCatalog MUST provide `list_products()` returning all discovered products | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-002 | ProductCatalog MUST provide `get_product(name)` returning single product | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-003 | ProductCatalog MUST provide `get_flows(product)` returning product flows | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-004 | ProductCatalog MUST provide `get_agent_registry(product)` returning agents | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-005 | ProductCatalog MUST provide `get_tool_registry(product)` returning tools | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_catalog.py`
 
 ### 6.2 Product State
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-CAT-010** | [V1] Each product MUST have state: `enabled`, `disabled`, `error` | MUST |
-| **PROD-CAT-011** | [V1] Products disabled in `products.yaml` MUST have state `disabled` | MUST |
-| **PROD-CAT-012** | [V1] Products that fail to load MUST have state `error` with message | MUST |
-| **PROD-CAT-013** | [V1] Error products MUST include `error_path` and `error_message` | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-CAT-010 | Each product MUST have state: `enabled`, `disabled`, `error` | MUST | BRD-EXP-033, BRD-EXP-042 | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-011 | Products disabled in `products.yaml` MUST have state `disabled` | MUST | BRD-EXP-033, BRD-EXP-042 | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-012 | Products that fail to load MUST have state `error` with message | MUST | BRD-EXP-033, BRD-EXP-034, BRD-EXP-042 | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-013 | Error products MUST include `error_path` and `error_message` | MUST | BRD-EXP-033, BRD-EXP-034, BRD-EXP-042 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_catalog.py`
 
 ### 6.3 Caching
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-CAT-020** | [V1] ProductCatalog MUST cache discovery results | MUST |
-| **PROD-CAT-021** | [V1] Cache MUST be invalidated on explicit refresh | MUST |
-| **PROD-CAT-022** | [V1] Registry imports MUST be cached per product | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-CAT-020 | ProductCatalog MUST cache discovery results | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-021 | Cache MUST be invalidated on explicit refresh | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CAT-022 | Registry imports MUST be cached per product | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_catalog.py`
 
 ---
 
@@ -247,25 +199,23 @@ products/
 
 ### 7.1 Loading Process
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-LOAD-001** | [V1] ProductLoader MUST load manifest from `products/<name>/manifest.yaml` | MUST |
-| **PROD-LOAD-002** | [V1] ProductLoader MUST import registry from `products.<name>.registry` | MUST |
-| **PROD-LOAD-003** | [V1] ProductLoader MUST validate manifest against schema | MUST |
-| **PROD-LOAD-004** | [V1] ProductLoader MUST verify all flow entry_points exist | MUST |
-| **PROD-LOAD-005** | [V1] ProductLoader MUST raise `ProductLoadError` on failure | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-LOAD-001 | ProductLoader MUST load manifest from `products/<name>/manifest.yaml` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-002 | ProductLoader MUST import registry from `products.<name>.registry` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-003 | ProductLoader MUST validate manifest against schema | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-004 | ProductLoader MUST verify all flow entry_points exist | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-005 | ProductLoader MUST raise `ProductLoadError` on failure | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_loader.py`
 
 ### 7.2 Flow Resolution
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-LOAD-010** | [V1] Flow entry_point MUST be resolved relative to product directory | MUST |
-| **PROD-LOAD-011** | [V1] Missing flow file MUST raise `FlowNotFoundError` | MUST |
-| **PROD-LOAD-012** | [V1] Flow YAML MUST be validated against flow schema | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-LOAD-010 | Flow entry_point MUST be resolved relative to product directory | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-011 | Missing flow file MUST raise `FlowNotFoundError` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-LOAD-012 | Flow YAML MUST be validated against flow schema | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/flow_loader.py`
 
 ---
 
@@ -273,25 +223,23 @@ products/
 
 ### 8.1 Execution Context
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-RUN-001** | [V1] ProductRunner MUST create isolated execution context per run | MUST |
-| **PROD-RUN-002** | [V1] Execution context MUST include product-specific agent registry | MUST |
-| **PROD-RUN-003** | [V1] Execution context MUST include product-specific tool registry | MUST |
-| **PROD-RUN-004** | [V1] Execution context MUST merge core + product registries | MUST |
-| **PROD-RUN-005** | [V1] Product registry entries MUST override core entries with same name | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-RUN-001 | ProductRunner MUST create isolated execution context per run | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-002 | Execution context MUST include product-specific agent registry | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-003 | Execution context MUST include product-specific tool registry | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-004 | Execution context MUST merge core + product registries | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-005 | Product registry entries MUST override core entries with same name | MUST | BRD-EXP-040 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_runner.py`
 
 ### 8.2 Resource Isolation
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-RUN-010** | [V1] Each run MUST have isolated observability directory: `observability/<product>/<run_id>/` | MUST |
-| **PROD-RUN-011** | [V1] Product runs MUST NOT access other products' observability directories | MUST |
-| **PROD-RUN-012** | [V1] Product configuration MUST be loaded in isolation from other products | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-RUN-010 | Each run MUST have isolated observability directory: `observability/<product>/<run_id>/` | MUST | BRD-EXP-041 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-011 | Product runs MUST NOT access other products' observability directories | MUST | BRD-EXP-041 | 1.1 | 13 Jan 2026 | — |
+| PROD-RUN-012 | Product configuration MUST be loaded in isolation from other products | MUST | BRD-EXP-041 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_runner.py`, `core/memory/observability_store.py`
 
 ---
 
@@ -299,42 +247,39 @@ products/
 
 ### 9.1 Semantic Adapter Interface
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-SEM-001** | [V1] Products MAY provide a `ProductSemanticAdapter` class in `products/<name>/semantic.py` | MAY |
-| **PROD-SEM-002** | [V1] If provided, `ProductSemanticAdapter` MUST implement `interpret(context) -> SemanticEnvelope` | MUST |
-| **PROD-SEM-003** | [V1] If provided, `ProductSemanticAdapter` MUST implement `validate(envelope, context) -> ValidationResult` | MUST |
-| **PROD-SEM-004** | [V1] Products without adapter MUST use core default interpretation (passthrough + heuristics) | MUST |
-| **PROD-SEM-005** | [V1] Orchestrator MUST call adapter via product router; adapters MUST NOT import orchestrator internals | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-SEM-001 | Products MAY provide a `ProductSemanticAdapter` class in `products/<name>/semantic.py` | MAY | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-002 | If provided, `ProductSemanticAdapter` MUST implement `interpret(context) -> SemanticEnvelope` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-003 | If provided, `ProductSemanticAdapter` MUST implement `validate(envelope, context) -> ValidationResult` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-004 | Products without adapter MUST use core default interpretation (passthrough + heuristics) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-005 | Orchestrator MUST call adapter via product router; adapters MUST NOT import orchestrator internals | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/semantic.py`, `core/orchestrator/product_router.py`
 
 ### 9.2 Interpret Hook
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-SEM-INT-001** | [V1] `interpret(context)` MUST receive: `raw_input`, `payload`, `product_config` | MUST |
-| **PROD-SEM-INT-002** | [V1] `interpret` MUST return a fully populated `SemanticEnvelope` | MUST |
-| **PROD-SEM-INT-003** | [V1] `interpret` MUST set `intent_type` from product-defined intent taxonomy | MUST |
-| **PROD-SEM-INT-004** | [V1] `interpret` MUST extract domain-specific entities (e.g., chart types, metrics, filters) | MUST |
-| **PROD-SEM-INT-005** | [V1] `interpret` MUST NOT call tools or agents directly | MUST |
-| **PROD-SEM-INT-006** | [V1] `interpret` MUST NOT import `core/orchestrator/*` internals | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-SEM-INT-001 | `interpret(context)` MUST receive: `raw_input`, `payload`, `product_config` | MUST | BRD-AUTO-025, BRD-AUTO-ADAPT-001 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-INT-002 | `interpret` MUST return a fully populated `SemanticEnvelope` | MUST | BRD-AUTO-025, BRD-AUTO-ADAPT-001, BRD-AUTO-ADAPT-002 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-INT-003 | `interpret` MUST set `intent_type` from product-defined intent taxonomy | MUST | BRD-AUTO-025, BRD-AUTO-ADAPT-001, BRD-AUTO-ADAPT-006 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-INT-004 | `interpret` MUST extract domain-specific entities (e.g., chart types, metrics, filters) | MUST | BRD-AUTO-025, BRD-AUTO-ADAPT-001, BRD-AUTO-ADAPT-004, BRD-AUTO-ADAPT-005 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-INT-005 | `interpret` MUST NOT call tools or agents directly | MUST | BRD-AUTO-025, BRD-AUTO-ADAPT-001, BRD-AUTO-ADAPT-008 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-INT-006 | `interpret` MUST NOT import `core/orchestrator/*` internals | MUST | BRD-AUTO-ADAPT-009 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/semantic.py`
 
 ### 9.3 Validate Hook
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-SEM-VAL-001** | [V1] `validate(envelope, context)` MUST check domain-specific constraints | MUST |
-| **PROD-SEM-VAL-002** | [V1] `validate` MUST return `ValidationResult` with all required fields | MUST |
-| **PROD-SEM-VAL-003** | [V1] `validate` MAY adjust `revised_confidence` based on validation findings | MAY |
-| **PROD-SEM-VAL-004** | [V1] `validate` MAY generate a `clarifying_question` when input is ambiguous | MAY |
-| **PROD-SEM-VAL-005** | [V1] `validate` MUST NOT call tools or agents directly | MUST |
-| **PROD-SEM-VAL-006** | [V1] `validate` MUST NOT import `core/orchestrator/*` internals | MUST |
-| **PROD-SEM-VAL-007** | [V1] Domain rules (e.g., "trend chart requires time axis") MUST be in product adapter, not core | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-SEM-VAL-001 | `validate(envelope, context)` MUST check domain-specific constraints | MUST | BRD-AUTO-026, BRD-AUTO-ADAPT-003 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-002 | `validate` MUST return `ValidationResult` with all required fields | MUST | BRD-AUTO-026, BRD-AUTO-ADAPT-003 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-003 | `validate` MAY adjust `revised_confidence` based on validation findings | MAY | BRD-AUTO-026, BRD-AUTO-ADAPT-003 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-004 | `validate` MAY generate a `clarifying_question` when input is ambiguous | MAY | BRD-AUTO-026, BRD-AUTO-ADAPT-003 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-005 | `validate` MUST NOT call tools or agents directly | MUST | BRD-AUTO-026, BRD-AUTO-ADAPT-003 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-006 | `validate` MUST NOT import `core/orchestrator/*` internals | MUST | BRD-GOV-027 | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-VAL-007 | Domain rules (e.g., "trend chart requires time axis") MUST be in product adapter, not core | MUST | BRD-GOV-027 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/*/semantic.py`
 
 ---
 
@@ -342,14 +287,13 @@ products/
 
 ### 10.1 Configuration Loading
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-CFG-001** | [V1] Product-specific config MUST be loaded from `products/<name>/config/` | MUST |
-| **PROD-CFG-002** | [V1] Product config MUST NOT override global `configs/` settings | MUST |
-| **PROD-CFG-003** | [V1] Product config MAY provide product-specific model/policy overrides | MAY |
-| **PROD-CFG-004** | [V1] Missing product config directory MUST NOT cause load failure | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-CFG-001 | Product-specific config MUST be loaded from `products/<name>/config/` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CFG-002 | Product config MUST NOT override global `configs/` settings | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CFG-003 | Product config MAY provide product-specific model/policy overrides | MAY | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-CFG-004 | Missing product config directory MUST NOT cause load failure | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/config/loader.py`
 
 ---
 
@@ -357,14 +301,13 @@ products/
 
 ### 11.1 Global Product Settings
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-YAML-001** | [V1] `configs/products.yaml` MUST define global product settings | MUST |
-| **PROD-YAML-002** | [V1] Each product MAY have `enabled: true/false` setting | MAY |
-| **PROD-YAML-003** | [V1] Products not listed MUST default to `enabled: true` | MUST |
-| **PROD-YAML-004** | [V1] Products with `enabled: false` MUST be excluded from catalog | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-YAML-001 | `configs/products.yaml` MUST define global product settings | MUST | BRD-EXP-033 | 1.1 | 13 Jan 2026 | — |
+| PROD-YAML-002 | Each product MAY have `enabled: true/false` setting | MAY | BRD-EXP-033 | 1.1 | 13 Jan 2026 | — |
+| PROD-YAML-003 | Products not listed MUST default to `enabled: true` | MUST | BRD-EXP-033 | 1.1 | 13 Jan 2026 | — |
+| PROD-YAML-004 | Products with `enabled: false` MUST be excluded from catalog | MUST | BRD-EXP-033 | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `configs/products.yaml`, `core/orchestrator/product_catalog.py`
 
 ---
 
@@ -372,42 +315,39 @@ products/
 
 ### 12.1 Hello World Product
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-HW-001** | [V1] `hello_world` product MUST serve as minimal reference implementation | MUST |
-| **PROD-HW-002** | [V1] `hello_world` MUST demonstrate: manifest, registry, single flow | MUST |
-| **PROD-HW-003** | [V1] `hello_world` flow MUST execute without external dependencies | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-HW-001 | `hello_world` product MUST serve as minimal reference implementation | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-HW-002 | `hello_world` MUST demonstrate: manifest, registry, single flow | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-HW-003 | `hello_world` flow MUST execute without external dependencies | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/hello_world/`
 
 ### 12.2 ADE Product
 
-| ID | Requirement | Level |
-|----|-------------|-------|
-| **PROD-ADE-001** | [V1] `ade` product MUST demonstrate advanced product patterns | MUST |
-| **PROD-ADE-002** | [V1] `ade` MUST demonstrate: multi-flow, custom agents, custom tools | MUST |
-| **PROD-ADE-003** | [V1] `ade` MUST demonstrate: UI configuration, file inputs | MUST |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-ADE-001 | `ade` product MUST demonstrate advanced product patterns | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-ADE-002 | `ade` MUST demonstrate: multi-flow, custom agents, custom tools | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-ADE-003 | `ade` MUST demonstrate: UI configuration, file inputs | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `products/ade/`
 
 ### 12.3 Semantic Adapter Isolation (Added: 2026-01-13)
 
 > **Source**: BRD-AUTO-ADAPT-001...010, INV-6, INV-10
 
-| ID | Requirement | Level | Ver |
-|----|-------------|-------|-----|
-| **PROD-SEM-ISO-001** | [V1] Product semantic adapter MUST be imported via dynamic import, not static | MUST | 1.1 |
-| **PROD-SEM-ISO-002** | [V1] Adapter module MUST NOT import `core.orchestrator.*` (enforced by arch test) | MUST | 1.1 |
-| **PROD-SEM-ISO-003** | [V1] Adapter MUST NOT hold state between calls; all state in SemanticEnvelope | MUST | 1.1 |
-| **PROD-SEM-ISO-004** | [V1] Adapter MUST NOT call LLM directly; use `advisory_service` if reasoning needed | MUST | 1.1 |
-| **PROD-SEM-ISO-005** | [V1] Adapter MUST NOT access other products' data or configuration | MUST | 1.1 |
-| **PROD-SEM-ISO-006** | [V1] Adapter failures MUST NOT crash orchestrator; return `SemanticEnvelope` with `confidence=0.0` | MUST | 1.1 |
-| **PROD-SEM-ISO-007** | [V1] Adapter MUST receive only: `raw_input`, `payload`, `product_config` | MUST | 1.1 |
-| **PROD-SEM-ISO-008** | [V1] Adapter MUST NOT have network access; all external calls via registered tools | MUST | 1.1 |
-| **PROD-SEM-ISO-009** | [V1] Adapter execution timeout MUST be enforced (default: 5s) | MUST | 1.1 |
-| **PROD-SEM-ISO-010** | [V1] Adapter MUST emit `product_adapter_invoked` trace event | MUST | 1.1 |
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| PROD-SEM-ISO-001 | Product semantic adapter MUST be imported via dynamic import, not static | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-002 | Adapter module MUST NOT import `core.orchestrator.*` (enforced by arch test) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-003 | Adapter MUST NOT hold state between calls; all state in SemanticEnvelope | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-004 | Adapter MUST NOT call LLM directly; use `advisory_service` if reasoning needed | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-005 | Adapter MUST NOT access other products' data or configuration | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-006 | Adapter failures MUST NOT crash orchestrator; return `SemanticEnvelope` with `confidence=0.0` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-007 | Adapter MUST receive only: `raw_input`, `payload`, `product_config` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-008 | Adapter MUST NOT have network access; all external calls via registered tools | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-009 | Adapter execution timeout MUST be enforced (default: 5s) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+| PROD-SEM-ISO-010 | Adapter MUST emit `product_adapter_invoked` trace event | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
-**Implementation**: `core/orchestrator/product_router.py`, `products/*/semantic.py`
 
 ---
 
@@ -425,56 +365,3 @@ products/
 | Control flow in adapters | Adapters interpret, don't execute | Adapter calls tools |
 
 ---
-
-## 14. Future Considerations
-
-### 14.1 V1.1 Enhancements
-
-| ID | Feature | Description |
-|----|---------|-------------|
-| **PROD-FUTURE-001** | Hot reload | Reload products without restart |
-| **PROD-FUTURE-002** | Product dependencies | Declare inter-product dependencies |
-| **PROD-FUTURE-003** | Version constraints | Define min/max platform version |
-
-### 14.2 V2 Features
-
-| ID | Feature | Description |
-|----|---------|-------------|
-| **PROD-FUTURE-010** | Plugin marketplace | External product installation |
-| **PROD-FUTURE-011** | Product templates | Scaffolding for new products |
-| **PROD-FUTURE-012** | Multi-tenancy | Per-tenant product isolation |
-
----
-
-## 15. Traceability Matrix
-
-| Requirement | Implementation | Test | BRD Source |
-|-------------|----------------|------|------------|
-| PROD-DIR-001 | `products/*/` | `tests/unit/products/test_structure.py` | BRD-AUTO-010 |
-| PROD-MAN-001 | `products/*/manifest.yaml` | `tests/unit/products/test_manifest.py` | BRD-AUTO-020 |
-| PROD-REG-001 | `products/*/registry.py` | `tests/unit/products/test_registry.py` | BRD-AUTO-030 |
-| PROD-CAT-001 | `core/orchestrator/product_catalog.py` | `tests/unit/core/test_product_catalog.py` | BRD-AUTO-040 |
-| PROD-LOAD-001 | `core/orchestrator/product_loader.py` | `tests/unit/core/test_product_loader.py` | BRD-AUTO-040 |
-| PROD-RUN-001 | `core/orchestrator/product_runner.py` | `tests/unit/core/test_product_runner.py` | BRD-AUTO-050 |
-| PROD-SEM-001 | `products/*/semantic.py` | `tests/architecture/test_semantic_isolation.py` | BRD-AUTO-ADAPT-001 |
-| PROD-SEM-INT-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` | BRD-AUTO-ADAPT-002 |
-| PROD-SEM-VAL-001 | `products/*/semantic.py` | `tests/unit/products/test_semantic_adapter.py` | BRD-AUTO-ADAPT-003 |
-| PROD-SEM-ISO-001...010 | `core/orchestrator/product_router.py` | `tests/architecture/test_adapter_isolation.py` | BRD-AUTO-ADAPT-001...010 |
-
----
-
-## 16. BRD Requirement Mapping (Added: 2026-01-13)
-
-| BRD Requirement | Techspec Requirement(s) | Status |
-|-----------------|-------------------------|--------|
-| BRD-AUTO-ADAPT-001 | PROD-SEM-001, PROD-SEM-ISO-001 | Mapped |
-| BRD-AUTO-ADAPT-002 | PROD-SEM-INT-001...006, PROD-SEM-ISO-007 | Mapped |
-| BRD-AUTO-ADAPT-003 | PROD-SEM-VAL-001...007 | Mapped |
-| BRD-AUTO-ADAPT-004 | PROD-SEM-ISO-003 | Mapped |
-| BRD-AUTO-ADAPT-005 | PROD-SEM-ISO-004 | Mapped |
-| BRD-AUTO-ADAPT-006 | PROD-SEM-ISO-005 | Mapped |
-| BRD-AUTO-ADAPT-007 | PROD-SEM-ISO-006 | Mapped |
-| BRD-AUTO-ADAPT-008 | PROD-SEM-ISO-008 | Mapped |
-| BRD-AUTO-ADAPT-009 | PROD-SEM-ISO-009 | Mapped |
-| BRD-AUTO-ADAPT-010 | PROD-SEM-ISO-010 | Mapped |
-| BRD-AUTO-010...050 | PROD-DIR-*, PROD-MAN-*, PROD-RUN-* | Existing |
