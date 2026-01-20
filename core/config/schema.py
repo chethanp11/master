@@ -162,6 +162,14 @@ class PoliciesConfig(BaseModel):
         le=1.0,
         description="Minimum confidence score for individual entities.",
     )
+    
+    # Reasoning confidence thresholds (IMP-019: INT-CONF-THR-001..005)
+    reasoning_confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.5,  # Governance floor: MUST NOT be below 0.5
+        le=1.0,
+        description="Minimum confidence score for reasoning to proceed without escalation.",
+    )
 
     # Retrieval source access control
     retrieval_policy: Optional[RetrievalPolicyConfig] = Field(

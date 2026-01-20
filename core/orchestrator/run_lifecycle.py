@@ -18,10 +18,19 @@ from typing import Any, Dict, List, Optional, Union
 
 from core.contracts.flow_schema import FlowDef, StepDef
 from core.contracts.run_schema import (
+    AbortedArtifact,
+    AbortSource,
+    CancelledArtifact,
+    CompletedArtifact,
+    FailedArtifact,
+    OutcomeReason,
+    PausedIndefiniteArtifact,
     RunRecord,
     RunStatus,
     StepRecord,
     StepStatus,
+    TerminalOutcome,
+    Versions,
 )
 from core.memory.router import MemoryRouter
 from core.orchestrator.context import RunContext
@@ -96,6 +105,8 @@ def start_run(
     flow_def: FlowDef,
     run_ctx: RunContext,
     emit_event_fn,
+    platform_version: str = "1.0.0",
+    model_versions: Optional[Dict[str, str]] = None,
 ) -> RunRecord:
     """
     Initialize and start a run.
@@ -107,10 +118,23 @@ def start_run(
         flow_def: Flow definition
         run_ctx: Run context (with run_id, product, flow, payload)
         emit_event_fn: Callback to emit trace events
+        platform_version: Optional platform version (default "1.0.0")
+        model_versions: Optional dict of model name → version
         
     Returns:
         Created RunRecord
     """
+    # IMP-027: Capture version information for reproducibility
+    versions = Versions.capture(
+        platform_version=platform_version,
+        flow_version=getattr(flow_def, 'version', 'unknown'),
+        models=model_versions,
+    )
+    
+    # IMP-028: Compute input hash for reproducibility
+    from core.utils.hashing import compute_input_hash
+    input_hash = compute_input_hash(run_ctx.payload)
+    
     run_record = RunRecord(
         run_id=run_ctx.run_id,
         product=run_ctx.product,
@@ -118,6 +142,8 @@ def start_run(
         status=RunStatus.RUNNING,
         autonomy_level=str(flow_def.autonomy_level.value),
         input=run_ctx.payload,
+        versions=versions,
+        input_hash=input_hash,
         summary={
             "current_step_index": 0,
             "steps_executed": 0,
@@ -187,8 +213,36 @@ def complete_run(
         reason="run_completed",
     )
     
+    # IMP-029: Compute output hash for reproducibility
+    from core.utils.hashing import compute_output_hash
+    output_hash = compute_output_hash(output)
+    
     if output:
         memory.set_run_output(run_id, output)
+    
+    # Store output hash
+    memory.update_run_status(run_id, RunStatus.COMPLETED.value, summary={"output_hash": output_hash})
+    
+    # IMP-013: Create completed artifact
+    completed_artifact = CompletedArtifact(
+        final_output=output or {},
+        output_summary=summary.get("output_summary") if summary else None,
+        metrics=summary.get("metrics", {}) if summary else {},
+    )
+    
+    # IMP-012: Set terminal outcome and emit event
+    # IMP-013: Include terminal artifact (persisted BEFORE finalize)
+    _set_terminal_outcome(
+        memory=memory,
+        emit_event_fn=emit_event_fn,
+        run_id=run_id,
+        product=product,
+        flow=flow,
+        terminal_outcome=TerminalOutcome.COMPLETED,
+        outcome_reason=OutcomeReason.SUCCESS,
+        outcome_explanation="Run completed successfully.",
+        terminal_artifact=completed_artifact.model_dump(),
+    )
     
     emit_event_fn(
         kind="run_completed",
@@ -196,7 +250,7 @@ def complete_run(
         step_id=None,
         product=product,
         flow=flow,
-        payload={"output": output or {}},
+        payload={"output": output or {}, "output_hash": output_hash},
     )
     
     bundle = memory.get_run(run_id)
@@ -215,6 +269,9 @@ def fail_run(
     error_code: str,
     error_message: str,
     summary: Optional[Dict[str, Any]] = None,
+    stack_trace: Optional[str] = None,
+    failed_step_id: Optional[str] = None,
+    recovery_attempted: bool = False,
 ) -> RunRecord:
     """
     Mark run as failed.
@@ -231,6 +288,9 @@ def fail_run(
         error_code: Error classification code
         error_message: Error message
         summary: Summary metadata
+        stack_trace: Optional stack trace for debugging (IMP-013)
+        failed_step_id: ID of step that caused failure (IMP-013)
+        recovery_attempted: Whether recovery was attempted (IMP-013)
         
     Returns:
         Updated RunRecord
@@ -252,6 +312,40 @@ def fail_run(
         reason="run_failed",
     )
     
+    # IMP-029: Compute output hash for error artifact
+    from core.utils.hashing import compute_output_hash
+    error_output = {"error_code": error_code, "error_message": error_message}
+    output_hash = compute_output_hash(error_output)
+    
+    # Store output hash
+    memory.update_run_status(run_id, RunStatus.FAILED.value, summary={"output_hash": output_hash})
+    
+    # IMP-012: Determine outcome reason from error code
+    outcome_reason = _error_code_to_outcome_reason(error_code)
+    
+    # IMP-013: Create failed artifact
+    failed_artifact = FailedArtifact(
+        error_code=error_code,
+        error_message=error_message,
+        stack_trace=stack_trace,
+        failed_step_id=failed_step_id,
+        recovery_attempted=recovery_attempted,
+    )
+    
+    # IMP-012: Set terminal outcome and emit event
+    # IMP-013: Include terminal artifact (persisted BEFORE finalize)
+    _set_terminal_outcome(
+        memory=memory,
+        emit_event_fn=emit_event_fn,
+        run_id=run_id,
+        product=product,
+        flow=flow,
+        terminal_outcome=TerminalOutcome.FAILED,
+        outcome_reason=outcome_reason,
+        outcome_explanation=error_message,
+        terminal_artifact=failed_artifact.model_dump(),
+    )
+    
     emit_event_fn(
         kind="run_failed",
         run_id=run_id,
@@ -261,6 +355,7 @@ def fail_run(
         payload={
             "error_code": error_code,
             "error_message": error_message,
+            "output_hash": output_hash,
         },
     )
     
@@ -435,6 +530,89 @@ def _coerce_run_status(status: Union[RunStatus, str]) -> RunStatus:
     if isinstance(status, str):
         return RunStatus(status)
     raise TypeError(f"Expected RunStatus or str, got {type(status)}")
+
+
+def _error_code_to_outcome_reason(error_code: str) -> OutcomeReason:
+    """
+    Map error code to OutcomeReason enum.
+    
+    IMP-012: Provides deterministic mapping from error codes to outcome reasons.
+    
+    Args:
+        error_code: Error classification code
+        
+    Returns:
+        Corresponding OutcomeReason enum value
+    """
+    error_code_lower = error_code.lower()
+    if "budget" in error_code_lower:
+        return OutcomeReason.BUDGET_EXCEEDED
+    if "governance" in error_code_lower or "blocked" in error_code_lower:
+        return OutcomeReason.GOVERNANCE_BLOCK
+    if "max_iterations" in error_code_lower or "iteration" in error_code_lower:
+        return OutcomeReason.MAX_ITERATIONS
+    if "validation" in error_code_lower:
+        return OutcomeReason.VALIDATION_FAILED
+    if "user_abort" in error_code_lower or "cancelled" in error_code_lower:
+        return OutcomeReason.USER_ABORT
+    return OutcomeReason.UNRECOVERABLE_ERROR
+
+
+def _set_terminal_outcome(
+    *,
+    memory: MemoryRouter,
+    emit_event_fn,
+    run_id: str,
+    product: str,
+    flow: str,
+    terminal_outcome: TerminalOutcome,
+    outcome_reason: OutcomeReason,
+    outcome_explanation: str,
+    terminal_artifact: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Set terminal outcome on run record and emit trace event.
+    
+    IMP-012 (ORC-TERM-001..005): Every run must end with explicit terminal outcome.
+    IMP-013 (ORC-TERM-ART-001..004): Terminal outcomes include typed artifacts.
+    
+    Args:
+        memory: Memory router for persistence
+        emit_event_fn: Callback to emit trace events
+        run_id: Run ID
+        product: Product name
+        flow: Flow name
+        terminal_outcome: Terminal outcome classification
+        outcome_reason: Reason for terminal outcome
+        outcome_explanation: Human-readable explanation
+        terminal_artifact: Optional serialized artifact for the outcome
+    """
+    # Persist terminal outcome to run record (IMP-013: artifact persisted BEFORE finalize)
+    memory.update_run_terminal_outcome(
+        run_id=run_id,
+        terminal_outcome=terminal_outcome.value,
+        outcome_reason=outcome_reason.value,
+        outcome_explanation=outcome_explanation,
+        terminal_artifact=terminal_artifact,
+    )
+    
+    # Emit run_terminal_outcome trace event
+    payload = {
+        "terminal_outcome": terminal_outcome.value,
+        "outcome_reason": outcome_reason.value,
+        "outcome_explanation": outcome_explanation,
+    }
+    if terminal_artifact is not None:
+        payload["terminal_artifact"] = terminal_artifact
+    
+    emit_event_fn(
+        kind="run_terminal_outcome",
+        run_id=run_id,
+        step_id=None,
+        product=product,
+        flow=flow,
+        payload=payload,
+    )
 
 
 def _precreate_steps(

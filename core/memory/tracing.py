@@ -86,6 +86,41 @@ class TraceEventType(str, Enum):
     USER_INPUT_REQUESTED = "user_input_requested"
     USER_INPUT_RECEIVED = "user_input_received"
 
+    # Terminal outcome events (IMP-012: ORC-TERM-001..005)
+    RUN_TERMINAL_OUTCOME = "run_terminal_outcome"
+    
+    # Hypothesis selection events (IMP-015: INT-HYP-SEL-001..005)
+    HYPOTHESIS_SELECTED = "hypothesis_selected"
+    HYPOTHESIS_SELECTION_DEFERRED = "hypothesis_selection_deferred"
+    
+    # Sufficiency state events (IMP-017: INT-SUFF-LC-001..005)
+    SUFFICIENCY_STATE_UPDATED = "sufficiency_state_updated"
+    SUFFICIENCY_STATE_RESTORED = "sufficiency_state_restored"
+    
+    # Reasoning lifecycle events (IMP-009: ORC-REASON-001..005)
+    REASONING_PHASE_STARTED = "reasoning_phase_started"
+    REASONING_PHASE_COMPLETED = "reasoning_phase_completed"
+    REASONING_PHASE_TRANSITION = "reasoning_phase_transition"
+    
+    # Reasoning phase failure events (IMP-011: ORC-REASON-020..022)
+    REASONING_PHASE_FAILED = "reasoning_phase_failed"
+    
+    # Reasoning termination events (IMP-010: ORC-REASON-010..015)
+    REASONING_TERMINATED = "reasoning_terminated"
+    
+    # Confidence events (IMP-018: INT-CONF-001..005)
+    CONFIDENCE_BELOW_THRESHOLD = "confidence_below_threshold"
+    CONFIDENCE_AGGREGATED = "confidence_aggregated"
+    
+    # Confidence threshold events (IMP-019: INT-CONF-THR-001..005)
+    CONFIDENCE_THRESHOLD_VIOLATED = "confidence_threshold_violated"
+    
+    # ContextPack freeze events (IMP-021: INT-CP-FREEZE-LC-001..003)
+    CONTEXT_PACK_FROZEN = "context_pack_frozen"
+    
+    # Self-modification events (IMP-022: GOV-POL-SELFMOD-001..003)
+    SELF_MODIFICATION_BLOCKED = "self_modification_blocked"
+
 
 class Tracer:
     def __init__(

@@ -1,9 +1,9 @@
 # Memory and Observability Technical Specification
 
 > **Document ID**: MEM / OBS  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-20  
 
 ## Version History
 
@@ -12,6 +12,7 @@
 | 1.0.0 | 2026-01-12 | Initial V1 specification |
 | 1.1.0 | 2026-01-13 | Added: §12 Semantic Trace Events, §13 Reasoning Observability, §14 Explicit Non-Goals, §17 BRD Requirement Mapping |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-20 | Added §13A Explainability (BRD-OPS-060), §13B Reproducibility (BRD-OPS-061) |
 
 ---
 
@@ -352,6 +353,73 @@ auditing, and analysis.
 | MEM-DEC-001 | `decision_artifact_created` MUST be emitted when DecisionArtifact is persisted | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | MEM-DEC-002 | Event payload MUST include: `decision_id`, `options_count`, `confidence`, `justification_hash` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | MEM-DEC-003 | Event MUST NOT include full `options_considered` (use artifact storage for full data) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+
+---
+
+## 13A. Explainability Requirements (Added: 2026-01-20)
+
+> **Source**: BRD-OPS-060 - Post-hoc explainability
+
+### 13A.1 Explainability Support
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-EXPLAIN-001 | All reasoning traces MUST be persisted with sufficient detail for post-hoc explanation | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-002 | Each decision point MUST be traceable through `decision_id` → `evidence_refs` → source tools | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-003 | Reasoning chains MUST be reconstructable from trace events for any completed run | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-004 | `explain_run(run_id)` API MUST return structured explanation artifact | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-005 | Explanation artifact MUST include: `reasoning_chain`, `evidence_used`, `decisions_made`, `confidence_evolution` | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13A.2 Explanation Artifact Schema
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-EXPLAIN-ART-001 | `ExplanationArtifact` MUST include `run_id`, `created_at`, `reasoning_steps` (list) | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-ART-002 | Each `reasoning_step` MUST include: `step_id`, `phase`, `input_summary`, `output_summary`, `confidence`, `evidence_refs` | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+| MEM-EXPLAIN-ART-003 | Explanation MUST include `terminal_outcome` with `outcome_reason` and `outcome_explanation` | MUST | BRD-OPS-060 | 1.3 | 20 Jan 2026 | — |
+
+
+---
+
+## 13B. Reproducibility Requirements (Added: 2026-01-20)
+
+> **Source**: BRD-OPS-061 - Reproducibility (versions, inputs, hashes)
+
+### 13B.1 Version Recording
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-REPRO-001 | `RunRecord` MUST include `versions` object with platform and dependency versions | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-002 | `versions` MUST include: `platform_version`, `flow_version`, `python_version` | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-003 | `versions` MUST include model versions used: `models` dict mapping model name to version/checkpoint | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13B.2 Input Hashing
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-REPRO-010 | All inputs MUST be hashed using SHA-256 and stored as `input_hash` | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-011 | `input_hash` MUST be computed from canonical JSON (sorted keys, minimal separators) | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-012 | ContextPack MUST include `content_hash` computed before freeze | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13B.3 Output Hashing
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-REPRO-020 | All outputs MUST be hashed using SHA-256 and stored as `output_hash` | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-021 | `output_hash` MUST be recorded in terminal `run_completed` or `run_failed` event | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13B.4 Reproducibility Validation
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| MEM-REPRO-030 | `validate_reproducibility(run_id)` API MUST compare stored hashes with recomputed values | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-031 | Validation MUST return `is_reproducible` boolean and `discrepancies` list | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| MEM-REPRO-032 | Discrepancies MUST include: `field`, `expected_hash`, `actual_hash` | MUST | BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
 
 
 ---

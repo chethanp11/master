@@ -1,8 +1,8 @@
 # TechSpec Coverage Matrix
 
 > **Document ID**: TS-COVERAGE  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-13  
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-20  
 > **Status**: V1 Release  
 
 ---
@@ -13,6 +13,7 @@
 |---------|------|---------|
 | 1.1 | 2026-01-13 | Initial coverage mapping |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-20 | Added BRD V1.2 requirements: BRD-AUTO-028/029, BRD-AUTO-047...052, BRD-GOV-054, BRD-OPS-060/061 with TechSpec mappings |
 
 ---
 
@@ -84,6 +85,8 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-AUTO-025 | Interpret user intent before execution | ORC-SEM-001...004, PROD-SEM-INT-001...005 | Semantic phase |
 | BRD-AUTO-026 | Normalize and validate input | ORC-SEM-030...035, PROD-SEM-VAL-001...005 | Normalization rules |
 | BRD-AUTO-027 | Express confidence, request clarification | ORC-SEM-017...022, ORC-SEM-STOP-001...003 | NextAction enum + pause |
+| BRD-AUTO-028 | Multiple competing hypotheses with confidence scores | INT-HYP-001...005 | Hypothesis tracking as first-class reasoning output |
+| BRD-AUTO-029 | Persistent sufficiency state (facts, unknowns, assumptions, gaps) | INT-SUFF-001...005 | SufficiencyState tracking across reasoning |
 
 ### 1.4 Reasoning Quality (BRD-AUTO-030 to BRD-AUTO-036)
 
@@ -108,6 +111,27 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-AUTO-044 | Governed iteration cycle | GOV-GATE-001...003, ORC-STEP-020...026 | Gate architecture |
 | BRD-AUTO-045 | Deterministic stop conditions | GOV-GATE-030...035, ORC-STEP-015 | Loop gate validation |
 | BRD-AUTO-046 | Durable iterative state | MEM-API-001...005, ORC-RUN-010...015 | Memory backend + run init |
+
+### 1.5.1 Orchestrator-Controlled Reasoning (BRD-AUTO-047 to BRD-AUTO-048, Added V1.2)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-047 | Central reasoning lifecycle (interpret→propose→critique→recommend) | ORC-REASON-001...005, INT-RL-001...004 | Orchestrator-controlled bounded reasoning |
+| BRD-AUTO-048 | Bounded reasoning iteration with deterministic stop | ORC-REASON-010...015, GOV-BUD-001...010 | Sufficiency, budget, limits, or HITL |
+
+### 1.5.2 Confidence and Critique Control (BRD-AUTO-049 to BRD-AUTO-050, Added V1.2)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-049 | Confidence as core runtime signal | INT-CONF-001...005, GOV-SEM-CONF-001...007 | Confidence propagation across stages/gates |
+| BRD-AUTO-050 | Mandatory advisory critique before decisions | INT-CRIT-001...005, AGT-CRIT-001...007 | Critique can downgrade or block |
+
+### 1.5.3 Execution Gatekeeping (BRD-AUTO-051 to BRD-AUTO-052, Added V1.2)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-051 | ContextPack frozen before planning/execution | INT-CP-FREEZE-001...003, ORC-CTXPACK-001...003 | Data, evidence, constraints, quality consolidated |
+| BRD-AUTO-052 | Explicit terminal outcomes with explanations | ORC-TERM-001...005, INT-EXIT-001...010 | SUCCESS, PARTIAL, ASK_USER, ABORT with artifacts |
 
 ### 1.6 Semantic Interpretation Phase (BRD-AUTO-SEM-001 to BRD-AUTO-SEM-010)
 
@@ -214,7 +238,7 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-GOV-046 | Artifacts capture options, evidence, choice | AGT-ARTIFACT-004, INT-RL-SEL-003 | Artifact content |
 | BRD-GOV-047 | Artifacts immutable | AGT-ARTIFACT-005 | Immutability |
 
-### 2.6 Governance Hooks (BRD-GOV-050 to BRD-GOV-053)
+### 2.6 Governance Hooks (BRD-GOV-050 to BRD-GOV-054)
 
 | BRD ID | Description | Derived TechSpec | Rationale |
 |--------|-------------|------------------|-----------|
@@ -222,6 +246,7 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-GOV-051 | Hooks not bypassable | GOV-HOOK-001 | Thin evaluation layer |
 | BRD-GOV-052 | Hook failures halt execution | GOV-HOOK-002 (allowed=False) | Fail-closed |
 | BRD-GOV-053 | Hooks don't log (separation) | GOV-HOOK-003 | Caller emits traces |
+| BRD-GOV-054 | Runtime prevents learning/self-modification | GOV-POL-SELFMOD-001...003 | No runtime self-modification during execution |
 
 ### 2.7 Semantic Interpretation Governance (BRD-GOV-060 to BRD-GOV-063)
 
@@ -416,6 +441,13 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-OPS-ARCH-005 | Test core doesn't import products | ACC-SEM-003 | Import isolation |
 | BRD-OPS-ARCH-006 | Tests in tests/architecture/ | ACC-ARCH-004, ACC-SEM-004 | Location |
 | BRD-OPS-ARCH-007 | Tests run in CI | ACC-CI-001, ACC-SEM-005 | CI integration |
+
+### 4.9 Explainability & Reproducibility (BRD-OPS-060 to BRD-OPS-061)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-OPS-060 | Post-hoc explainability | MEM-EXPLAIN-001...005 | Recorded reasoning traces support audit and explanation |
+| BRD-OPS-061 | Reproducibility (versions, inputs, hashes) | MEM-REPRO-001...005, ORC-REPRO-001...003 | Input/output hashing, version recording, deterministic replay |
 
 ---
 

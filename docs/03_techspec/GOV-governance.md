@@ -1,9 +1,9 @@
 # Governance Technical Specification
 
 > **Document ID**: GOV  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-20  
 
 ---
 
@@ -14,6 +14,7 @@
 | 1.0.0 | 2026-01-12 | Initial release |
 | 1.1.0 | 2026-01-13 | Added §12 Semantic Confidence Governance, §13 Decision Artifact Requirements, §14 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-20 | Added §13A Runtime Self-Modification Prevention (BRD-GOV-054) |
 
 ---
 
@@ -456,6 +457,40 @@ persisting state or performing logging directly.
 | GOV-DEC-PERS-002 | Artifact key MUST be `decision.{decision_id}` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | GOV-DEC-PERS-003 | Artifact creation MUST emit `decision_artifact_created` trace event | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | GOV-DEC-PERS-004 | Artifacts MUST NOT be modified after creation | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+
+---
+
+## 13A. Runtime Self-Modification Prevention (Added: 2026-01-20)
+
+> **Source**: BRD-GOV-054 - Runtime prevents learning/self-modification
+
+### 13A.1 Self-Modification Prevention Requirements
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-POL-SELFMOD-001 | Runtime MUST prevent agents from modifying their own configuration, prompts, or policies during execution | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-002 | Runtime MUST prevent learning or weight updates during execution; learning is allowed only in offline training | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-003 | Attempts to modify runtime configuration MUST raise `SelfModificationBlockedError` and emit `self_modification_blocked` trace event | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13A.2 Immutable Runtime Artifacts
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-POL-SELFMOD-010 | Policy configurations MUST be frozen at run initialization and MUST NOT change during run | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-011 | Agent prompts and system messages MUST be frozen at run initialization | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-012 | Budget and resource limits MUST be frozen at run initialization (except for consumption tracking) | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-013 | Tool and agent registries MUST be read-only during run execution | MUST | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+
+
+### 13A.3 Allowed Runtime State Changes
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-POL-SELFMOD-020 | Budget consumption counters MAY be updated during execution | MAY | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-021 | Run artifacts and evidence MAY be accumulated during execution | MAY | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
+| GOV-POL-SELFMOD-022 | Run status and step status MAY transition according to state machine rules | MAY | BRD-GOV-054 | 1.3 | 20 Jan 2026 | — |
 
 
 ---

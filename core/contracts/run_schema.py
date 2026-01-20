@@ -58,6 +58,238 @@ class StepStatus(str, Enum):
     SKIPPED = "SKIPPED"
 
 
+# ==============================
+# Terminal Outcome Enums (IMP-012)
+# ==============================
+class TerminalOutcome(str, Enum):
+    """
+    Explicit terminal outcome classification for a run.
+    
+    ORC-TERM-001..005: Every run must end in exactly one terminal outcome.
+    """
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    ABORTED = "ABORTED"
+    PAUSED_INDEFINITE = "PAUSED_INDEFINITE"
+
+
+class OutcomeReason(str, Enum):
+    """
+    Reason for terminal outcome.
+    
+    ORC-TERM-002: Each outcome has a typed reason enum.
+    """
+    SUCCESS = "SUCCESS"
+    USER_ABORT = "USER_ABORT"
+    GOVERNANCE_BLOCK = "GOVERNANCE_BLOCK"
+    BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
+    MAX_ITERATIONS = "MAX_ITERATIONS"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    UNRECOVERABLE_ERROR = "UNRECOVERABLE_ERROR"
+
+
+class AbortSource(str, Enum):
+    """
+    Source of an abort action.
+    
+    ORC-TERM-ART-003: Aborted outcome includes abort source.
+    """
+    USER = "USER"
+    SYSTEM = "SYSTEM"
+    GOVERNANCE = "GOVERNANCE"
+
+
+# ==============================
+# Version Tracking (IMP-027)
+# ==============================
+
+class Versions(BaseModel):
+    """
+    Version tracking for reproducibility.
+    
+    IMP-027: MEM-REPRO-001, MEM-REPRO-002, MEM-REPRO-003
+    BRD: BRD-OPS-061
+    
+    Captures all version information needed to reproduce a run.
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    platform_version: str = Field(
+        default="1.0.0",
+        description="MASTER platform version."
+    )
+    flow_version: str = Field(
+        default="unknown",
+        description="Flow file version or hash."
+    )
+    python_version: str = Field(
+        default="unknown",
+        description="Python runtime version."
+    )
+    models: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Model versions (model name → version/checkpoint)."
+    )
+    
+    @classmethod
+    def capture(
+        cls,
+        *,
+        platform_version: str = "1.0.0",
+        flow_version: str = "unknown",
+        models: Optional[Dict[str, str]] = None,
+    ) -> "Versions":
+        """
+        Capture current versions.
+        
+        Args:
+            platform_version: Platform version string
+            flow_version: Flow file version or hash
+            models: Optional model versions dict
+            
+        Returns:
+            Versions instance with captured information
+        """
+        import sys
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        return cls(
+            platform_version=platform_version,
+            flow_version=flow_version,
+            python_version=python_version,
+            models=models or {},
+        )
+
+
+# ==============================
+# Terminal Outcome Artifacts (IMP-013)
+# ==============================
+class CompletedArtifact(BaseModel):
+    """
+    Artifact for COMPLETED terminal outcome.
+    
+    ORC-TERM-ART-001: COMPLETED outcome includes final output artifact.
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    final_output: Dict[str, Any] = Field(
+        ...,
+        description="Final output produced by the run.",
+    )
+    output_summary: Optional[str] = Field(
+        default=None,
+        description="Human-readable summary of the output.",
+    )
+    metrics: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Completion metrics (duration, steps executed, etc.).",
+    )
+
+
+class FailedArtifact(BaseModel):
+    """
+    Artifact for FAILED terminal outcome.
+    
+    ORC-TERM-ART-002: FAILED outcome includes error artifact with required fields.
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    error_code: str = Field(
+        ...,
+        description="Machine-readable error code.",
+    )
+    error_message: str = Field(
+        ...,
+        description="Human-readable error message.",
+    )
+    stack_trace: Optional[str] = Field(
+        default=None,
+        description="Optional stack trace for debugging.",
+    )
+    failed_step_id: Optional[str] = Field(
+        default=None,
+        description="ID of the step that caused the failure.",
+    )
+    recovery_attempted: bool = Field(
+        default=False,
+        description="Whether recovery was attempted before failing.",
+    )
+
+
+class AbortedArtifact(BaseModel):
+    """
+    Artifact for ABORTED terminal outcome.
+    
+    ORC-TERM-ART-003: ABORTED outcome includes abort reason and source.
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    abort_reason: str = Field(
+        ...,
+        description="Reason for the abort.",
+    )
+    abort_source: AbortSource = Field(
+        ...,
+        description="Source of the abort (user/system/governance).",
+    )
+    aborted_at_step_id: Optional[str] = Field(
+        default=None,
+        description="ID of the step that was running when abort occurred.",
+    )
+    partial_output: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Any partial output produced before abort.",
+    )
+
+
+class CancelledArtifact(BaseModel):
+    """
+    Artifact for CANCELLED terminal outcome.
+    
+    ORC-TERM-ART-004: CANCELLED outcome includes cancellation details.
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    cancel_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for cancellation.",
+    )
+    cancelled_by: Optional[str] = Field(
+        default=None,
+        description="Entity that initiated cancellation.",
+    )
+    cancelled_at_step_id: Optional[str] = Field(
+        default=None,
+        description="ID of the step that was running when cancelled.",
+    )
+
+
+class PausedIndefiniteArtifact(BaseModel):
+    """
+    Artifact for PAUSED_INDEFINITE terminal outcome.
+    
+    Captures state for runs paused indefinitely (e.g., awaiting external input).
+    """
+    model_config = ConfigDict(extra="forbid")
+    
+    pause_reason: str = Field(
+        ...,
+        description="Reason for indefinite pause.",
+    )
+    paused_at_step_id: Optional[str] = Field(
+        default=None,
+        description="ID of the step where pause occurred.",
+    )
+    resumable: bool = Field(
+        default=True,
+        description="Whether the run can be resumed.",
+    )
+    resume_instructions: Optional[str] = Field(
+        default=None,
+        description="Instructions for resuming the run.",
+    )
+
+
 class ArtifactRef(BaseModel):
     """Reference to an artifact persisted by memory backend."""
 
@@ -132,6 +364,39 @@ class RunRecord(BaseModel):
     semantic_envelope: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Semantic interpretation result (SemanticEnvelope serialized).",
+    )
+    # Terminal outcome fields (IMP-012: ORC-TERM-001..005)
+    terminal_outcome: Optional[TerminalOutcome] = Field(
+        default=None,
+        description="Explicit terminal outcome classification.",
+    )
+    outcome_reason: Optional[OutcomeReason] = Field(
+        default=None,
+        description="Reason for terminal outcome.",
+    )
+    outcome_explanation: Optional[str] = Field(
+        default=None,
+        description="Human-readable explanation for terminal outcome.",
+    )
+    # Terminal artifact (IMP-013: ORC-TERM-ART-001..004)
+    terminal_artifact: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Serialized terminal artifact (CompletedArtifact, FailedArtifact, AbortedArtifact, etc.).",
+    )
+    # Version tracking (IMP-027: MEM-REPRO-001..003)
+    versions: Optional[Versions] = Field(
+        default=None,
+        description="Version information for reproducibility.",
+    )
+    # Input hashing (IMP-028: MEM-REPRO-010..012)
+    input_hash: Optional[str] = Field(
+        default=None,
+        description="SHA-256 hash of canonical JSON input for reproducibility.",
+    )
+    # Output hashing (IMP-029: MEM-REPRO-020..021)
+    output_hash: Optional[str] = Field(
+        default=None,
+        description="SHA-256 hash of canonical JSON output for reproducibility.",
     )
 
 

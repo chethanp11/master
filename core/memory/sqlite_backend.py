@@ -244,6 +244,60 @@ class SQLiteBackend(MemoryBackend):
             )
             con.commit()
 
+    def update_run(self, run_id: str, patch: Dict[str, Any]) -> None:
+        """Update arbitrary fields on a run record by storing in summary_json."""
+        with self._connect() as con:
+            # Retrieve existing summary
+            row = con.execute(
+                "SELECT summary_json FROM runs WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                return
+            existing = _loads(row[0]) if row[0] else {}
+            existing.update(patch)
+            con.execute(
+                "UPDATE runs SET summary_json=? WHERE run_id=?",
+                (_dumps(existing), run_id),
+            )
+            con.commit()
+
+    def update_run_terminal_outcome(
+        self,
+        run_id: str,
+        *,
+        terminal_outcome: str,
+        outcome_reason: str,
+        outcome_explanation: str,
+        terminal_artifact: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update terminal outcome fields on a run record.
+        
+        IMP-012 (ORC-TERM-001..005): Persist terminal outcome classification.
+        IMP-013 (ORC-TERM-ART-001..004): Persist terminal artifact.
+        
+        Note: Terminal outcome fields are stored in summary_json for backwards compatibility.
+        """
+        with self._connect() as con:
+            # Read current summary
+            cur = con.execute("SELECT summary_json FROM runs WHERE run_id=?", (run_id,))
+            row = cur.fetchone()
+            if row is None:
+                return
+            summary = json.loads(row[0]) if row[0] else {}
+            # Update with terminal outcome fields
+            summary["terminal_outcome"] = terminal_outcome
+            summary["outcome_reason"] = outcome_reason
+            summary["outcome_explanation"] = outcome_explanation
+            if terminal_artifact is not None:
+                summary["terminal_artifact"] = terminal_artifact
+            con.execute(
+                "UPDATE runs SET summary_json=? WHERE run_id=?",
+                (_dumps(summary), run_id),
+            )
+            con.commit()
+
     # ------------------------------
     # Steps
     # ------------------------------
@@ -528,6 +582,90 @@ class SQLiteBackend(MemoryBackend):
                     )
                 )
             return out
+
+    # IMP-017: Sufficiency state persistence
+    def persist_sufficiency_state(
+        self,
+        run_id: str,
+        state: Dict[str, Any],
+    ) -> None:
+        """
+        Persist sufficiency state for a run.
+        
+        IMP-017 (INT-SUFF-LC-003): Store in summary_json for backwards compatibility.
+        """
+        with self._connect() as con:
+            # Read current summary
+            cur = con.execute("SELECT summary_json FROM runs WHERE run_id=?", (run_id,))
+            row = cur.fetchone()
+            if row is None:
+                return
+            summary = json.loads(row[0]) if row[0] else {}
+            summary["sufficiency_state"] = state
+            con.execute(
+                "UPDATE runs SET summary_json=? WHERE run_id=?",
+                (_dumps(summary), run_id),
+            )
+            con.commit()
+
+    def restore_sufficiency_state(
+        self,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Restore sufficiency state for a run.
+        
+        IMP-017 (INT-SUFF-LC-004): Retrieve from summary_json.
+        """
+        with self._connect() as con:
+            cur = con.execute("SELECT summary_json FROM runs WHERE run_id=?", (run_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            summary = json.loads(row[0]) if row[0] else {}
+            return summary.get("sufficiency_state")
+
+    # IMP-021: ContextPack persistence
+    def persist_context_pack(
+        self,
+        run_id: str,
+        context_pack: Dict[str, Any],
+    ) -> None:
+        """
+        Persist frozen ContextPack for a run.
+        
+        IMP-021 (INT-CP-FREEZE-LC-002): Store in summary_json for audit.
+        """
+        with self._connect() as con:
+            # Read current summary
+            cur = con.execute("SELECT summary_json FROM runs WHERE run_id=?", (run_id,))
+            row = cur.fetchone()
+            if row is None:
+                return
+            summary = json.loads(row[0]) if row[0] else {}
+            summary["context_pack"] = context_pack
+            con.execute(
+                "UPDATE runs SET summary_json=? WHERE run_id=?",
+                (_dumps(summary), run_id),
+            )
+            con.commit()
+
+    def restore_context_pack(
+        self,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Restore frozen ContextPack for a run.
+        
+        IMP-021 (INT-CP-FREEZE-LC-002): Retrieve from summary_json for audit.
+        """
+        with self._connect() as con:
+            cur = con.execute("SELECT summary_json FROM runs WHERE run_id=?", (run_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            summary = json.loads(row[0]) if row[0] else {}
+            return summary.get("context_pack")
 
 
 # Backwards-compatible alias expected by older modules/tests

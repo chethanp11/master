@@ -1,9 +1,9 @@
 # Intelligence Layer Technical Specification
 
 > **Document ID**: INT  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-20  
 
 ---
 
@@ -14,6 +14,7 @@
 | 1.0.0 | 2026-01-12 | Initial release |
 | 1.1.0 | 2026-01-13 | Added §8 Failure Modes & Safe Exits, §9 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-20 | Added §6A Hypothesis Management (BRD-AUTO-028), §6B Sufficiency State (BRD-AUTO-029), §6C Confidence as Runtime Signal (BRD-AUTO-049), §6D ContextPack Freeze (BRD-AUTO-051) |
 
 ---
 
@@ -320,6 +321,114 @@ This layer enhances decision quality while maintaining governance constraints.
 | INT-SEM-VAL-004 | `ValidationResult` MUST include: `revised_confidence` (float 0.0-1.0, after validation adjustments) | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | INT-SEM-VAL-005 | `ValidationResult` MAY include: `clarifying_question` (string, when user input needed) | MAY | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | INT-SEM-VAL-006 | If `is_valid=false`, `NextAction` MUST be `ASK_USER` or `ABORT` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+
+---
+
+## 6A. Hypothesis Management (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-028 - Multiple competing hypotheses with confidence scores
+
+### 6A.1 Hypothesis Structure
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-HYP-001 | Intelligence layer MUST support multiple competing `Hypothesis` objects for any interpretation | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-002 | Each `Hypothesis` MUST include `id` (UUID), `description` (string), `confidence` (0.0-1.0), and `evidence_refs` (list) | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-003 | `HypothesisSet` MUST contain `hypotheses` list, `created_at` timestamp, and `context_hash` reference | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-004 | `HypothesisSet` MUST be immutable once frozen; modifications MUST create new `HypothesisSet` | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-005 | System MUST retain all hypotheses (not just selected) for audit trail | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+
+
+### 6A.2 Hypothesis Selection
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-HYP-SEL-001 | `select_hypothesis` MUST return exactly one `Hypothesis` from the set | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-SEL-002 | Selection MUST prefer hypothesis with highest `confidence` unless governance overrides | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-SEL-003 | If top hypotheses are within `confidence_margin` (default 0.1), system MUST escalate to `ASK_USER` | MUST | BRD-AUTO-028, BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-SEL-004 | Selection MUST emit `hypothesis_selected` event with `selected_id`, `alternatives`, `margin`, `reason` | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+| INT-HYP-SEL-005 | Rejected hypotheses MUST be recorded with rejection reason | MUST | BRD-AUTO-028 | 1.3 | 20 Jan 2026 | — |
+
+
+---
+
+## 6B. Sufficiency State (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-029 - Persistent sufficiency state (facts, unknowns, assumptions, gaps)
+
+### 6B.1 Sufficiency State Structure
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-SUFF-001 | Intelligence layer MUST maintain a `SufficiencyState` object per run | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-002 | `SufficiencyState` MUST include `facts` (list of verified evidence items) | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-003 | `SufficiencyState` MUST include `unknowns` (list of unresolved questions) | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-004 | `SufficiencyState` MUST include `assumptions` (list of working assumptions with confidence) | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-005 | `SufficiencyState` MUST include `gaps` (list of identified missing information) | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+
+
+### 6B.2 Sufficiency State Lifecycle
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-SUFF-LC-001 | `SufficiencyState` MUST be persisted after each reasoning pass | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-LC-002 | New evidence MUST update `facts` and potentially resolve `unknowns` or `gaps` | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-LC-003 | Each state transition MUST emit `sufficiency_state_updated` event | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-LC-004 | State MUST be restorable from persistence for run resumption | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+| INT-SUFF-LC-005 | Sufficiency MUST be evaluated: run MAY proceed only if `gaps.count == 0` or gaps are non-blocking | MUST | BRD-AUTO-029 | 1.3 | 20 Jan 2026 | — |
+
+
+---
+
+## 6C. Confidence as Runtime Signal (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-049 - Confidence as core runtime signal
+
+### 6C.1 Confidence Propagation Requirements
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-CONF-001 | Confidence MUST flow through all reasoning phases as a first-class value | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-002 | Each reasoning output MUST include `confidence` field (0.0-1.0) | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-003 | Aggregated confidence MUST be computed as weighted product of component confidences | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-004 | Confidence below threshold MUST trigger governance-controlled actions (ASK_USER, HITL, ABORT) | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-005 | Confidence MUST be emitted in all trace events related to reasoning | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+
+
+### 6C.2 Confidence Thresholds
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-CONF-THR-001 | Global confidence threshold MUST be configurable (default 0.7) | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-THR-002 | Per-product thresholds MUST override global threshold | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-THR-003 | Threshold comparison MUST be deterministic: `<` means below, `>=` means at or above | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-THR-004 | Threshold violations MUST be logged with `confidence_threshold_violated` event | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+| INT-CONF-THR-005 | Products MUST NOT lower confidence threshold below 0.5 (governance floor) | MUST | BRD-AUTO-049 | 1.3 | 20 Jan 2026 | — |
+
+
+---
+
+## 6D. ContextPack Freeze Before Execution (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-051 - ContextPack frozen before planning/execution
+
+### 6D.1 Freeze Requirements
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-CP-FREEZE-001 | ContextPack MUST be frozen (immutable) before plan generation begins | MUST | BRD-AUTO-051 | 1.3 | 20 Jan 2026 | — |
+| INT-CP-FREEZE-002 | Frozen ContextPack MUST have `frozen_at` timestamp and `frozen_hash` (SHA-256) | MUST | BRD-AUTO-051 | 1.3 | 20 Jan 2026 | — |
+| INT-CP-FREEZE-003 | Attempts to modify frozen ContextPack MUST raise `ContextPackFrozenError` | MUST | BRD-AUTO-051 | 1.3 | 20 Jan 2026 | — |
+
+
+### 6D.2 Freeze Lifecycle
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-CP-FREEZE-LC-001 | Freeze MUST emit `context_pack_frozen` event with `run_id`, `frozen_hash`, `evidence_count` | MUST | BRD-AUTO-051 | 1.3 | 20 Jan 2026 | — |
+| INT-CP-FREEZE-LC-002 | Frozen ContextPack MUST be persisted for audit and reproducibility | MUST | BRD-AUTO-051, BRD-OPS-061 | 1.3 | 20 Jan 2026 | — |
+| INT-CP-FREEZE-LC-003 | Plan executor MUST validate ContextPack is frozen before execution | MUST | BRD-AUTO-051 | 1.3 | 20 Jan 2026 | — |
 
 
 ---

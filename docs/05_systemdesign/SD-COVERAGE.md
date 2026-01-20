@@ -1,10 +1,10 @@
 # System Design: Spec Coverage Matrix
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
-> **Version**: 1.1  
+> **Version**: 1.2  
 
-> **Last Updated**: 2026-01-16  
-> **Status**: V1 Release  
+> **Last Updated**: 2026-01-20  
+> **Status**: V1.3 Tech Spec Alignment  
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-01-20 | Added V1.3 Tech Spec requirements coverage (Hypothesis Management, Sufficiency State, Reasoning Lifecycle, Terminal Outcomes, Self-Modification Prevention, Explainability, Reproducibility). SD-COVERAGE GAP COUNT: 63 |
 | 1.1 | 2026-01-13 | Header version normalization |
 
 ## Purpose
@@ -40,11 +41,11 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 | Tech Spec | Total | ✅ | 🟡 | ❌ | Coverage |
 |-----------|-------|-----|-----|-----|----------|
-| [ORC-orchestration.md](#orchestration-orc) | ~115 | 113 | 0 | 2 | 98% |
+| [ORC-orchestration.md](#orchestration-orc) | ~136 | 113 | 0 | 23 | 83% |
 | [AGT-agents-tools.md](#agents--tools-agt-tool) | ~50 | 45 | 3 | 2 | 90% |
-| [GOV-governance.md](#governance-gov) | ~65 | 63 | 0 | 2 | 97% |
-| [MEM-memory.md](#memory-mem) | ~45 | 43 | 2 | 0 | 96% |
-| [INT-intelligence.md](#intelligence-int) | ~55 | 48 | 5 | 2 | 87% |
+| [GOV-governance.md](#governance-gov) | ~75 | 63 | 0 | 12 | 84% |
+| [MEM-memory.md](#memory-mem) | ~64 | 43 | 2 | 19 | 67% |
+| [INT-intelligence.md](#intelligence-int) | ~91 | 48 | 5 | 38 | 53% |
 | [GW-gateway.md](#gateway-gw) | ~75 | 70 | 3 | 2 | 93% |
 | [PROD-products.md](#products-prod) | ~50 | 47 | 1 | 2 | 94% |
 | [ACC-acceptance.md](#acceptance-acc) | ~15 | 15 | 0 | 0 | 100% |
@@ -145,6 +146,39 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 |--------------|---------------------|--------|----------------|----------------|-------|-------|
 | ORC-PLAN-001 | Plan from pending_plan or agent | ✅ Implemented | `core/orchestrator/plan_executor.py` | `trace: plan_proposed` | `tests/unit/core/test_plan_executor.py` | |
 | ORC-PLAN-002 | Validate against ActionPlan schema | ✅ Implemented | `core/contracts/action_plan_schema.py` | — | `tests/unit/core/test_action_plan.py` | |
+
+### Orchestrator-Controlled Reasoning Lifecycle (ORC-REASON) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| ORC-REASON-001 | Orchestrator controls reasoning phases: INTERPRET → PROPOSE → CRITIQUE → RECOMMEND | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-002 | Phase transitions explicit and logged | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-003 | Each phase produces typed output artifact | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-004 | Phase outputs persisted before transition | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-005 | Reasoning lifecycle MUST NOT proceed to RECOMMEND without passing CRITIQUE | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-010 | Reasoning bounded by max_reasoning_iterations (default: 3, max: 10) | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-011 | Each iteration consumes reasoning budget | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-012 | Iteration count tracked and emitted in trace events | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-013 | When max_reasoning_iterations reached, terminate with deterministic outcome | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-014 | Termination reason: SUFFICIENT, MAX_ITERATIONS, BUDGET_EXCEEDED, CONFIDENCE_MET | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-015 | reasoning_terminated event with iteration_count, reason, final_confidence | ❌ Not Implemented | — | — | — | BRD-AUTO-048 |
+| ORC-REASON-020 | Each phase emits reasoning_phase_started event | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-021 | Each phase emits reasoning_phase_completed event | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+| ORC-REASON-022 | Phase failures emit reasoning_phase_failed event | ❌ Not Implemented | — | — | — | BRD-AUTO-047 |
+
+### Explicit Terminal Outcomes (ORC-TERM) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| ORC-TERM-001 | Run terminates with explicit outcome: COMPLETED, FAILED, CANCELLED, ABORTED, PAUSED_INDEFINITE | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-002 | Every terminal outcome includes outcome_reason (enum) and outcome_explanation (string) | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-003 | outcome_reason enum: SUCCESS, USER_ABORT, GOVERNANCE_BLOCK, BUDGET_EXCEEDED, MAX_ITERATIONS, VALIDATION_FAILED, UNRECOVERABLE_ERROR | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-004 | outcome_explanation MUST be human-readable and auditable | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-005 | Terminal outcome persisted in RunRecord and emitted as run_terminal_outcome event | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-ART-001 | COMPLETED outcome includes final output artifact | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-ART-002 | FAILED outcome includes error artifact with error_code, error_message, stack_trace | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-ART-003 | ABORTED outcome includes abort artifact with abort_reason, abort_source | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
+| ORC-TERM-ART-004 | All terminal artifacts persisted before run record finalized | ❌ Not Implemented | — | — | — | BRD-AUTO-052 |
 
 ---
 
@@ -272,6 +306,21 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 | — | Gate returns GateResult | ✅ Implemented | `core/governance/gates.py` | `trace: gate_evaluated` | `tests/unit/core/test_gates.py` | |
 | — | Gate failure pauses run | ✅ Implemented | `core/governance/gates.py` | `trace: gate_paused` | `tests/integration/test_gate_pause.py` | |
 
+### Runtime Self-Modification Prevention (GOV-POL-SELFMOD) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| GOV-POL-SELFMOD-001 | Runtime prevents agents from modifying own config, prompts, or policies | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-002 | Runtime prevents learning or weight updates during execution | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-003 | Self-modification attempts raise SelfModificationBlockedError | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-010 | Policy configurations frozen at run initialization | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-011 | Agent prompts and system messages frozen at run initialization | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-012 | Budget and resource limits frozen at run initialization | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-013 | Tool and agent registries read-only during run execution | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-020 | Budget consumption counters MAY be updated during execution | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-021 | Run artifacts and evidence MAY be accumulated during execution | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+| GOV-POL-SELFMOD-022 | Run status and step status MAY transition according to state machine rules | ❌ Not Implemented | — | — | — | BRD-GOV-054 |
+
 ---
 
 ## Memory (MEM)
@@ -316,6 +365,35 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 | — | Events linked to run ID | ✅ Implemented | `core/memory/tracing.py` | — | `tests/unit/core/test_tracing.py` | |
 | — | Trace exportable as JSON | ✅ Implemented | `core/memory/tracing.py` | `artifact: trace.json` | `tests/unit/core/test_trace_export.py` | |
 | — | SecurityRedactor applied to payloads | ✅ Implemented | `core/memory/tracing.py` | — | `tests/unit/core/test_tracing.py` | |
+
+### Explainability (MEM-EXPLAIN) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| MEM-EXPLAIN-001 | All reasoning traces persisted with sufficient detail for explanation | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-002 | Each decision point traceable through decision_id → evidence_refs → source tools | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-003 | Reasoning chains reconstructable from trace events | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-004 | explain_run(run_id) API returns structured explanation artifact | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-005 | Explanation includes reasoning_chain, evidence_used, decisions_made, confidence_evolution | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-ART-001 | ExplanationArtifact includes run_id, created_at, reasoning_steps (list) | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-ART-002 | Each reasoning_step includes step_id, phase, input_summary, output_summary, confidence, evidence_refs | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+| MEM-EXPLAIN-ART-003 | Explanation includes terminal_outcome with outcome_reason and outcome_explanation | ❌ Not Implemented | — | — | — | BRD-OPS-060 |
+
+### Reproducibility (MEM-REPRO) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| MEM-REPRO-001 | RunRecord includes versions object with platform and dependency versions | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-002 | versions includes platform_version, flow_version, python_version | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-003 | versions includes model versions: models dict mapping name to version/checkpoint | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-010 | All inputs hashed using SHA-256 and stored as input_hash | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-011 | input_hash computed from canonical JSON (sorted keys, minimal separators) | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-012 | ContextPack includes content_hash computed before freeze | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-020 | All outputs hashed using SHA-256 and stored as output_hash | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-021 | output_hash recorded in terminal run_completed or run_failed event | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-030 | validate_reproducibility(run_id) API compares stored hashes | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-031 | Validation returns is_reproducible boolean and discrepancies list | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
+| MEM-REPRO-032 | Discrepancies include field, expected_hash, actual_hash | ❌ Not Implemented | — | — | — | BRD-OPS-061 |
 
 ---
 
@@ -370,6 +448,62 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 | — | completeness_score 0.0-1.0 | ✅ Implemented | `core/contracts/critic_schema.py` | — | `tests/unit/core/test_critic_schema.py` | |
 | — | confidence_adjustment -1.0 to 1.0 | ✅ Implemented | `core/contracts/critic_schema.py` | — | `tests/unit/core/test_critic_schema.py` | |
 | — | recommended_next_action enum | ✅ Implemented | `core/contracts/critic_schema.py` | — | `tests/unit/core/test_critic_schema.py` | |
+
+### Hypothesis Management (INT-HYP) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| INT-HYP-001 | Intelligence layer supports multiple competing Hypothesis objects | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-002 | Hypothesis includes id, description, confidence (0.0-1.0), evidence_refs | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-003 | HypothesisSet contains hypotheses list, created_at, context_hash | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-004 | HypothesisSet immutable once frozen | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-005 | System retains all hypotheses for audit trail | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-SEL-001 | select_hypothesis returns exactly one Hypothesis | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-SEL-002 | Selection prefers highest confidence hypothesis | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-SEL-003 | If top hypotheses within confidence_margin, escalate to ASK_USER | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-SEL-004 | Selection emits hypothesis_selected event | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+| INT-HYP-SEL-005 | Rejected hypotheses recorded with rejection reason | ❌ Not Implemented | — | — | — | BRD-AUTO-028 |
+
+### Sufficiency State (INT-SUFF) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| INT-SUFF-001 | Intelligence layer maintains SufficiencyState per run | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-002 | SufficiencyState includes facts (verified evidence) | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-003 | SufficiencyState includes unknowns (unresolved questions) | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-004 | SufficiencyState includes assumptions (with confidence) | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-005 | SufficiencyState includes gaps (missing information) | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-LC-001 | SufficiencyState persisted after each reasoning pass | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-LC-002 | New evidence updates facts and resolves unknowns/gaps | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-LC-003 | Each state transition emits sufficiency_state_updated event | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-LC-004 | State restorable from persistence for run resumption | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+| INT-SUFF-LC-005 | Run proceeds only if gaps.count == 0 or gaps are non-blocking | ❌ Not Implemented | — | — | — | BRD-AUTO-029 |
+
+### Confidence as Runtime Signal (INT-CONF) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| INT-CONF-001 | Confidence flows through all reasoning phases as first-class value | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-002 | Each reasoning output includes confidence field (0.0-1.0) | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-003 | Aggregated confidence computed as weighted product of component confidences | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-004 | Confidence below threshold triggers governance-controlled actions | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-005 | Confidence emitted in all trace events related to reasoning | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-THR-001 | Global confidence threshold configurable (default 0.7) | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-THR-002 | Per-product thresholds override global threshold | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-THR-003 | Threshold comparison deterministic: < means below, >= means at or above | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-THR-004 | Threshold violations logged with confidence_threshold_violated event | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+| INT-CONF-THR-005 | Products MUST NOT lower confidence threshold below 0.5 | ❌ Not Implemented | — | — | — | BRD-AUTO-049 |
+
+### ContextPack Freeze (INT-CP-FREEZE) — V1.3
+
+| Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
+|--------------|---------------------|--------|----------------|----------------|-------|-------|
+| INT-CP-FREEZE-001 | ContextPack frozen (immutable) before plan generation begins | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
+| INT-CP-FREEZE-002 | Frozen ContextPack has frozen_at timestamp and frozen_hash (SHA-256) | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
+| INT-CP-FREEZE-003 | Attempts to modify frozen ContextPack raise ContextPackFrozenError | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
+| INT-CP-FREEZE-LC-001 | Freeze emits context_pack_frozen event with run_id, frozen_hash, evidence_count | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
+| INT-CP-FREEZE-LC-002 | Frozen ContextPack persisted for audit and reproducibility | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
+| INT-CP-FREEZE-LC-003 | Plan executor validates ContextPack is frozen before execution | ❌ Not Implemented | — | — | — | BRD-AUTO-051 |
 
 ---
 
@@ -511,6 +645,56 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 | ACC-002 | Integration tests for cross-module flows | ✅ Implemented | `tests/integration/` | — | — | |
 | ACC-003 | Architecture tests for invariants | ✅ Implemented | `tests/architecture/` | — | — | |
 | ACC-004 | Acceptance tests for end-to-end flows | ✅ Implemented | `tests/acceptance_intelligence/` | — | — | |
+
+---
+
+## Gap Register — V1.3 Tech Spec Requirements
+
+> **SD-COVERAGE GAP COUNT: 63**
+
+This section catalogues all V1.3 Tech Spec requirements that are not yet implemented. Each gap corresponds to new requirements from the BRD → Tech Spec alignment performed on 2026-01-20.
+
+### Gap Summary by Component
+
+| Component | Gap Count | Priority | Effort Estimate |
+|-----------|-----------|----------|-----------------|
+| ORC-REASON | 14 | P0 | 5 days |
+| ORC-TERM | 9 | P0 | 3 days |
+| INT-HYP | 10 | P0 | 4 days |
+| INT-SUFF | 10 | P0 | 4 days |
+| INT-CONF | 10 | P1 | 3 days |
+| INT-CP-FREEZE | 6 | P1 | 2 days |
+| GOV-POL-SELFMOD | 10 | P1 | 3 days |
+| MEM-EXPLAIN | 8 | P1 | 3 days |
+| MEM-REPRO | 11 | P2 | 4 days |
+| **TOTAL** | **63** | — | **~31 days** |
+
+### Gap Register
+
+| GAP-ID | Tech Spec IDs | Component | BRD Source | Priority | Description |
+|--------|---------------|-----------|------------|----------|-------------|
+| GAP-009 | ORC-REASON-001...005 | ORC | BRD-AUTO-047 | P0 | Orchestrator-controlled reasoning lifecycle phases |
+| GAP-010 | ORC-REASON-010...015 | ORC | BRD-AUTO-048 | P0 | Bounded reasoning iteration with budget enforcement |
+| GAP-011 | ORC-REASON-020...022 | ORC | BRD-AUTO-047 | P0 | Reasoning phase trace events |
+| GAP-012 | ORC-TERM-001...005 | ORC | BRD-AUTO-052 | P0 | Explicit terminal outcome definitions |
+| GAP-013 | ORC-TERM-ART-001...004 | ORC | BRD-AUTO-052 | P0 | Terminal outcome artifacts |
+| GAP-014 | INT-HYP-001...005 | INT | BRD-AUTO-028 | P0 | Hypothesis structure and immutability |
+| GAP-015 | INT-HYP-SEL-001...005 | INT | BRD-AUTO-028 | P0 | Hypothesis selection with confidence margin |
+| GAP-016 | INT-SUFF-001...005 | INT | BRD-AUTO-029 | P0 | SufficiencyState structure (facts, unknowns, assumptions, gaps) |
+| GAP-017 | INT-SUFF-LC-001...005 | INT | BRD-AUTO-029 | P0 | SufficiencyState lifecycle and persistence |
+| GAP-018 | INT-CONF-001...005 | INT | BRD-AUTO-049 | P1 | Confidence as first-class runtime signal |
+| GAP-019 | INT-CONF-THR-001...005 | INT | BRD-AUTO-049 | P1 | Confidence threshold configuration |
+| GAP-020 | INT-CP-FREEZE-001...003 | INT | BRD-AUTO-051 | P1 | ContextPack freeze requirements |
+| GAP-021 | INT-CP-FREEZE-LC-001...003 | INT | BRD-AUTO-051 | P1 | ContextPack freeze lifecycle |
+| GAP-022 | GOV-POL-SELFMOD-001...003 | GOV | BRD-GOV-054 | P1 | Runtime self-modification prevention |
+| GAP-023 | GOV-POL-SELFMOD-010...013 | GOV | BRD-GOV-054 | P1 | Frozen configuration enforcement |
+| GAP-024 | GOV-POL-SELFMOD-020...022 | GOV | BRD-GOV-054 | P1 | Allowed runtime mutations |
+| GAP-025 | MEM-EXPLAIN-001...005 | MEM | BRD-OPS-060 | P1 | Explainability core requirements |
+| GAP-026 | MEM-EXPLAIN-ART-001...003 | MEM | BRD-OPS-060 | P1 | Explanation artifact structure |
+| GAP-027 | MEM-REPRO-001...003 | MEM | BRD-OPS-061 | P2 | Version tracking for reproducibility |
+| GAP-028 | MEM-REPRO-010...012 | MEM | BRD-OPS-061 | P2 | Input hashing for reproducibility |
+| GAP-029 | MEM-REPRO-020...021 | MEM | BRD-OPS-061 | P2 | Output hashing for reproducibility |
+| GAP-030 | MEM-REPRO-030...032 | MEM | BRD-OPS-061 | P2 | Reproducibility validation API |
 
 ---
 

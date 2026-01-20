@@ -57,6 +57,33 @@ class MemoryRouter(MemoryBackend):
     def update_run_output(self, run_id: str, *, output: Optional[Dict[str, Any]]) -> None:
         self.backend.update_run_output(run_id, output=output)
 
+    def update_run(self, run_id: str, patch: Dict[str, Any]) -> None:
+        """Update arbitrary fields on a run record."""
+        self.backend.update_run(run_id, patch)
+
+    def update_run_terminal_outcome(
+        self,
+        run_id: str,
+        *,
+        terminal_outcome: str,
+        outcome_reason: str,
+        outcome_explanation: str,
+        terminal_artifact: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update terminal outcome fields on a run record.
+        
+        IMP-012 (ORC-TERM-001..005): Persist terminal outcome classification.
+        IMP-013 (ORC-TERM-ART-001..004): Persist terminal artifact.
+        """
+        self.backend.update_run_terminal_outcome(
+            run_id,
+            terminal_outcome=terminal_outcome,
+            outcome_reason=outcome_reason,
+            outcome_explanation=outcome_explanation,
+            terminal_artifact=terminal_artifact,
+        )
+
     def add_step(self, step: StepRecord) -> None:
         self.backend.add_step(step)
 
@@ -118,6 +145,38 @@ class MemoryRouter(MemoryBackend):
 
     def list_pending_approvals(self, *, limit: int = 50, offset: int = 0) -> List[ApprovalRecord]:
         return self.backend.list_pending_approvals(limit=limit, offset=offset)
+
+    # IMP-017: Sufficiency state persistence
+    def persist_sufficiency_state(
+        self,
+        run_id: str,
+        state: Dict[str, Any],
+    ) -> None:
+        """Persist sufficiency state for a run."""
+        self.backend.persist_sufficiency_state(run_id, state)
+
+    def restore_sufficiency_state(
+        self,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Restore sufficiency state for a run."""
+        return self.backend.restore_sufficiency_state(run_id)
+
+    # IMP-021: ContextPack persistence
+    def persist_context_pack(
+        self,
+        run_id: str,
+        context_pack: Dict[str, Any],
+    ) -> None:
+        """Persist frozen ContextPack for a run."""
+        self.backend.persist_context_pack(run_id, context_pack)
+
+    def restore_context_pack(
+        self,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Restore frozen ContextPack for a run."""
+        return self.backend.restore_context_pack(run_id)
 
     def ensure_schema(self) -> None:
         self.backend.ensure_schema()

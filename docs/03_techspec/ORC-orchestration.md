@@ -1,9 +1,9 @@
 # Orchestration Engine Technical Specification
 
 > **Document ID**: ORC  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-20  
 
 ---
 
@@ -14,6 +14,7 @@
 | 1.0.0 | 2026-01-12 | Initial release |
 | 1.1.0 | 2026-01-13 | Added §3.7 Versioning & Reproducibility, §3.8 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-20 | Added §15 Orchestrator-Controlled Reasoning (BRD-AUTO-047/048), §16 Explicit Terminal Outcomes (BRD-AUTO-052) |
 
 ---
 
@@ -464,6 +465,71 @@ run lifecycle management, step execution, pause/resume mechanics, and control fl
 | ORC-MEM-001 | Run records MUST be persisted via `MemoryBackend` with: `create_run`, `update_run_status`, `update_run_output`, `get_run_bundle` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ORC-MEM-002 | Step records MUST be persisted via: `create_step`, `update_step` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ORC-MEM-003 | Approval records MUST be managed via `HITLService`: `request_approval`, `resolve_approval` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+
+---
+
+## 15. Orchestrator-Controlled Reasoning Lifecycle (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-047 (Central reasoning lifecycle), BRD-AUTO-048 (Bounded reasoning iteration)
+
+### 15.1 Reasoning Lifecycle Phases
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-REASON-001 | Orchestrator MUST control reasoning lifecycle with phases: `INTERPRET` → `PROPOSE` → `CRITIQUE` → `RECOMMEND` | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-002 | Phase transitions MUST be explicit and logged via trace events | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-003 | Each phase MUST produce a typed output artifact (`InterpretOutput`, `ProposeOutput`, `CritiqueOutput`, `RecommendOutput`) | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-004 | Phase outputs MUST be persisted before transitioning to next phase | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-005 | Reasoning lifecycle MUST NOT proceed to RECOMMEND without passing CRITIQUE | MUST | BRD-AUTO-047, BRD-AUTO-050 | 1.3 | 20 Jan 2026 | — |
+
+
+### 15.2 Bounded Reasoning Iteration
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-REASON-010 | Reasoning iterations MUST be bounded by `max_reasoning_iterations` (default: 3, max: 10) | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-011 | Each iteration MUST consume reasoning budget via `BudgetEnforcer` | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-012 | Iteration count MUST be tracked and emitted in all reasoning trace events | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-013 | When `max_reasoning_iterations` is reached, reasoning MUST terminate with deterministic outcome | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-014 | Iteration termination reason MUST be one of: `SUFFICIENT`, `MAX_ITERATIONS`, `BUDGET_EXCEEDED`, `CONFIDENCE_MET` | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-015 | Reasoning termination MUST emit `reasoning_terminated` event with `iteration_count`, `reason`, `final_confidence` | MUST | BRD-AUTO-048 | 1.3 | 20 Jan 2026 | — |
+
+
+### 15.3 Reasoning Phase Events
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-REASON-020 | Each phase MUST emit `reasoning_phase_started` with `phase_name`, `iteration`, `input_hash` | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-021 | Each phase MUST emit `reasoning_phase_completed` with `phase_name`, `iteration`, `output_hash`, `confidence` | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+| ORC-REASON-022 | Phase failures MUST emit `reasoning_phase_failed` with `phase_name`, `iteration`, `error_code`, `reason` | MUST | BRD-AUTO-047 | 1.3 | 20 Jan 2026 | — |
+
+
+---
+
+## 16. Explicit Terminal Outcomes (Added: 2026-01-20)
+
+> **Source**: BRD-AUTO-052 - Explicit terminal outcomes with explanations
+
+### 16.1 Terminal Outcome Definitions
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-TERM-001 | Run MUST terminate with one of explicit outcomes: `COMPLETED`, `FAILED`, `CANCELLED`, `ABORTED`, `PAUSED_INDEFINITE` | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-002 | Every terminal outcome MUST include `outcome_reason` (enum) and `outcome_explanation` (string) | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-003 | `outcome_reason` enum MUST include: `SUCCESS`, `USER_ABORT`, `GOVERNANCE_BLOCK`, `BUDGET_EXCEEDED`, `MAX_ITERATIONS`, `VALIDATION_FAILED`, `UNRECOVERABLE_ERROR` | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-004 | `outcome_explanation` MUST be human-readable and auditable | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-005 | Terminal outcome MUST be persisted in `RunRecord` and emitted as `run_terminal_outcome` event | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+
+
+### 16.2 Terminal Outcome Artifacts
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-TERM-ART-001 | `COMPLETED` outcome MUST include final output artifact | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-ART-002 | `FAILED` outcome MUST include error artifact with `error_code`, `error_message`, `stack_trace` (if available) | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-ART-003 | `ABORTED` outcome MUST include abort artifact with `abort_reason`, `abort_source` (user/system/governance) | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
+| ORC-TERM-ART-004 | All terminal artifacts MUST be persisted before run record is finalized | MUST | BRD-AUTO-052 | 1.3 | 20 Jan 2026 | — |
 
 
 ---
