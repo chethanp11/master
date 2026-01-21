@@ -1,0 +1,20 @@
+# ADE Confidence Configuration
+# TS-AGENT-CONF-003: Confidence thresholds configurable via YAML.
+
+# Confidence level thresholds for intent interpretation
+# Values determine label boundaries: low < low_threshold <= medium < high_threshold <= high
+low_threshold: 0.4
+high_threshold: 0.7
+
+# Sufficiency thresholds for data quality assessment
+sufficiency_thresholds:
+  # Minimum row count for high confidence
+  min_rows: 30
+  # Minimum row count threshold (below this is low confidence)
+  critical_rows: 15
+  # Minimum time points for time series analysis
+  min_time_points: 12
+  # Maximum coefficient of variation for stable variance
+  max_cv: 0.6
+  # Minimum non-null rate for required columns
+  min_non_null_rate: 0.7

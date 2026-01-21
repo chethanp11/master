@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from core.agents.base import BaseAgent, agent
 from core.contracts.agent_schema import AgentError, AgentErrorCode, AgentMeta, AgentResult
-from products.ade.config.confidence import load_confidence_thresholds
+from products.ade.utils.confidence import load_confidence_thresholds
 from products.ade.schemas.intent_frame import IntentFrame
 
 

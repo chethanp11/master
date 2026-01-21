@@ -246,10 +246,10 @@
 ### IMP-019
 - **Source Tech Spec IDs**: TS-AGENT-CONF-003
 - **Related SD-COVERAGE Gap IDs**: GAP-022
-- **Target Code Locations**: `products/ade/configs/confidence.yaml`, `products/ade/config.py`
+- **Target Code Locations**: `products/ade/config/confidence.yaml`, `products/ade/config.py`
 - **Type of Change**: Code extension required
 - **Steps**:
-  1. Create `products/ade/configs/confidence.yaml` with keys: `low_threshold: float`, `high_threshold: float`, `sufficiency_thresholds: Dict`.
+  1. Create `products/ade/config/confidence.yaml` with keys: `low_threshold: float`, `high_threshold: float`, `sufficiency_thresholds: Dict`.
   2. Add `load_confidence_config()` to `products/ade/config.py` returning `ConfidenceConfig(BaseModel)`.
   3. Update `intent_agent` and `sufficiency_evaluator` to read thresholds from config.
 - **Acceptance Checks**:

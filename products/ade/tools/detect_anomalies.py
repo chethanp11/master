@@ -36,11 +36,20 @@ class DetectAnomaliesInput(BaseModel):
 
 
 class Anomaly(BaseModel):
+    """Anomaly detected in time series.
+
+    TS-TOOL-ANOM-002: severity_score for ranking anomalies.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     ts: str
     value: float
     zscore: float
+    severity_score: float = Field(
+        default=0.0,
+        description="Absolute z-score for severity ranking (higher = more severe)",
+    )
 
 
 class DetectAnomaliesOutput(BaseModel):
@@ -75,8 +84,14 @@ def detect_anomalies(payload: DetectAnomaliesInput) -> DetectAnomaliesOutput:
     for pt in series:
         z = (pt.value - m) / stddev
         if abs(z) >= payload.z_threshold:
-            anomalies.append(Anomaly(ts=pt.ts, value=pt.value, zscore=z))
-    anomalies.sort(key=lambda a: (-abs(a.zscore), a.ts))
+            anomalies.append(Anomaly(
+                ts=pt.ts,
+                value=pt.value,
+                zscore=z,
+                severity_score=abs(z),  # TS-TOOL-ANOM-002
+            ))
+    # Sort by severity_score descending (highest severity first)
+    anomalies.sort(key=lambda a: (-a.severity_score, a.ts))
     summary = f"found {len(anomalies)} anomalies"
     return DetectAnomaliesOutput(anomalies=anomalies, summary=summary)
 

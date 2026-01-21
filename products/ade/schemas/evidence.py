@@ -1,3 +1,9 @@
+"""Evidence schemas for ADE.
+
+TS-SCHEMA-EVITEM-001: EvidenceItem includes confidence field.
+TS-SCHEMA-EVITEM-002: EvidenceItem includes values field.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional, Union
@@ -6,6 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class EvidenceItemBase(BaseModel):
+    """Base evidence item with common fields.
+
+    TS-SCHEMA-EVITEM-001: confidence field with 0.0-1.0 range.
+    TS-SCHEMA-EVITEM-002: values field for evidence data.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     evidence_id: str
@@ -14,6 +26,12 @@ class EvidenceItemBase(BaseModel):
     dataset_id: str
     created_at_iso: str
     inputs_hash: str
+    # TS-SCHEMA-EVITEM-001: Confidence score for this evidence item
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    # TS-SCHEMA-EVITEM-002: Extracted values from evidence
+    values: Dict[str, Any] = Field(default_factory=dict)
+    # TS-SCHEMA-CTX-004: Columns referenced by this evidence
+    columns: List[str] = Field(default_factory=list)
 
 
 class TrendEvidence(EvidenceItemBase):

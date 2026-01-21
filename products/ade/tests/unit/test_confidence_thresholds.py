@@ -1,4 +1,4 @@
-from products.ade.config.confidence import load_confidence_thresholds
+from products.ade.utils.confidence import load_confidence_thresholds
 
 
 def test_load_confidence_thresholds_defaults() -> None:
