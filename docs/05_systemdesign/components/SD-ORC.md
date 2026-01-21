@@ -1,10 +1,10 @@
 # System Design: Orchestration (SD-ORC)
 
 > **Component**: Orchestration Engine  
-> **Version**: 1.1  
+> **Version**: 1.2  
 > **Path**: `core/orchestrator/`  
 > **Tech Spec**: [ORC-orchestration.md](../../03_technical_specifications/ORC-orchestration.md)  
-> **Last Updated**: 2026-01-16  
+> **Last Updated**: 2026-01-20  
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-01-20 | Added V1.3 Reasoning Lifecycle (ORC-REASON) and Terminal Outcomes (ORC-TERM) sections |
 | 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
@@ -383,6 +384,164 @@ async def execute_step(step, context):
 
 ---
 
+## 8.1. Orchestrator-Controlled Reasoning Lifecycle (V1.3)
+
+The orchestrator controls reasoning phases as first-class lifecycle states, ensuring explicit phase transitions, bounded iterations, and deterministic termination.
+
+### Reasoning Phases
+
+| Phase | Purpose | Artifact Type | Tech Spec |
+|-------|---------|---------------|-----------|
+| `INTERPRET` | Parse and understand input | `InterpretPhaseOutput` | ORC-REASON-001 |
+| `PROPOSE` | Generate candidate solutions | `ProposePhaseOutput` | ORC-REASON-001 |
+| `CRITIQUE` | Evaluate proposals | `CritiquePhaseOutput` | ORC-REASON-001 |
+| `RECOMMEND` | Select final recommendation | `RecommendPhaseOutput` | ORC-REASON-001 |
+
+**Invariant**: RECOMMEND phase MUST NOT proceed without passing CRITIQUE (ORC-REASON-005).
+
+### Reasoning Phase State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> INTERPRET
+    INTERPRET --> PROPOSE: phase_completed
+    PROPOSE --> CRITIQUE: phase_completed
+    CRITIQUE --> RECOMMEND: critique_passed
+    CRITIQUE --> PROPOSE: critique_failed + iterations_remaining
+    CRITIQUE --> TERMINATED: critique_failed + max_iterations
+    RECOMMEND --> [*]: phase_completed
+    INTERPRET --> TERMINATED: phase_failed
+    PROPOSE --> TERMINATED: phase_failed
+    CRITIQUE --> TERMINATED: phase_failed
+```
+
+### Bounded Reasoning Iteration
+
+| Config | Default | Max | Tech Spec |
+|--------|---------|-----|-----------|
+| `max_reasoning_iterations` | 3 | 10 | ORC-REASON-010 |
+| Budget consumed per iteration | Yes | — | ORC-REASON-011 |
+| Iteration count in trace | Yes | — | ORC-REASON-012 |
+
+### Termination Reasons
+
+| Reason | Description | Tech Spec |
+|--------|-------------|-----------|
+| `SUFFICIENT` | Reasoning complete with acceptable confidence | ORC-REASON-014 |
+| `MAX_ITERATIONS` | max_reasoning_iterations reached | ORC-REASON-013, ORC-REASON-014 |
+| `BUDGET_EXCEEDED` | Reasoning budget exhausted | ORC-REASON-014 |
+| `CONFIDENCE_MET` | Confidence threshold achieved early | ORC-REASON-014 |
+
+### Reasoning Trace Events
+
+| Event | Trigger | Payload | Tech Spec |
+|-------|---------|---------|-----------|
+| `reasoning_phase_started` | Phase begins | `{run_id, phase, iteration}` | ORC-REASON-020 |
+| `reasoning_phase_completed` | Phase succeeds | `{run_id, phase, output_type, confidence}` | ORC-REASON-021 |
+| `reasoning_phase_failed` | Phase errors | `{run_id, phase, error, iteration}` | ORC-REASON-022 |
+| `reasoning_terminated` | Reasoning ends | `{run_id, iteration_count, reason, final_confidence}` | ORC-REASON-015 |
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `core/orchestrator/reasoning_lifecycle.py` | ReasoningPhase enum, ReasoningLifecycle class, phase execution |
+| `core/contracts/reasoning_schema.py` | ReasoningTerminationReason enum, phase output models |
+| `core/memory/tracing.py` | Phase trace event types |
+
+### Module Structure
+
+```python
+# core/orchestrator/reasoning_lifecycle.py
+class ReasoningPhase(str, Enum):
+    INTERPRET = "interpret"
+    PROPOSE = "propose"
+    CRITIQUE = "critique"
+    RECOMMEND = "recommend"
+
+class ReasoningTerminationReason(str, Enum):
+    SUFFICIENT = "sufficient"
+    MAX_ITERATIONS = "max_iterations"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    CONFIDENCE_MET = "confidence_met"
+
+class ReasoningLifecycle:
+    def __init__(self, max_iterations: int = 3, budget_per_iteration: int = 1000): ...
+    def start_phase(self, phase: ReasoningPhase) -> PhaseStartedPayload: ...
+    def complete_phase(self, phase: ReasoningPhase, output: Any, confidence: float) -> PhaseCompletedPayload: ...
+    def fail_phase(self, phase: ReasoningPhase, error: str) -> PhaseFailedPayload: ...
+    def terminate(self, reason: ReasoningTerminationReason, final_confidence: float) -> ReasoningTerminatedPayload: ...
+    def should_terminate(self) -> Tuple[bool, Optional[ReasoningTerminationReason]]: ...
+```
+
+---
+
+## 8.2. Explicit Terminal Outcomes (V1.3)
+
+Every run terminates with an explicit, auditable outcome that includes structured reason and explanation.
+
+### Terminal Outcome Enum
+
+| Outcome | Description | Tech Spec |
+|---------|-------------|-----------|
+| `COMPLETED` | Run finished successfully | ORC-TERM-001 |
+| `FAILED` | Run encountered unrecoverable error | ORC-TERM-001 |
+| `CANCELLED` | Run cancelled by user/system | ORC-TERM-001 |
+| `ABORTED` | Run aborted by governance | ORC-TERM-001 |
+| `PAUSED_INDEFINITE` | Run paused with no resume expected | ORC-TERM-001 |
+
+### Outcome Reason Enum
+
+| Reason | Description | Tech Spec |
+|--------|-------------|-----------|
+| `SUCCESS` | Normal completion | ORC-TERM-003 |
+| `USER_ABORT` | User requested abort | ORC-TERM-003 |
+| `GOVERNANCE_BLOCK` | Governance policy blocked | ORC-TERM-003 |
+| `BUDGET_EXCEEDED` | Budget exhausted | ORC-TERM-003 |
+| `MAX_ITERATIONS` | Iteration limit reached | ORC-TERM-003 |
+| `VALIDATION_FAILED` | Output validation failed | ORC-TERM-003 |
+| `UNRECOVERABLE_ERROR` | System error | ORC-TERM-003 |
+
+### Terminal Artifact Schemas
+
+| Outcome | Artifact | Fields | Tech Spec |
+|---------|----------|--------|-----------|
+| `COMPLETED` | `CompletedArtifact` | `output`, `summary`, `confidence` | ORC-TERM-ART-001 |
+| `FAILED` | `FailedArtifact` | `error_code`, `error_message`, `stack_trace` | ORC-TERM-ART-002 |
+| `ABORTED` | `AbortedArtifact` | `abort_reason`, `abort_source`, `governance_rule` | ORC-TERM-ART-003 |
+| `CANCELLED` | `CancelledArtifact` | `cancelled_by`, `cancellation_reason` | ORC-TERM-ART-003 |
+| `PAUSED_INDEFINITE` | `PausedIndefiniteArtifact` | `pause_reason`, `resume_instructions` | ORC-TERM-ART-003 |
+
+### RunRecord Terminal Fields
+
+```python
+# core/contracts/run_schema.py
+class RunRecord(BaseModel):
+    # ... existing fields ...
+    terminal_outcome: Optional[TerminalOutcome] = None      # ORC-TERM-001
+    outcome_reason: Optional[OutcomeReason] = None          # ORC-TERM-002
+    outcome_explanation: Optional[str] = None               # ORC-TERM-004
+    terminal_artifact: Optional[Dict[str, Any]] = None      # ORC-TERM-ART-004
+```
+
+### Terminal Trace Event
+
+| Event | Trigger | Payload | Tech Spec |
+|-------|---------|---------|-----------|
+| `run_terminal_outcome` | Run terminates | `{run_id, outcome, reason, explanation, artifact_hash}` | ORC-TERM-005 |
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `core/contracts/run_schema.py` | TerminalOutcome, OutcomeReason enums, terminal artifact models |
+| `core/orchestrator/run_lifecycle.py` | Terminal outcome persistence and event emission |
+| `core/memory/tracing.py` | RUN_TERMINAL_OUTCOME event type |
+| `core/memory/in_memory.py` | Terminal field persistence |
+| `core/memory/sqlite_backend.py` | Terminal field persistence |
+
+---
+
 ## 9. Tech Spec Coverage
 
 See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matrix.
@@ -396,6 +555,9 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matr
 | Step Execution | ORC-STEP-001 to ORC-STEP-004 | ✅ All Implemented |
 | Flow Loading | ORC-FLOW-001 to ORC-FLOW-004 | ✅ All Implemented |
 | HITL | ORC-HITL-001 to ORC-HITL-003 | ✅ All Implemented |
+| Reasoning Lifecycle | ORC-REASON-001 to ORC-REASON-022 | ✅ All Implemented (V1.3) |
+| Terminal Outcomes | ORC-TERM-001 to ORC-TERM-005 | ✅ All Implemented (V1.3) |
+| Terminal Artifacts | ORC-TERM-ART-001 to ORC-TERM-ART-004 | ✅ All Implemented (V1.3) |
 
 ---
 
@@ -405,6 +567,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matr
 |------|---------|
 | `core/orchestrator/engine.py` | Main engine class |
 | `core/orchestrator/run_lifecycle.py` | Run lifecycle management |
+| `core/orchestrator/reasoning_lifecycle.py` | Reasoning phase lifecycle (V1.3) |
 | `core/orchestrator/context.py` | RunContext/StepContext definitions |
 | `core/orchestrator/state.py` | State management |
 | `core/orchestrator/step_executor.py` | Step execution logic |
@@ -419,6 +582,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#orchestration-orc) for full coverage matr
 | `core/orchestrator/templating.py` | Parameter templating |
 | `core/orchestrator/error_policy.py` | Error handling policies |
 | `core/orchestrator/_types.py` | Type definitions |
+| `core/contracts/reasoning_schema.py` | Reasoning phase schemas (V1.3) |
 
 ---
 

@@ -1,7 +1,8 @@
 # ADE Architecture
 
 > **Document**: System Design — Architecture  
-> **Version**: 1.0.0
+> **Version**: 1.1.0  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -131,12 +132,35 @@ Pydantic models in `products/ade/schemas/`:
 | `InsightCard` | Standalone insight card |
 | `ContextPack` | Dataset profile and coverage summary |
 | `VersionMetadata` | Output version + hashing metadata |
+| `TerminalOutcome` | Terminal outcome enum (SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT) |
+| `RunResult` | Run result with outcome, partial details, terminal artifact |
 
 **Evidence**:
 - `products/ade/schemas/decision_packet.py` (`DecisionPacket.stop_reason`, `DecisionPacket.version_metadata`)
 - `products/ade/schemas/business_report.py` (`BusinessReport.stop_reason`, `BusinessReport.version_metadata`)
 - `products/ade/schemas/context_pack.py` (`ContextPack`)
 - `products/ade/schemas/version_metadata.py` (`VersionMetadata`)
+- `products/ade/schemas/terminal_outcome.py` (`TerminalOutcome`, `PartialSuccessDetails`, `TerminalArtifact`, `RunResult`)
+
+### 3.6 Utilities
+
+Product utilities in `products/ade/utils/`:
+
+| Utility | Purpose | Location |
+|---------|---------|----------|
+| `advisory.py` | Advisory labeling and non-decisional language | `products/ade/utils/advisory.py` |
+| `confidence.py` | Confidence threshold loading from YAML | `products/ade/utils/confidence.py` |
+| `narrative.py` | Decision record-based explanations | `products/ade/utils/narrative.py` |
+| `output.py` | Output directory creation utilities | `products/ade/utils/output.py` |
+| `semantic_validation.py` | Dataset/metric reference validation | `products/ade/utils/semantic_validation.py` |
+| `validation.py` | Validation gating and quality checks | `products/ade/utils/validation.py` |
+| `versioning.py` | Version metadata generation | `products/ade/utils/versioning.py` |
+
+**Evidence**:
+- `products/ade/utils/advisory.py` (`get_advisory_label`, `apply_advisory_language`, `ADVISORY_LABELS`)
+- `products/ade/utils/narrative.py` (`DecisionRecord`, `build_explanation`, `get_decision_records_summary`)
+- `products/ade/utils/validation.py` (`ValidationGate`, `validate_report_quality`)
+- `products/ade/utils/semantic_validation.py` (`validate_dataset`, `validate_metric`, `ValidationResult`)
 
 ---
 
@@ -280,6 +304,50 @@ ADE behavior is exercised by unit and integration tests:
 - Orchestrator flow wiring: `products/ade/tests/integration/test_ade_orchestrator_flow.py`
 - Business report rendering: `products/ade/tests/integration/test_business_report_html.py`
 - Quality checks: `products/ade/tests/unit/test_assemble_business_report_quality.py`
+
+---
+
+## 10. Framework Alignment and Constraints
+
+ADE follows framework alignment constraints documented in `clarification_records.md` and `FRAMEWORK_GAPS.md`.
+
+### 10.1 Framework Reliance (TS-AGENT-FRI-*)
+
+| Constraint | Enforcement | Evidence |
+|------------|-------------|----------|
+| No core module re-implementation | Static analysis + code review | `clarification_records.md` |
+| Agent base class hooks | Runtime enforcement | `core/agents/base.py` |
+| Framework gap logging | FRAMEWORK_GAPS.md | `products/ade/docs/FRAMEWORK_GAPS.md` |
+| Escalation via `escalate_framework_gap()` | Runtime | Agent base class |
+
+### 10.2 No Runtime Learning (TS-AGENT-NRL-*)
+
+| Constraint | Enforcement | Evidence |
+|------------|-------------|----------|
+| No state persistence across runs | Static analysis + test | `clarification_records.md` |
+| No ML training | Static analysis + test | `clarification_records.md` |
+| BRD-first policy | Process enforcement | PR review |
+| Determinism (same inputs → same outputs) | Test enforcement | Unit tests |
+
+**Evidence**:
+- `products/ade/docs/03_implementation_plan/clarification_records.md`
+- `products/ade/docs/FRAMEWORK_GAPS.md`
+
+---
+
+## 11. Terminal Outcomes
+
+ADE supports explicit terminal outcomes per TS-AGENT-TERM-*.
+
+| Outcome | Description | Schema |
+|---------|-------------|--------|
+| SUCCESS | Run completed successfully with all outputs | `TerminalOutcome.SUCCESS` |
+| PARTIAL_SUCCESS | Some outputs generated, some missing | `TerminalOutcome.PARTIAL_SUCCESS` |
+| ASK_USER | User input required to proceed | `TerminalOutcome.ASK_USER` |
+| ABORT | Run aborted due to error or blocking condition | `TerminalOutcome.ABORT` |
+
+**Evidence**:
+- `products/ade/schemas/terminal_outcome.py` (`TerminalOutcome`, `PartialSuccessDetails`, `TerminalArtifact`, `RunResult`)
 
 ---
 

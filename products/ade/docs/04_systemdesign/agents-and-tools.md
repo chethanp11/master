@@ -1,7 +1,8 @@
 # ADE Agents and Tools
 
 > **Document**: System Design — Agents and Tools  
-> **Version**: 1.0.0
+> **Version**: 1.1.0  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -293,9 +294,17 @@ enabled: bool = True
 
 **Output**:
 ```python
-anomalies: List[AnomalyRow]
+anomalies: List[AnomalyRow]  # sorted by severity_score descending
 evidence_items: List[EvidenceItem]
 ```
+
+**Severity Ranking (TS-TOOL-ANOM-002)**:
+- Each `Anomaly` has `severity_score: float = abs(zscore)`
+- Anomalies are sorted by `severity_score` descending (highest severity first)
+- Negative z-scores produce positive severity scores for proper ranking
+
+**Evidence**:
+- `products/ade/tools/detect_anomalies.py` (`Anomaly.severity_score`, sorted by `-severity_score`)
 
 ---
 
@@ -567,6 +576,88 @@ These helpers are used internally but are not registered tools.
 |---------|---------|----------|
 | `export_rendering` | PDF rendering utilities for insight cards | `products/ade/tools/export_rendering.py` |
 | `evidence_utils` | Evidence hashing and ID helpers | `products/ade/tools/evidence_utils.py` |
+
+---
+
+## 6. V1.2 Utility Modules
+
+### 6.1 Narrative Builder (TS-AGENT-NARR-005)
+
+Location: `products/ade/utils/narrative.py`
+
+| Function | Purpose |
+|----------|----------|
+| `DecisionRecord` | Decision record class with record_id, step_id, decision, rationale, confidence |
+| `build_explanation(decision_records)` | Generates user-facing text from decision records |
+| `build_explanation_from_dicts(records)` | Converts dict records to DecisionRecord objects |
+| `get_decision_records_summary()` | Returns traceability summary with record IDs |
+
+**Evidence**:
+- `products/ade/utils/narrative.py` (`DecisionRecord`, `build_explanation`)
+
+### 6.2 Advisory Labeling (TS-BRD-DAB-001..005)
+
+Location: `products/ade/utils/advisory.py`
+
+| Function | Purpose |
+|----------|----------|
+| `ADVISORY_LABELS` | Dict mapping confidence levels to advisory labels |
+| `get_advisory_label(confidence)` | Returns non-decisional label per confidence |
+| `apply_advisory_language(text)` | Replaces decisional terms (must→should consider) |
+| `format_advisory_header(title, confidence)` | Adds advisory labeling to headers |
+| `format_recommendation_disclaimer()` | Generates appropriate disclaimers |
+| `format_findings_preamble()` | Presents findings as observations |
+| `validate_advisory_language(text)` | Detects inappropriate decisional terms |
+
+**Evidence**:
+- `products/ade/utils/advisory.py` (`get_advisory_label`, `apply_advisory_language`, `ADVISORY_LABELS`)
+
+### 6.3 Semantic Validation (TS-SEM-VALIDATE-008, 009)
+
+Location: `products/ade/utils/semantic_validation.py`
+
+| Function | Purpose |
+|----------|----------|
+| `_validate_dataset_ref(dataset, available)` | Returns True/False for dataset validity |
+| `_validate_metric_ref(metric, schema)` | Returns True/False for metric validity |
+| `validate_dataset()` | Returns ValidationResult with ASK_USER outcome if invalid |
+| `validate_metric()` | Returns ValidationResult with ASK_USER outcome if invalid |
+| `validate_semantic_envelope()` | Validates both dataset and metric with context |
+
+**Evidence**:
+- `products/ade/utils/semantic_validation.py` (`validate_dataset`, `validate_metric`, `ValidationResult`)
+
+### 6.4 Validation Utilities (TS-BRD-VAL-001..003, TS-BRD-QUAL-001..004)
+
+Location: `products/ade/utils/validation.py`
+
+| Function | Purpose |
+|----------|----------|
+| `ValidationResult` | Model for structured validation outcomes |
+| `format_pydantic_errors()` | Produces clear field paths per TS-BRD-VAL-002 |
+| `validate_output_schema()` | Validates data against Pydantic schemas |
+| `ValidationGate` | Class that blocks rendering when validation fails |
+| `validate_executive_summary()` | Checks for non-empty, substantive summaries |
+| `validate_findings()` | Verifies evidence_refs present on all findings |
+| `validate_recommendations()` | Ensures recommendations are not too generic |
+| `validate_visuals()` | Checks visual titles and required data |
+| `validate_report_quality()` | Runs all checks and returns combined result |
+
+**Evidence**:
+- `products/ade/utils/validation.py` (`ValidationGate`, `validate_report_quality`)
+
+### 6.5 Output Directory Utilities (TS-IO-OUT-007)
+
+Location: `products/ade/utils/output.py`
+
+| Function | Purpose |
+|----------|----------|
+| `ensure_output_dir()` | Creates output directories with parents if needed |
+| `get_output_path()` | Returns path with optional directory creation |
+| `default_output_dir()` | Returns standard output directory location |
+
+**Evidence**:
+- `products/ade/utils/output.py` (`ensure_output_dir`, `get_output_path`)
 
 ---
 

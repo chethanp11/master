@@ -1,10 +1,10 @@
 # System Design: Governance (SD-GOV)
 
 > **Component**: Governance Layer  
-> **Version**: 1.1  
+> **Version**: 1.2  
 > **Path**: `core/governance/`  
 > **Tech Spec**: [GOV-governance.md](../../03_technical_specifications/GOV-governance.md)  
-> **Last Updated**: 2026-01-16  
+> **Last Updated**: 2026-01-20  
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-01-20 | Added V1.3 Self-Modification Prevention sections |
 | 1.1 | 2026-01-13 | Header version normalization |
 
 ## 1. Scope & Ownership
@@ -403,6 +404,177 @@ Errors are returned as structured data, not exceptions.
 
 ---
 
+## 13.1. Runtime Self-Modification Prevention (V1.3)
+
+The governance layer prevents agents from modifying their own configuration, prompts, or policies during execution.
+
+### SelfModificationGuard
+
+```python
+# core/governance/self_modification_guard.py
+class SelfModificationGuard:
+    """
+    Guards against runtime self-modification attempts.
+    
+    - enabled: Guard active (default True)
+    - exempt_agents: Set of agent IDs that bypass guard (for system use)
+    """
+```
+
+### Guard Methods
+
+| Method | Blocks | Tech Spec |
+|--------|--------|-----------|
+| `check_config_modification(agent_id, target_config)` | Config changes | GOV-POL-SELFMOD-001 |
+| `check_prompt_modification(agent_id, target_prompt)` | Prompt changes | GOV-POL-SELFMOD-001 |
+| `check_policy_modification(agent_id, target_policy)` | Policy changes | GOV-POL-SELFMOD-001 |
+| `check_learning_update(agent_id)` | Weight/learning updates | GOV-POL-SELFMOD-002 |
+
+### Exceptions
+
+```python
+class SelfModificationBlockedError(Exception):
+    """Raised when self-modification attempt is blocked."""
+    def __init__(self, agent_id: str, target: str, reason: str): ...
+```
+
+### Trace Events
+
+| Event | Trigger | Payload | Tech Spec |
+|-------|---------|---------|-----------|
+| `self_modification_blocked` | Guard blocks attempt | `{agent_id, target, reason}` | GOV-POL-SELFMOD-003 |
+
+### SelfModificationAttempt
+
+```python
+@dataclass
+class SelfModificationAttempt:
+    """Record of a self-modification attempt."""
+    agent_id: str
+    target: str
+    blocked: bool
+    reason: str
+    timestamp: datetime
+```
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `core/governance/self_modification_guard.py` | SelfModificationBlockedError, SelfModificationAttempt, SelfModificationGuard |
+| `core/memory/tracing.py` | SELF_MODIFICATION_BLOCKED event type |
+
+---
+
+## 13.2. Frozen Configuration Enforcement (V1.3)
+
+Configuration is frozen at run initialization to prevent mutation.
+
+### FrozenConfig
+
+```python
+# core/governance/self_modification_guard.py
+@dataclass
+class FrozenConfig:
+    frozen_at: datetime
+    policies_hash: str     # SHA-256 of policies
+    agents_hash: str       # SHA-256 of agent config
+    tools_hash: str        # SHA-256 of tool registry
+    budget_hash: str       # SHA-256 of budget limits
+    
+    # Full snapshots for comparison
+    policies_snapshot: Dict[str, Any]
+    agents_snapshot: Dict[str, Any]
+    tools_snapshot: List[str]
+    budget_snapshot: Dict[str, Any]
+```
+
+### Factory Method
+
+```python
+@classmethod
+def create(cls, policies: Dict, agents: Dict, 
+           tools: List[str], budget: Dict) -> "FrozenConfig":
+    """
+    Create FrozenConfig with hash snapshots at run initialization.
+    """
+```
+
+### Validation Methods
+
+| Method | Validates | Tech Spec |
+|--------|-----------|-----------|
+| `validate_policies(current)` | Policy configuration unchanged | GOV-POL-SELFMOD-010 |
+| `validate_agents(current)` | Agent config unchanged | GOV-POL-SELFMOD-011 |
+| `validate_budget(current)` | Budget limits unchanged | GOV-POL-SELFMOD-012 |
+| `validate_tools(current)` | Tool registry unchanged | GOV-POL-SELFMOD-013 |
+| `check_mutation()` | Combined validation | GOV-POL-SELFMOD-010..013 |
+
+### ConfigMutationBlockedError
+
+```python
+class ConfigMutationBlockedError(Exception):
+    """Raised when frozen configuration has been mutated."""
+    def __init__(self, field: str, expected_hash: str, actual_hash: str): ...
+```
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `core/governance/self_modification_guard.py` | FrozenConfig, ConfigMutationBlockedError |
+
+---
+
+## 13.3. Allowed Runtime Mutations (V1.3)
+
+Certain runtime mutations are explicitly allowed for proper execution.
+
+### AllowedMutationType
+
+```python
+# core/governance/self_modification_guard.py
+class AllowedMutationType:
+    BUDGET_CONSUMPTION = "budget_consumption"       # GOV-POL-SELFMOD-020
+    RUN_ARTIFACTS = "run_artifacts"                 # GOV-POL-SELFMOD-021
+    EVIDENCE_ACCUMULATION = "evidence_accumulation" # GOV-POL-SELFMOD-021
+    RUN_STATUS = "run_status"                       # GOV-POL-SELFMOD-022
+    STEP_STATUS = "step_status"                     # GOV-POL-SELFMOD-022
+    TRACE_EVENTS = "trace_events"                   # Observability
+    
+    ALL = frozenset({
+        BUDGET_CONSUMPTION, RUN_ARTIFACTS, EVIDENCE_ACCUMULATION,
+        RUN_STATUS, STEP_STATUS, TRACE_EVENTS
+    })
+```
+
+### Mutation Functions
+
+| Function | Purpose | Tech Spec |
+|----------|---------|-----------|
+| `is_allowed_mutation(mutation_type)` | Check if type is allowed | GOV-POL-SELFMOD-020..022 |
+| `get_allowed_mutation_rationale(mutation_type)` | Get documented rationale | GOV-POL-SELFMOD-020..022 |
+| `check_mutation_allowed(mutation_type)` | Raise if not allowed | GOV-POL-SELFMOD-020..022 |
+
+### Rationale by Type
+
+| Mutation | Rationale |
+|----------|-----------|
+| `BUDGET_CONSUMPTION` | Budget tracking is governance-controlled counter mutation |
+| `RUN_ARTIFACTS` | Runs accumulate output artifacts as primary function |
+| `EVIDENCE_ACCUMULATION` | Evidence gathering is core intelligence function |
+| `RUN_STATUS` | Status transitions follow state machine rules |
+| `STEP_STATUS` | Step completion is execution control |
+| `TRACE_EVENTS` | Observability requires event emission |
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `core/governance/self_modification_guard.py` | AllowedMutationType, is_allowed_mutation(), check_mutation_allowed() |
+
+---
+
 ## 14. Tech Spec Coverage
 
 See [SD-COVERAGE.md](../SD-COVERAGE.md#governance-gov) for full matrix.
@@ -414,6 +586,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#governance-gov) for full matrix.
 | Policies (GOV-POL-*) | ✅ All Implemented |
 | Security (GOV-SEC-*) | ✅ All Implemented |
 | Budgets (GOV-BUD-*) | ✅ All Implemented |
+| Self-Modification Prevention (GOV-POL-SELFMOD-*) | ✅ All Implemented (V1.3) |
 
 ---
 
@@ -427,6 +600,7 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#governance-gov) for full matrix.
 | `core/governance/policies.py` | Policy enforcement |
 | `core/governance/security.py` | PII redaction, secrets |
 | `core/governance/budgeting.py` | Token budget tracking |
+| `core/governance/self_modification_guard.py` | Self-modification prevention (V1.3) |
 
 ---
 

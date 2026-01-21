@@ -1,7 +1,8 @@
 # ADE Flow Definitions
 
 > **Document**: System Design — Flows  
-> **Version**: 1.0.0
+> **Version**: 1.1.0  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -84,7 +85,25 @@ autonomy_level: "suggest_only"
 **Evidence**:
 - `products/ade/flows/ade_v1.yaml` (steps: `context_pack`, `critic_eval`, `assemble_decision_packet`)
 
-### 2.4 User Input: viz_preferences
+### 2.4 Plan Proposal Details (TS-FLOW-V1-006..009)
+
+The `plan_proposal` step generates a `PlanProposal` with detailed metadata in `estimated_cost.details`:
+
+| Field | Description | TS ID |
+|-------|-------------|-------|
+| `objective` | Plan objective string | TS-FLOW-V1-006 |
+| `expected_evidence` | List of evidence sources | TS-FLOW-V1-006 |
+| `assumptions` | List of planning assumptions | TS-FLOW-V1-007 |
+| `risks` | List of identified risks | TS-FLOW-V1-007 |
+| `replan_change_summary` | Summary of changes from prior plan | TS-FLOW-V1-008 |
+| `replan_rationale` | Rationale for replan | TS-FLOW-V1-008 |
+| `tool_recommendations` | Advisory tool recommendations | TS-FLOW-V1-009 |
+
+**Evidence**:
+- `products/ade/agents/plan_proposal_agent.py` (`estimated_cost.details`)
+- `products/ade/agents/planning_agent.py` (`replan_change_summary`)
+
+### 2.5 User Input: viz_preferences
 
 ```yaml
 form_id: "viz_preferences"

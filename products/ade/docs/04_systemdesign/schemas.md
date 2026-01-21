@@ -1,7 +1,8 @@
 # ADE Data Schemas
 
 > **Document**: System Design — Schemas  
-> **Version**: 1.0.0
+> **Version**: 1.1.0  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -247,6 +248,12 @@ class EvidenceItemBase(BaseModel):
     dataset_id: str
     created_at_iso: str
     inputs_hash: str
+    # TS-SCHEMA-EVITEM-001: confidence field
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    # TS-SCHEMA-EVITEM-002: values field for extracted values
+    values: Dict[str, Any] = Field(default_factory=dict)
+    # TS-SCHEMA-CTX-004: columns for column references
+    columns: List[str] = Field(default_factory=list)
 
 class TrendEvidence(EvidenceItemBase):
     kind: Literal["trend"]
@@ -344,6 +351,20 @@ class ContextPack(BaseModel):
     data_quality_flags: List[str]
     metric_availability: List[str]
     evidence_refs: List[Dict[str, Any]]
+    # TS-SCHEMA-CTX-004: Evidence items with dataset_id/columns
+    evidence_items: List[ContextPackEvidenceItem] = Field(default_factory=list)
+    # TS-SCHEMA-CTX-005: Context pack ID for traceability
+    context_pack_id: Optional[str] = None
+```
+
+**ContextPackEvidenceItem** (TS-SCHEMA-CTX-004):
+```python
+class ContextPackEvidenceItem(BaseModel):
+    dataset_id: str
+    columns: List[str] = Field(default_factory=list)
+    source: str = ""
+    description: str = ""
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 ```
 
 **Evidence**:
@@ -384,6 +405,81 @@ All schemas enforce:
 | **Default factories** | `Field(default_factory=list)` for lists |
 | **Optional fields** | `Optional[T] = None` pattern |
 | **Literal constraints** | `Literal["value1", "value2"]` for enums |
+
+---
+
+## 9. Terminal Outcome Schemas (TS-AGENT-TERM-*)
+
+**Location**: `products/ade/schemas/terminal_outcome.py`
+
+### 9.1 TerminalOutcome Enum (TS-AGENT-TERM-001)
+
+```python
+class TerminalOutcome(str, Enum):
+    SUCCESS = "success"
+    PARTIAL_SUCCESS = "partial_success"
+    ASK_USER = "ask_user"
+    ABORT = "abort"
+```
+
+### 9.2 PartialSuccessDetails (TS-AGENT-TERM-002)
+
+```python
+class PartialSuccessDetails(BaseModel):
+    completed_steps: List[str] = Field(default_factory=list)
+    missing_steps: List[str] = Field(default_factory=list)
+    reason: str = ""
+```
+
+### 9.3 TerminalArtifact (TS-AGENT-TERM-003)
+
+```python
+class TerminalArtifact(BaseModel):
+    explanation: str = ""
+    supporting_refs: List[str] = Field(default_factory=list)
+    confidence: str = "medium"
+```
+
+### 9.4 RunResult
+
+```python
+class RunResult(BaseModel):
+    run_id: str
+    outcome: TerminalOutcome = TerminalOutcome.SUCCESS
+    partial_details: Optional[PartialSuccessDetails] = None
+    terminal_artifact: Dict[str, Any] = Field(default_factory=dict)
+    artifacts: Dict[str, Any] = Field(default_factory=dict)
+    error_message: Optional[str] = None
+```
+
+**Evidence**:
+- `products/ade/schemas/terminal_outcome.py` (`TerminalOutcome`, `PartialSuccessDetails`, `TerminalArtifact`, `RunResult`)
+
+---
+
+## 10. Confidence Configuration Schema (TS-AGENT-CONF-003)
+
+**Location**: `products/ade/config/confidence.yaml`, `products/ade/utils/confidence.py`
+
+### 10.1 ConfidenceConfig
+
+```python
+class ConfidenceConfig(BaseModel):
+    low_threshold: float = 0.4
+    high_threshold: float = 0.7
+    sufficiency_thresholds: SufficiencyThresholds
+
+class SufficiencyThresholds(BaseModel):
+    min_rows: int = 30
+    critical_rows: int = 15
+    min_time_points: int = 12
+    max_cv: float = 0.6
+    min_non_null_rate: float = 0.7
+```
+
+**Evidence**:
+- `products/ade/config/confidence.yaml`
+- `products/ade/utils/confidence.py` (`ConfidenceConfig`, `SufficiencyThresholds`, `load_confidence_config`)
 
 ---
 

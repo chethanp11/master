@@ -1,7 +1,8 @@
 # ADE Inputs and Outputs
 
 > **Document**: System Design — Inputs and Outputs  
-> **Version**: 1.0.0
+> **Version**: 1.1.0  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -205,8 +206,14 @@ Quality checks are enforced during business report assembly:
 - Recommendations must be specific (minimum word count).
 - Visuals must include data payloads.
 
+**Validation Gating (TS-BRD-VAL-001..003)**:
+- All outputs validated against Pydantic schemas before rendering
+- `ValidationGate` class blocks rendering when validation fails
+- Clear validation errors with field paths via `format_pydantic_errors()`
+
 **Evidence**:
 - `products/ade/tools/assemble_business_report.py` (`_validate_report_quality`, `_validate_visuals`)
+- `products/ade/utils/validation.py` (`ValidationGate`, `validate_output_schema`, `format_pydantic_errors`)
 
 ### 5.3 Optional Outputs (via export_pdf)
 
