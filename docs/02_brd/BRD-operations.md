@@ -1,8 +1,8 @@
 # BRD: Operational Excellence
 
 > **Document ID**: BRD-OPS  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19  
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-25  
 > **Status**: V1 Release  
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
@@ -16,6 +16,7 @@
 | 1.0 | 2026-01-12 | Initial release |
 | 1.1 | 2026-01-13 | Added §3.7 Semantic Trace Events, §3.8 Architecture Tests |
 | V1.2 | 2026-01-19 | Standardized requirement tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-25 | Added §3.10 Architecture Invariants with PLAT-INV-* coverage |
 
 ---
 
@@ -180,6 +181,50 @@ An operational foundation that provides:
 |----|-------------|---------------------------|----------|------------|---------|-------|
 | **BRD-OPS-060** | Platform must retain reasoning artifacts and execution context to enable post-hoc explainability and reproducibility | Derived from: PLAT-OPS-001 | P0 | 2026-01-18 | V1.1 | — |
 | **BRD-OPS-061** | Platform must record the versions, inputs, and hashes required to reproduce outcomes | Derived from: PLAT-OPS-002 | P0 | 2026-01-18 | V1.1 | — |
+
+### 3.10 Architecture Invariants (Added: 2026-01-25)
+
+> **Source**: [PLAT-INV](../01_vision_and_intent/intent-operations.md#plat-inv--architecture-invariants)
+
+#### INV-1: Reasoning as a Framework Primitive
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| **BRD-INV-001** | MASTER SHALL provide standard reasoning middleware primitives that products can invoke without custom orchestration — reasoning is a platform capability | Derived from: PLAT-INV-001 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-002** | Reasoning SHALL follow a structured, multi-phase pattern (interpret → propose → critique → recommend) within a controlled step — consistent and auditable reasoning | Derived from: PLAT-INV-002 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-003** | Reasoning primitives SHALL be bounded, repeatable, and auditable — prevent open-ended reasoning | Derived from: PLAT-INV-003 | P0 | 2026-01-25 | V1.3 | — |
+
+#### INV-2: Critique Is Mandatory, Bounded, and Non-Controlling
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| **BRD-INV-005** | MASTER SHALL support explicit critique passes as part of intelligent execution — ensure quality checks | Derived from: PLAT-INV-005 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-006** | Critique SHALL be advisory only — it may lower confidence, surface gaps, or recommend escalation but preserve control boundaries | Derived from: PLAT-INV-006 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-007** | Critique SHALL NEVER execute tools, route flows, override policies, or force decisions — prevent unauthorized control | Derived from: PLAT-INV-007 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-008** | Control authority SHALL always remain with the orchestrator and governance layer — centralize control | Derived from: PLAT-INV-008 | P0 | 2026-01-25 | V1.3 | — |
+
+#### INV-5: Iteration Is Orchestrator-Controlled
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| **BRD-INV-016** | MASTER SHALL provide standard iteration patterns for intelligent workflows — avoid ad hoc iteration | Derived from: PLAT-INV-016 | P0 | 2026-01-25 | V1.3 | — |
+
+#### INV-6: Platform Laws Are Explicit and Non-Negotiable
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| **BRD-INV-020** | Agents SHALL be advisory only and MUST NOT control execution, routing, or side effects — preserve control boundaries | Derived from: PLAT-INV-020 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-021** | Only the orchestrator SHALL execute tools, change flow state, pause/resume runs, and escalate to HITL — centralize execution control | Derived from: PLAT-INV-021 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-023** | Products SHALL be isolated and MUST NOT access other products' resources directly — enforce product isolation | Derived from: PLAT-INV-023 | P0 | 2026-01-25 | V1.3 | — |
+
+#### INV-8: Executable Invariants
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| **BRD-INV-027** | Platform invariants SHALL be executable — invariants SHALL be enforced via automated tests, runtime checks, and architecture gates (invariants are code, not documentation) | Derived from: PLAT-INV-027 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-028** | Products SHALL NOT re-implement semantic interpretation, validation, or confidence logic — these capabilities SHALL be consumed from platform primitives | Derived from: PLAT-INV-028 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-029** | Architecture tests SHALL verify that products do not duplicate platform semantic or validation logic — automated duplication detection | Derived from: PLAT-INV-029 | P0 | 2026-01-25 | V1.3 | — |
+| **BRD-INV-030** | Invariant violations SHALL block CI/CD pipelines — no deployment SHALL proceed with invariant failures | Derived from: PLAT-INV-030 | P0 | 2026-01-25 | V1.3 | — |
 
 ---
 

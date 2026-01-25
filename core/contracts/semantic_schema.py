@@ -56,6 +56,34 @@ class NextAction(str, Enum):
 
 
 # ==============================
+# Semantic Envelope Enforcement Errors (ORC-SEM-ENV-001...005)
+# ==============================
+class SemanticEnvelopeRequiredError(Exception):
+    """
+    Raised when planning or execution is attempted without a valid semantic envelope.
+    
+    ORC-SEM-ENV-001: Planning phase MUST require valid SemanticEnvelope.
+    ORC-SEM-ENV-002: Engine MUST reject calls without envelope.
+    """
+
+    def __init__(self, message: str = "SemanticEnvelope required for planning phase"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class SemanticEnvelopeNotValidatedError(Exception):
+    """
+    Raised when planning is attempted with an envelope that hasn't been validated.
+    
+    ORC-SEM-ENV-003: Engine MUST verify envelope_validated == True before planning.
+    """
+
+    def __init__(self, message: str = "SemanticEnvelope must be validated before planning"):
+        self.message = message
+        super().__init__(self.message)
+
+
+# ==============================
 # Entity Model
 # ==============================
 class Entity(BaseModel):
@@ -89,6 +117,69 @@ class Entity(BaseModel):
         le=1.0,
         description="Confidence score for this entity extraction (0.0-1.0)",
     )
+
+
+# ==============================
+# Ambiguity Model (ORC-SEM-AMB-001...006)
+# ==============================
+class Ambiguity(BaseModel):
+    """
+    Structured ambiguity detected during semantic interpretation.
+    
+    ORC-SEM-AMB-001: Ambiguities must be structured, not just string lists.
+    ORC-SEM-AMB-002: Each ambiguity must track resolution method and selected option.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # ORC-SEM-AMB-001: Unique identifier
+    ambiguity_id: str = Field(
+        ...,
+        description="Unique identifier for this ambiguity",
+        min_length=1,
+        max_length=64,
+    )
+    
+    # ORC-SEM-AMB-002: Description of the ambiguity
+    description: str = Field(
+        ...,
+        description="Human-readable description of the ambiguity",
+        max_length=500,
+    )
+    
+    # ORC-SEM-AMB-003: Possible resolution options
+    options: List[str] = Field(
+        default_factory=list,
+        description="Possible options to resolve this ambiguity",
+        max_length=10,
+    )
+    
+    # ORC-SEM-AMB-004: Source span in input text
+    source_span: Optional[tuple] = Field(
+        default=None,
+        description="(start, end) character positions in original input",
+    )
+    
+    # ORC-SEM-AMB-005: Resolution tracking
+    resolution_method: Optional[str] = Field(
+        default=None,
+        description="Method used to resolve (e.g., 'user_clarification', 'default_selection', 'context_inference')",
+    )
+    selected_option: Optional[str] = Field(
+        default=None,
+        description="The option selected to resolve this ambiguity",
+    )
+    
+    # ORC-SEM-AMB-006: Blocking flag
+    is_blocking: bool = Field(
+        default=True,
+        description="True if this ambiguity blocks execution until resolved",
+    )
+
+    @property
+    def is_resolved(self) -> bool:
+        """Check if ambiguity has been resolved."""
+        return self.resolution_method is not None and self.selected_option is not None
 
 
 # ==============================
@@ -151,11 +242,18 @@ class SemanticEnvelope(BaseModel):
         description="Overall confidence score for this interpretation (0.0-1.0)",
     )
 
-    # ORC-SEM-018: ambiguities (list of unresolved ambiguities)
-    ambiguities: List[str] = Field(
+    # ORC-SEM-018: ambiguities (list of structured ambiguities)
+    # ORC-SEM-AMB-001...006: Structured ambiguity tracking
+    ambiguities: List[Ambiguity] = Field(
         default_factory=list,
-        description="List of unresolved ambiguities requiring clarification",
+        description="List of structured ambiguities requiring clarification",
         max_length=20,
+    )
+    
+    # Legacy: string ambiguities for backward compatibility
+    ambiguity_strings: List[str] = Field(
+        default_factory=list,
+        description="Legacy string-based ambiguities (deprecated)",
     )
 
     # ORC-SEM-019: proposed_next_action (NextAction enum value)
@@ -175,6 +273,38 @@ class SemanticEnvelope(BaseModel):
         description="Method used for interpretation (e.g., 'llm', 'rule-based', 'hybrid')",
     )
 
+    # ORC-SEM-ENV-001...005: Envelope enforcement fields
+    all_constraints_satisfiable: bool = Field(
+        default=True,
+        description="True if all constraints can be satisfied",
+    )
+    envelope_validated: bool = Field(
+        default=False,
+        description="True if envelope has passed validation",
+    )
+    bypass_attempt_blocked: bool = Field(
+        default=False,
+        description="True if a bypass attempt was blocked (audit trail)",
+    )
+
+    # ==============================
+    # Computed Properties
+    # ==============================
+    @property
+    def ambiguity_count(self) -> int:
+        """ORC-SEM-AMB: Total count of ambiguities."""
+        return len(self.ambiguities)
+    
+    @property
+    def blocking_ambiguity_count(self) -> int:
+        """ORC-SEM-AMB: Count of blocking ambiguities."""
+        return sum(1 for a in self.ambiguities if a.is_blocking and not a.is_resolved)
+    
+    @property
+    def unresolved_ambiguity_count(self) -> int:
+        """ORC-SEM-AMB: Count of unresolved ambiguities."""
+        return sum(1 for a in self.ambiguities if not a.is_resolved)
+
     # ==============================
     # Validators
     # ==============================
@@ -188,8 +318,8 @@ class SemanticEnvelope(BaseModel):
 
     @field_validator("ambiguities", mode="before")
     @classmethod
-    def validate_ambiguities_length(cls, v: List[str]) -> List[str]:
-        """Enforce max 20 ambiguities."""
+    def validate_ambiguities_length(cls, v: List[Ambiguity]) -> List[Ambiguity]:
+        """Enforce max 20 ambiguities (ORC-SEM-AMB)."""
         if v is not None and len(v) > 20:
             raise ValueError("ambiguities list cannot exceed 20 items")
         return v

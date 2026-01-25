@@ -1,8 +1,8 @@
 # BRD: Governance & Compliance
 
 > **Document ID**: BRD-GOV  
-> **Version**: 1.2  
-> **Last Updated**: 2026-01-13
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-25
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
 
@@ -14,6 +14,7 @@
 |---------|------|---------|
 | 1.0 | 2026-01-12 | Initial release |
 | 1.1 | 2026-01-13 | Added §3.8 Semantic Confidence Governance with INT-GOV-CONF-* requirements |
+| V1.3 | 2026-01-25 | Added §3.9 HITL Binding Requirements, §3.10 Semantic Gate Enforcement, §3.11 Evidence Requirements, §3.12 Decision Records; closed coverage gaps |
 
 ---
 
@@ -82,6 +83,8 @@ A governance framework that provides:
 | **BRD-GOV-004** | Approval decisions must be recorded with approver identity and timestamp | P0 | INT-GOV-004 | 2026-01-12 |
 | **BRD-GOV-005** | Workflows must pause gracefully while awaiting approval | P0 | INT-GOV-005 | 2026-01-12 |
 | **BRD-GOV-006** | Workflows must resume correctly after approval/rejection | P0 | INT-GOV-006 | 2026-01-12 |
+| **BRD-GOV-007** | HITL decisions SHALL be structurally binding — execution SHALL NOT proceed until human decision is recorded | P0 | INT-GOV-007 | 2026-01-25 |
+| **BRD-GOV-008** | HITL requirements SHALL be declared at flow design time, not inferred at runtime — deterministic governance required | P0 | INT-GOV-008 | 2026-01-25 |
 
 ### 3.2 Security & Privacy
 
@@ -92,6 +95,9 @@ A governance framework that provides:
 | **BRD-GOV-012** | Redaction must be automatic—not dependent on developer action | P0 | INT-GOV-012 | 2026-01-12 |
 | **BRD-GOV-013** | Custom redaction patterns must be configurable per product | P1 | INT-GOV-013 | 2026-01-12 |
 | **BRD-GOV-014** | Redaction failures must halt execution rather than leak data | P0 | INT-GOV-014 | 2026-01-12 |
+| **BRD-GOV-015** | PII SHALL never appear in logs — prevent privacy leaks through all log outputs | P0 | INT-GOV-015 | 2026-01-25 |
+| **BRD-GOV-016** | Credentials SHALL never be exposed — prevent secret leaks through any output channel | P0 | INT-GOV-016 | 2026-01-25 |
+| **BRD-GOV-017** | Redaction SHALL be automatic — remove manual redaction dependency, all redaction must occur without developer action | P0 | INT-GOV-017 | 2026-01-25 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -112,6 +118,9 @@ A governance framework that provides:
 | **BRD-GOV-025** | Low-confidence interpretations must pause for user clarification | P0 | INT-GOV-025, INV-3 | 2026-01-12 |
 | **BRD-GOV-026** | Confidence thresholds must be configurable per product | P1 | INT-GOV-026 | 2026-01-12 |
 | **BRD-GOV-027** | Semantic validation failures must block execution | P0 | INT-GOV-027 | 2026-01-12 |
+| **BRD-GOV-028** | Hooks SHALL NOT be bypassed — governance hooks must be non-bypassable at all lifecycle points | P0 | INT-GOV-028 | 2026-01-25 |
+| **BRD-GOV-029** | Policy violations SHALL block execution — enforce policy compliance with hard stops, not warnings | P0 | INT-GOV-029 | 2026-01-25 |
+| **BRD-GOV-035** | Budgets SHALL be hard limits — prevent overrun with enforced budget caps | P0 | INT-GOV-035 | 2026-01-25 |
 
 **Constraints (Non-Negotiable from Intent)**:
 | Constraint | Violation Example |
@@ -162,6 +171,36 @@ A governance framework that provides:
 | **BRD-GOV-062** | Confidence and ambiguity must propagate into downstream artifacts, decisions, and outputs | P0 | INV-3 | 1.0 | Added: 2026-01-13 |
 | **BRD-GOV-063** | When ambiguity exceeds policy thresholds, execution must require HITL or halt safely | P0 | INV-3 | 1.0 | Added: 2026-01-13 |
 
+### 3.9 Decision Records (Added: 2026-01-25)
+
+> **Source**: [PLAT-AUD](../01_vision_and_intent/intent-governance.md#plat-aud--decision-records)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-GOV-064** | Platform SHALL generate immutable decision records for every gated action, capturing options considered, evidence used, critique feedback, final choice, and confidence — ensure auditable decision provenance | P0 | PLAT-AUD-001 | V1.3 | Added: 2026-01-25 |
+
+### 3.10 Semantic Gate Enforcement (Added: 2026-01-25)
+
+> **Source**: [PLAT-GOV-GATE](../01_vision_and_intent/intent-governance.md#plat-gov-gate--semantic-gate-enforcement)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-GOV-GATE-001** | Platform SHALL enforce a mandatory semantic gate before any flow execution begins — prevent unvalidated execution | P0 | INT-GOV-GATE-001 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-GATE-002** | Semantic gate SHALL validate intent sufficiency, confidence thresholds, and constraint satisfaction before proceeding — comprehensive pre-execution validation | P0 | INT-GOV-GATE-002 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-GATE-003** | Execution SHALL be blocked when semantic assumptions are implicit or inferred rather than explicitly validated — no implicit assumption execution | P0 | INT-GOV-GATE-003 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-GATE-004** | Platform SHALL provide an Intent Sufficiency Gate that enforces hard fail on insufficient intent — make sufficiency a blocking gate | P0 | INT-GOV-GATE-004 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-GATE-005** | Semantic gate failures SHALL produce structured rejection artifacts with gap identification and remediation paths — actionable failure responses | P0 | INT-GOV-GATE-005 | V1.3 | Added: 2026-01-25 |
+
+### 3.11 Evidence Requirements (Added: 2026-01-25)
+
+> **Source**: [PLAT-GOV-EVID](../01_vision_and_intent/intent-governance.md#plat-gov-evid--evidence-requirements)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-GOV-EVID-001** | All decision artifacts SHALL include evidence references that support the decision — no decision without evidence | P0 | INT-GOV-EVID-001 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-EVID-002** | Confidence scores SHALL be tied to evidence completeness — incomplete evidence SHALL result in proportionally reduced confidence | P0 | INT-GOV-EVID-002 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-EVID-003** | Evidence references SHALL be traceable, typed, and queryable for audit — evidence as first-class artifact | P0 | INT-GOV-EVID-003 | V1.3 | Added: 2026-01-25 |
+
 ### 3.8 Semantic Confidence Governance (Added: 2026-01-13)
 
 > **Source**: [INT-GOV-CONF](../00_developer_intent/intent.md#24-semantic-confidence-governance-added-2026-01-13)
@@ -175,6 +214,9 @@ A governance framework that provides:
 | **BRD-GOV-CONF-005** | Governance hook `check_semantic_confidence` must enforce thresholds | P0 | INT-GOV-CONF-005 | 1.1 | Added: 2026-01-13 |
 | **BRD-GOV-CONF-006** | Effective confidence is minimum of (envelope.confidence, validation.revised_confidence) | P0 | INT-GOV-CONF-006 | 1.1 | Added: 2026-01-13 |
 | **BRD-GOV-CONF-007** | Threshold enforcement must be logged with confidence values | P1 | INT-GOV-CONF-007 | 1.1 | Added: 2026-01-13 |
+| **BRD-GOV-CONF-008** | Threshold SHALL be enforced — prevent low-confidence execution from proceeding | P0 | INT-GOV-CONF-008 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-CONF-009** | Overrides SHALL require explicit config — prevent implicit threshold changes | P0 | INT-GOV-CONF-009 | V1.3 | Added: 2026-01-25 |
+| **BRD-GOV-CONF-010** | Confidence check SHALL be a governance hook — avoid business-logic-only enforcement, enforce via governance layer | P0 | INT-GOV-CONF-010 | V1.3 | Added: 2026-01-25 |
 
 **Configuration (New: 2026-01-13)**:
 
@@ -269,6 +311,9 @@ by_product:
 | BRD-GOV-062 | Confidence propagation | INT-SEM-PROP-* | 1.0 |
 | BRD-GOV-063 | Ambiguity escalation | INT-SEM-ESC-* | 1.0 |
 | BRD-GOV-CONF-* | Semantic confidence governance | GOV-SEM-CONF-*, GOV-HOOK-SEM-* | 1.1 |
+| BRD-GOV-064 | Decision records | GOV-DEC-RECORD-* | V1.3 |
+| BRD-GOV-GATE-* | Semantic gate enforcement | GOV-GATE-SEM-*, ORC-GATE-SEM-* | V1.3 |
+| BRD-GOV-EVID-* | Evidence requirements | GOV-EVID-*, DEC-EVID-* | V1.3 |
 
 ---
 
@@ -346,6 +391,9 @@ by_product:
 | PII is never logged | Automatic redaction, fail-closed |
 | Intent precedes BRD | Governance requirements derive from intent |
 | Feedback is not intent | User feedback goes through review before promotion |
+| HITL decisions are binding | Execution cannot proceed until human decision recorded |
+| Semantic gate is mandatory | No flow execution without semantic gate validation |
+| Evidence is required | No decision artifact without evidence references |
 
 ---
 

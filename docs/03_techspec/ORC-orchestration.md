@@ -1,9 +1,9 @@
 # Orchestration Engine Technical Specification
 
 > **Document ID**: ORC  
-> **Version**: V1.3  
+> **Version**: V1.4  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-20  
+> **Last Updated**: 2026-01-25  
 
 ---
 
@@ -15,6 +15,7 @@
 | 1.1.0 | 2026-01-13 | Added §3.7 Versioning & Reproducibility, §3.8 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 | V1.3 | 2026-01-20 | Added §15 Orchestrator-Controlled Reasoning (BRD-AUTO-047/048), §16 Explicit Terminal Outcomes (BRD-AUTO-052) |
+| V1.4 | 2026-01-25 | Added §19 Semantic Envelope Enforcement (BRD-AUTO-SEM-011/012/013), §20 Minimum Reasoning Contract (BRD-AUTO-053), §21 Intent Sufficiency Gate (BRD-AUTO-054) |
 
 ---
 
@@ -575,6 +576,100 @@ run lifecycle management, step execution, pause/resume mechanics, and control fl
 | Unbounded iteration | Violates INV-5 | Loop without max_iters |
 | Hidden branching logic | Violates explicit flows | Undocumented conditional paths |
 | Autonomous tool invocation | Violates governance | Tool runs without before_tool hook |
+
+---
+
+## 19. Semantic Envelope Enforcement (Added: 2026-01-25)
+
+> **Source**: BRD-AUTO-SEM-011, BRD-AUTO-SEM-012, BRD-AUTO-SEM-013
+
+### 19.1 Envelope-Only Handoff to Planning
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SEM-ENV-001 | SemanticEnvelope SHALL be the only handoff to planning phase — raw text input MUST NOT proceed directly to planning | MUST | BRD-AUTO-SEM-011 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-ENV-002 | Planning steps MUST receive `SemanticEnvelope` as input, not raw user text | MUST | BRD-AUTO-SEM-011 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-ENV-003 | Orchestrator MUST reject planning invocation if `SemanticEnvelope` is absent from run context | MUST | BRD-AUTO-SEM-011 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-ENV-004 | Direct raw-text-to-planning bypass attempts MUST emit `envelope_bypass_blocked` trace event and fail with `semantic_envelope_required` error code | MUST | BRD-AUTO-SEM-011 | 1.4 | 25 Jan 2026 | — |
+
+### 19.2 Confidence Gate Enforcement
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SEM-CONF-GATE-001 | Confidence gates SHALL control execution — low-confidence interpretations MUST NOT proceed without intervention | MUST | BRD-AUTO-SEM-012 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-CONF-GATE-002 | Orchestrator MUST invoke `check_semantic_confidence` governance hook before proceeding past semantic phase | MUST | BRD-AUTO-SEM-012 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-CONF-GATE-003 | If `effective_confidence < threshold`, orchestrator MUST transition run to `PAUSED_WAITING_FOR_USER` with clarification request | MUST | BRD-AUTO-SEM-012 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-CONF-GATE-004 | Confidence gate bypass MUST NOT be permitted — no developer flag or configuration can disable the gate | MUST | BRD-AUTO-SEM-012 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-CONF-GATE-005 | Confidence gate decision MUST emit `confidence_gate_evaluated` trace event with `threshold`, `effective_confidence`, `decision` (proceed/block) | MUST | BRD-AUTO-SEM-012 | 1.4 | 25 Jan 2026 | — |
+
+### 19.3 Explicit Ambiguity Surfacing
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SEM-AMB-001 | Ambiguities SHALL be explicit — all detected ambiguities MUST be surfaced in the semantic envelope as structured data | MUST | BRD-AUTO-SEM-013 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-AMB-002 | Each ambiguity entry MUST include: `ambiguity_id`, `description`, `options` (list of possible interpretations), `source_span` (position in input) | MUST | BRD-AUTO-SEM-013 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-AMB-003 | Ambiguities MUST NOT be silently resolved — if resolution is applied, `resolution_method` and `selected_option` MUST be recorded | MUST | BRD-AUTO-SEM-013 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-AMB-004 | `ambiguity_count` MUST be included in `semantic_interpretation_completed` trace event | MUST | BRD-AUTO-SEM-013 | 1.4 | 25 Jan 2026 | — |
+| ORC-SEM-AMB-005 | If `ambiguity_count > max_allowed_ambiguities` (default: 3), orchestrator MUST block execution with `excessive_ambiguity` error | MUST | BRD-AUTO-SEM-013 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 20. Minimum Reasoning Contract (Added: 2026-01-25)
+
+> **Source**: BRD-AUTO-053
+
+### 20.1 Platform-Mandated Reasoning Minimums
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-REASON-CONTRACT-001 | Platform SHALL define and enforce a Minimum Reasoning Contract for all products — products SHALL NOT bypass or reduce reasoning phases below platform-mandated minimums | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-002 | Minimum Reasoning Contract MUST require at least: INTERPRET phase and PROPOSE phase for any intelligent step | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-003 | CRITIQUE phase MAY be skipped only when explicitly waived in flow configuration with `critique_waiver: true` AND waiver reason | MAY | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-004 | Critique waiver MUST emit `critique_phase_waived` trace event with `waiver_reason` and MUST still record confidence | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-005 | Products attempting to bypass mandatory phases MUST fail with `reasoning_contract_violation` error code | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+
+### 20.2 Reasoning Phase Validation
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-REASON-CONTRACT-010 | Orchestrator MUST validate that all required reasoning phases are defined in flow before execution | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-011 | Flow validation MUST fail at load time if mandatory reasoning phases are missing | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+| ORC-REASON-CONTRACT-012 | Reasoning phase skips at runtime (other than explicit waivers) MUST emit `reasoning_phase_skipped_unexpectedly` error event and fail the run | MUST | BRD-AUTO-053 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 21. Intent Sufficiency Gate (Added: 2026-01-25)
+
+> **Source**: BRD-AUTO-054
+
+### 21.1 Sufficiency as First-Class Orchestration Responsibility
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SUFF-GATE-001 | Intent sufficiency SHALL be a first-class orchestration responsibility — orchestrator SHALL track, evaluate, and gate execution based on sufficiency state | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-002 | Orchestrator MUST maintain a `SufficiencyState` object tracking: `known_facts`, `unknowns`, `assumptions`, `blocking_gaps` | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-003 | `SufficiencyState` MUST be evaluated before planning phase — if `blocking_gaps` is non-empty, execution MUST be blocked | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-004 | Sufficiency gate failure MUST produce structured rejection artifact with `gap_id`, `gap_description`, `remediation_path` for each blocking gap | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-005 | Sufficiency evaluation MUST emit `sufficiency_gate_evaluated` trace event with `known_count`, `unknown_count`, `assumption_count`, `blocking_gap_count`, `decision` (sufficient/insufficient) | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+
+### 21.2 Sufficiency State Management
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SUFF-GATE-010 | `SufficiencyState` MUST be initialized from semantic envelope entities, constraints, and ambiguities | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-011 | `SufficiencyState` MUST be updated after each reasoning iteration with new facts or resolved unknowns | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-012 | `SufficiencyState` MUST be persisted in run context and included in run record for audit | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-013 | Assumptions in `SufficiencyState` MUST include `assumption_id`, `description`, `confidence`, `source` (default/inferred/user-provided) | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-014 | Blocking gaps MUST be distinguished from non-blocking gaps; only blocking gaps prevent execution | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+
+### 21.3 Sufficiency Recovery Paths
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ORC-SUFF-GATE-020 | If sufficiency gate fails, orchestrator MUST determine recovery path: `ASK_USER`, `RETRIEVE_MORE`, or `ABORT` | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-021 | `ASK_USER` recovery MUST generate targeted clarification questions based on specific blocking gaps | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-022 | `RETRIEVE_MORE` recovery MAY trigger additional retrieval steps to resolve unknowns before re-evaluating sufficiency | MAY | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
+| ORC-SUFF-GATE-023 | Recovery attempts MUST be bounded by `max_sufficiency_retries` (default: 2); exceeding limit MUST trigger `ABORT` | MUST | BRD-AUTO-054 | 1.4 | 25 Jan 2026 | — |
 
 ---
 

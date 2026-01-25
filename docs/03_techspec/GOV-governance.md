@@ -1,9 +1,9 @@
 # Governance Technical Specification
 
 > **Document ID**: GOV  
-> **Version**: V1.3  
+> **Version**: V1.4  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-20  
+> **Last Updated**: 2026-01-25  
 
 ---
 
@@ -15,6 +15,7 @@
 | 1.1.0 | 2026-01-13 | Added §12 Semantic Confidence Governance, §13 Decision Artifact Requirements, §14 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 | V1.3 | 2026-01-20 | Added §13A Runtime Self-Modification Prevention (BRD-GOV-054) |
+| V1.4 | 2026-01-25 | Added §15 HITL Binding Requirements (BRD-GOV-007/008), §16 Enhanced Security & Privacy (BRD-GOV-015-017), §17 Policy Enforcement Enhancements (BRD-GOV-028/029/035), §18 Semantic Gate Enforcement (BRD-GOV-GATE-*), §19 Evidence Requirements (BRD-GOV-EVID-*), §20 Decision Records (BRD-GOV-064), §21 Confidence Governance Enhancements (BRD-GOV-CONF-008-010) |
 
 ---
 
@@ -507,5 +508,227 @@ persisting state or performing logging directly.
 | Hidden policy decisions | Violates auditability | Policy check without trace event |
 | Runtime policy modification | Governance is config-driven | Code changes policy at runtime |
 | Probabilistic enforcement | Governance is deterministic | Random sampling of policy checks |
+
+---
+
+## 15. HITL Binding Requirements (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-007, BRD-GOV-008
+
+### 15.1 Structurally Binding HITL Decisions
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-HITL-BIND-001 | HITL decisions SHALL be structurally binding — execution SHALL NOT proceed until human decision is recorded | MUST | BRD-GOV-007 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-BIND-002 | HITL approval record MUST contain: `decision` (approve/reject/request_changes), `decided_by` (user identity), `decided_at` (timestamp), `reason` (optional justification) | MUST | BRD-GOV-007 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-BIND-003 | Run state machine MUST NOT permit transition from `PENDING_HUMAN` to `RUNNING` without recorded approval decision | MUST | BRD-GOV-007 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-BIND-004 | Attempts to bypass HITL gate MUST emit `hitl_bypass_blocked` trace event and fail with `hitl_decision_required` error code | MUST | BRD-GOV-007 | 1.4 | 25 Jan 2026 | — |
+
+### 15.2 Design-Time HITL Declaration
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-HITL-DECL-001 | HITL requirements SHALL be declared at flow design time, not inferred at runtime — deterministic governance required | MUST | BRD-GOV-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-DECL-002 | Flow definition MUST declare `requires_human_approval: true` on steps requiring HITL | MUST | BRD-GOV-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-DECL-003 | Product manifest MAY declare `hitl_policy` with conditions for automatic HITL requirement | MAY | BRD-GOV-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-DECL-004 | Runtime inference of HITL requirements (e.g., based on data values) MUST be prohibited — all HITL gates must be known at flow load time | MUST | BRD-GOV-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-HITL-DECL-005 | Flow validation MUST fail at load time if HITL step lacks required declaration fields | MUST | BRD-GOV-008 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 16. Enhanced Security & Privacy (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-015, BRD-GOV-016, BRD-GOV-017
+
+### 16.1 PII Protection
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEC-PII-001 | PII SHALL never appear in logs — prevent privacy leaks through all log outputs | MUST | BRD-GOV-015 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-PII-002 | All logging calls MUST pass through `SecurityRedactor.scrub()` before output | MUST | BRD-GOV-015 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-PII-003 | PII detection MUST cover: SSN, credit card, email, phone, IP address, names (when tagged) | MUST | BRD-GOV-015 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-PII-004 | Redacted PII MUST be replaced with `[REDACTED:type]` format (e.g., `[REDACTED:SSN]`) | MUST | BRD-GOV-015 | 1.4 | 25 Jan 2026 | — |
+
+### 16.2 Credential Protection
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEC-CRED-001 | Credentials SHALL never be exposed — prevent secret leaks through any output channel | MUST | BRD-GOV-016 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-CRED-002 | Credential detection MUST cover: API keys, tokens, passwords, private keys, connection strings | MUST | BRD-GOV-016 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-CRED-003 | Credentials MUST be redacted from: trace events, error messages, API responses, file outputs | MUST | BRD-GOV-016 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-CRED-004 | Credential leakage detection MUST run in `after_run` hook and fail the run if unredacted credentials are found | MUST | BRD-GOV-016 | 1.4 | 25 Jan 2026 | — |
+
+### 16.3 Automatic Redaction
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEC-AUTO-001 | Redaction SHALL be automatic — remove manual redaction dependency, all redaction must occur without developer action | MUST | BRD-GOV-017 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-AUTO-002 | SecurityRedactor MUST be invoked automatically by all governance hooks | MUST | BRD-GOV-017 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-AUTO-003 | No code path SHALL allow unredacted sensitive data to reach persistent storage or external output | MUST | BRD-GOV-017 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEC-AUTO-004 | Redaction bypass attempts (e.g., encoding, obfuscation) MUST be detected and blocked | MUST | BRD-GOV-017 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 17. Policy Enforcement Enhancements (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-028, BRD-GOV-029, BRD-GOV-035
+
+### 17.1 Non-Bypassable Hooks
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-POL-NOBYPASS-001 | Hooks SHALL NOT be bypassed — governance hooks must be non-bypassable at all lifecycle points | MUST | BRD-GOV-028 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-NOBYPASS-002 | No developer flag, environment variable, or configuration option SHALL disable governance hooks | MUST | BRD-GOV-028 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-NOBYPASS-003 | Hook bypass attempts MUST emit `governance_bypass_blocked` trace event | MUST | BRD-GOV-028 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-NOBYPASS-004 | Architecture tests MUST verify all execution paths invoke required governance hooks | MUST | BRD-GOV-028 | 1.4 | 25 Jan 2026 | — |
+
+### 17.2 Policy Violation Blocking
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-POL-BLOCK-001 | Policy violations SHALL block execution — enforce policy compliance with hard stops, not warnings | MUST | BRD-GOV-029 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-BLOCK-002 | PolicyEngine MUST return `allowed=False` for all policy violations; warning-only mode MUST NOT exist | MUST | BRD-GOV-029 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-BLOCK-003 | Policy violation MUST produce structured error with `policy_id`, `violation_reason`, `remediation_hint` | MUST | BRD-GOV-029 | 1.4 | 25 Jan 2026 | — |
+| GOV-POL-BLOCK-004 | Policy violations MUST emit `policy_violation_blocked` trace event with full context | MUST | BRD-GOV-029 | 1.4 | 25 Jan 2026 | — |
+
+### 17.3 Budget Hard Limits
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-BUD-HARD-001 | Budgets SHALL be hard limits — prevent overrun with enforced budget caps | MUST | BRD-GOV-035 | 1.4 | 25 Jan 2026 | — |
+| GOV-BUD-HARD-002 | BudgetEnforcer MUST NOT allow any operation that would exceed configured budget limits | MUST | BRD-GOV-035 | 1.4 | 25 Jan 2026 | — |
+| GOV-BUD-HARD-003 | Soft limit mode (warn but continue) MUST NOT exist — all budget limits are hard stops | MUST | BRD-GOV-035 | 1.4 | 25 Jan 2026 | — |
+| GOV-BUD-HARD-004 | Budget exceeded MUST transition run to `FAILED` with `budget_exceeded` reason | MUST | BRD-GOV-035 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 18. Semantic Gate Enforcement (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-GATE-001 through BRD-GOV-GATE-005
+
+### 18.1 Mandatory Semantic Gate
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-GATE-SEM-001 | Platform SHALL enforce a mandatory semantic gate before any flow execution begins — prevent unvalidated execution | MUST | BRD-GOV-GATE-001 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-002 | Semantic gate MUST be invoked between semantic interpretation and planning phases | MUST | BRD-GOV-GATE-001 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-003 | Semantic gate bypass MUST NOT be possible — no skip flag or configuration can disable it | MUST | BRD-GOV-GATE-001 | 1.4 | 25 Jan 2026 | — |
+
+### 18.2 Gate Validation Criteria
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-GATE-SEM-010 | Semantic gate SHALL validate intent sufficiency, confidence thresholds, and constraint satisfaction before proceeding — comprehensive pre-execution validation | MUST | BRD-GOV-GATE-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-011 | Gate validation MUST check: `SufficiencyState.blocking_gaps == 0` | MUST | BRD-GOV-GATE-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-012 | Gate validation MUST check: `effective_confidence >= threshold` | MUST | BRD-GOV-GATE-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-013 | Gate validation MUST check: all required constraints are satisfied | MUST | BRD-GOV-GATE-002 | 1.4 | 25 Jan 2026 | — |
+
+### 18.3 Implicit Assumption Prevention
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-GATE-SEM-020 | Execution SHALL be blocked when semantic assumptions are implicit or inferred rather than explicitly validated — no implicit assumption execution | MUST | BRD-GOV-GATE-003 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-021 | All assumptions in `SufficiencyState` MUST have explicit `source` (default/inferred/user-provided) | MUST | BRD-GOV-GATE-003 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SEM-022 | Inferred assumptions above configured limit MUST trigger clarification or block execution | MUST | BRD-GOV-GATE-003 | 1.4 | 25 Jan 2026 | — |
+
+### 18.4 Intent Sufficiency Gate Enforcement
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-GATE-SUFF-001 | Platform SHALL provide an Intent Sufficiency Gate that enforces hard fail on insufficient intent — make sufficiency a blocking gate | MUST | BRD-GOV-GATE-004 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SUFF-002 | Sufficiency gate MUST be evaluated after semantic interpretation and before planning | MUST | BRD-GOV-GATE-004 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-SUFF-003 | Insufficient intent MUST block execution — no proceed-with-warnings mode | MUST | BRD-GOV-GATE-004 | 1.4 | 25 Jan 2026 | — |
+
+### 18.5 Gate Rejection Artifacts
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-GATE-REJ-001 | Semantic gate failures SHALL produce structured rejection artifacts with gap identification and remediation paths — actionable failure responses | MUST | BRD-GOV-GATE-005 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-REJ-002 | Rejection artifact MUST include: `gate_id`, `failure_reason`, `gaps` (list), `remediation_suggestions` | MUST | BRD-GOV-GATE-005 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-REJ-003 | Each gap in rejection artifact MUST include: `gap_id`, `gap_type`, `description`, `resolution_options` | MUST | BRD-GOV-GATE-005 | 1.4 | 25 Jan 2026 | — |
+| GOV-GATE-REJ-004 | Rejection artifact MUST be persisted and included in run output for audit | MUST | BRD-GOV-GATE-005 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 19. Evidence Requirements (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-EVID-001, BRD-GOV-EVID-002, BRD-GOV-EVID-003
+
+### 19.1 Decision Evidence Requirement
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-EVID-001 | All decision artifacts SHALL include evidence references that support the decision — no decision without evidence | MUST | BRD-GOV-EVID-001 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-002 | `DecisionArtifact.evidence_refs` MUST be non-empty for all gated decisions | MUST | BRD-GOV-EVID-001 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-003 | Decisions without evidence MUST be rejected with `evidence_required` error code | MUST | BRD-GOV-EVID-001 | 1.4 | 25 Jan 2026 | — |
+
+### 19.2 Evidence-Confidence Linkage
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-EVID-CONF-001 | Confidence scores SHALL be tied to evidence completeness — incomplete evidence SHALL result in proportionally reduced confidence | MUST | BRD-GOV-EVID-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-CONF-002 | Evidence completeness MUST be calculated as: `evidence_count / required_evidence_count` | MUST | BRD-GOV-EVID-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-CONF-003 | Confidence adjustment formula: `adjusted_confidence = base_confidence * evidence_completeness_factor` | MUST | BRD-GOV-EVID-002 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-CONF-004 | Evidence completeness factor MUST be logged in decision artifact | MUST | BRD-GOV-EVID-002 | 1.4 | 25 Jan 2026 | — |
+
+### 19.3 Evidence Traceability
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-EVID-TRACE-001 | Evidence references SHALL be traceable, typed, and queryable for audit — evidence as first-class artifact | MUST | BRD-GOV-EVID-003 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-TRACE-002 | Each evidence reference MUST include: `evidence_id`, `evidence_type`, `source`, `confidence`, `extraction_timestamp` | MUST | BRD-GOV-EVID-003 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-TRACE-003 | Evidence MUST be queryable by: `run_id`, `decision_id`, `evidence_type`, `source` | MUST | BRD-GOV-EVID-003 | 1.4 | 25 Jan 2026 | — |
+| GOV-EVID-TRACE-004 | Evidence index MUST be maintained in memory backend for efficient querying | MUST | BRD-GOV-EVID-003 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 20. Decision Records (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-064
+
+### 20.1 Immutable Decision Records
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-DEC-RECORD-001 | Platform SHALL generate immutable decision records for every gated action, capturing options considered, evidence used, critique feedback, final choice, and confidence — ensure auditable decision provenance | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-002 | Decision record MUST include: `decision_id` (UUID), `decision_type`, `timestamp`, `run_id`, `step_id` | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-003 | Decision record MUST include: `options_considered` (list of alternatives with scores) | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-004 | Decision record MUST include: `evidence_used` (list of evidence references) | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-005 | Decision record MUST include: `critique_feedback` (if critique phase was run) | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-006 | Decision record MUST include: `final_choice`, `justification`, `confidence` | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-007 | Decision records MUST be immutable after creation — no updates permitted | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+| GOV-DEC-RECORD-008 | Decision record creation MUST emit `decision_record_created` trace event | MUST | BRD-GOV-064 | 1.4 | 25 Jan 2026 | — |
+
+---
+
+## 21. Confidence Governance Enhancements (Added: 2026-01-25)
+
+> **Source**: BRD-GOV-CONF-008, BRD-GOV-CONF-009, BRD-GOV-CONF-010
+
+### 21.1 Threshold Enforcement
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEM-CONF-008 | Threshold SHALL be enforced — prevent low-confidence execution from proceeding | MUST | BRD-GOV-CONF-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-009 | Threshold enforcement MUST be a hard gate — no bypass or override at runtime | MUST | BRD-GOV-CONF-008 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-010 | Low-confidence runs MUST either pause for clarification or fail; silent continuation is prohibited | MUST | BRD-GOV-CONF-008 | 1.4 | 25 Jan 2026 | — |
+
+### 21.2 Explicit Override Configuration
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEM-CONF-011 | Overrides SHALL require explicit config — prevent implicit threshold changes | MUST | BRD-GOV-CONF-009 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-012 | Threshold overrides MUST be declared in `configs/products.yaml` under `by_product.<product>.semantic_confidence_threshold` | MUST | BRD-GOV-CONF-009 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-013 | Runtime threshold changes MUST NOT be permitted — configuration is read-only after run initialization | MUST | BRD-GOV-CONF-009 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-014 | Override configuration changes MUST require platform restart or explicit config reload | MUST | BRD-GOV-CONF-009 | 1.4 | 25 Jan 2026 | — |
+
+### 21.3 Governance Layer Enforcement
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| GOV-SEM-CONF-015 | Confidence check SHALL be a governance hook — avoid business-logic-only enforcement, enforce via governance layer | MUST | BRD-GOV-CONF-010 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-016 | `check_semantic_confidence` MUST be implemented as a governance hook in `core/governance/hooks.py` | MUST | BRD-GOV-CONF-010 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-017 | Confidence enforcement in business logic (outside governance layer) MUST be prohibited | MUST | BRD-GOV-CONF-010 | 1.4 | 25 Jan 2026 | — |
+| GOV-SEM-CONF-018 | Architecture tests MUST verify confidence enforcement is only in governance layer | MUST | BRD-GOV-CONF-010 | 1.4 | 25 Jan 2026 | — |
 
 ---

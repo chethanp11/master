@@ -20,7 +20,7 @@ from datetime import date, datetime
 
 import pytest
 
-from core.contracts.semantic_schema import Entity, NextAction, SemanticEnvelope
+from core.contracts.semantic_schema import Ambiguity, Entity, NextAction, SemanticEnvelope
 from core.orchestrator.normalization import (
     apply_core_normalization,
     apply_stable_ordering,
@@ -182,7 +182,11 @@ class TestStableOrdering:
                 Entity(name="apple", type="t", value="v2"),
                 Entity(name="mango", type="t", value="v3"),
             ],
-            ambiguities=["z_ambiguity", "a_ambiguity", "m_ambiguity"],
+            ambiguities=[
+                Ambiguity(ambiguity_id="a1", description="z_ambiguity"),
+                Ambiguity(ambiguity_id="a2", description="a_ambiguity"),
+                Ambiguity(ambiguity_id="a3", description="m_ambiguity"),
+            ],
             constraints={"z_key": 1, "a_key": 2, "m_key": 3},
             parameters={"z_param": 1, "a_param": 2},
         )
@@ -214,18 +218,22 @@ class TestStableOrdering:
         assert [e.name for e in result.entities] == ["apple", "mango", "zebra"]
 
     def test_stable_ordering_ambiguities_alphabetically(self) -> None:
-        """Ambiguities should be sorted alphabetically."""
+        """Ambiguities should be sorted alphabetically by description."""
         envelope = SemanticEnvelope(
             raw_input="test",
             normalized_input="test",
             product_id="p",
             intent_type="i",
-            ambiguities=["Zebra issue", "Apple problem", "Mango concern"],
+            ambiguities=[
+                Ambiguity(ambiguity_id="a1", description="Zebra issue"),
+                Ambiguity(ambiguity_id="a2", description="Apple problem"),
+                Ambiguity(ambiguity_id="a3", description="Mango concern"),
+            ],
         )
 
         result = apply_stable_ordering(envelope)
 
-        assert result.ambiguities == [
+        assert [a.description for a in result.ambiguities] == [
             "Apple problem",
             "Mango concern",
             "Zebra issue",
@@ -342,7 +350,10 @@ class TestApplyCoreNormalization:
                 Entity(name="zebra", type="animal", value="z2", confidence=0.95),  # Duplicate
             ],
             constraints={"z_key": 1, "a_key": 2},
-            ambiguities=["Z problem", "A issue"],
+            ambiguities=[
+                Ambiguity(ambiguity_id="a1", description="Z problem"),
+                Ambiguity(ambiguity_id="a2", description="A issue"),
+            ],
         )
 
         result = apply_core_normalization(envelope)
@@ -358,8 +369,8 @@ class TestApplyCoreNormalization:
         # 3. Entities sorted by name
         assert [e.name for e in result.entities] == ["apple", "zebra"]
 
-        # 4. Ambiguities sorted alphabetically
-        assert result.ambiguities == ["A issue", "Z problem"]
+        # 4. Ambiguities sorted alphabetically by description
+        assert [a.description for a in result.ambiguities] == ["A issue", "Z problem"]
 
         # 5. Constraint keys sorted
         assert list(result.constraints.keys()) == ["a_key", "z_key"]

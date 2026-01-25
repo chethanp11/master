@@ -30,6 +30,11 @@ from core.contracts.run_schema import (
     StepRecord,
     StepStatus,
 )
+from core.contracts.semantic_schema import (
+    SemanticEnvelope,
+    SemanticEnvelopeRequiredError,
+    SemanticEnvelopeNotValidatedError,
+)
 from core.governance.gates import gate_action_plan
 from core.memory.router import MemoryRouter
 from core.orchestrator.context import RunContext
@@ -39,6 +44,88 @@ if TYPE_CHECKING:
     from core.governance.hooks import GovernanceHooks
     from core.orchestrator.hitl import HitlService
     from core.orchestrator.step_executor import StepExecutor
+
+
+# ============================================================================
+# Semantic Envelope Enforcement (ORC-SEM-ENV-001...005)
+# ============================================================================
+
+
+def validate_semantic_envelope(
+    run_ctx: RunContext,
+    emit_event_fn: Optional[Callable[..., None]] = None,
+) -> SemanticEnvelope:
+    """
+    Validate that a semantic envelope exists and is validated for planning phase.
+    
+    ORC-SEM-ENV-001: Planning phase MUST require valid SemanticEnvelope.
+    ORC-SEM-ENV-002: Engine MUST reject calls without envelope.
+    ORC-SEM-ENV-003: Engine MUST verify envelope_validated == True.
+    ORC-SEM-ENV-004: Bypass attempts MUST emit trace event.
+    
+    Args:
+        run_ctx: Run context that should contain semantic envelope
+        emit_event_fn: Optional function to emit trace events
+        
+    Returns:
+        Validated SemanticEnvelope
+        
+    Raises:
+        SemanticEnvelopeRequiredError: If no envelope present
+        SemanticEnvelopeNotValidatedError: If envelope not validated
+    """
+    # Check for envelope in artifacts
+    envelope_data = run_ctx.artifacts.get("semantic_envelope")
+    
+    if envelope_data is None:
+        # ORC-SEM-ENV-004: Emit bypass attempt trace event
+        if emit_event_fn is not None:
+            emit_event_fn(
+                kind="envelope_bypass_blocked",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={
+                    "error_code": "semantic_envelope_required",
+                    "message": "Planning phase attempted without semantic envelope",
+                },
+            )
+        raise SemanticEnvelopeRequiredError(
+            "SemanticEnvelope required for planning phase"
+        )
+    
+    # Parse envelope if it's a dict
+    if isinstance(envelope_data, dict):
+        envelope = SemanticEnvelope.model_validate(envelope_data)
+    elif isinstance(envelope_data, SemanticEnvelope):
+        envelope = envelope_data
+    else:
+        raise SemanticEnvelopeRequiredError(
+            f"Invalid semantic envelope type: {type(envelope_data)}"
+        )
+    
+    # ORC-SEM-ENV-003: Check envelope_validated flag
+    if not envelope.envelope_validated:
+        # ORC-SEM-ENV-004: Emit bypass attempt trace event
+        if emit_event_fn is not None:
+            emit_event_fn(
+                kind="envelope_bypass_blocked",
+                run_id=run_ctx.run_id,
+                step_id=None,
+                product=run_ctx.product,
+                flow=run_ctx.flow,
+                payload={
+                    "error_code": "semantic_envelope_not_validated",
+                    "message": "Planning phase attempted with unvalidated envelope",
+                    "envelope_validated": envelope.envelope_validated,
+                },
+            )
+        raise SemanticEnvelopeNotValidatedError(
+            "SemanticEnvelope must be validated before planning"
+        )
+    
+    return envelope
 
 
 # ============================================================================
@@ -105,6 +192,7 @@ def handle_plan_propose(
     governance: "GovernanceHooks",
     fail_step_fn: Callable[..., str],
     emit_event_fn: Callable[..., None],
+    skip_envelope_validation: bool = False,
 ) -> Optional[str]:
     """
     Handle a PLAN_PROPOSE step.
@@ -121,10 +209,30 @@ def handle_plan_propose(
         governance: Governance hooks
         fail_step_fn: Function to call when step fails
         emit_event_fn: Function to emit events
+        skip_envelope_validation: If True, skip semantic envelope validation (testing only)
 
     Returns:
         "continue" to proceed, status string on failure/pause, None to continue processing
     """
+    # ORC-SEM-ENV-001: Validate semantic envelope before planning
+    if not skip_envelope_validation:
+        try:
+            validate_semantic_envelope(run_ctx, emit_event_fn)
+        except SemanticEnvelopeRequiredError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_required",
+                message="Planning requires a valid semantic envelope",
+            )
+        except SemanticEnvelopeNotValidatedError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_not_validated",
+                message="Semantic envelope must be validated before planning",
+            )
+    
     plan_payload = (step_def.params or {}).get("plan")
 
     if plan_payload is None:
@@ -221,6 +329,7 @@ def handle_plan_gate(
     memory: MemoryRouter,
     fail_step_fn: Callable[..., str],
     emit_event_fn: Callable[..., None],
+    skip_envelope_validation: bool = False,
 ) -> Optional[str]:
     """
     Handle a PLAN_GATE step.
@@ -235,10 +344,30 @@ def handle_plan_gate(
         memory: Memory router
         fail_step_fn: Function to call when step fails
         emit_event_fn: Function to emit events
+        skip_envelope_validation: If True, skip semantic envelope validation (testing only)
 
     Returns:
         "continue" to proceed, status string on failure, None to continue processing
     """
+    # ORC-SEM-ENV-001: Validate semantic envelope before planning gate
+    if not skip_envelope_validation:
+        try:
+            validate_semantic_envelope(run_ctx, emit_event_fn)
+        except SemanticEnvelopeRequiredError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_required",
+                message="Plan gate requires a valid semantic envelope",
+            )
+        except SemanticEnvelopeNotValidatedError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_not_validated",
+                message="Semantic envelope must be validated before plan gate",
+            )
+    
     # Get the plan artifact
     plan = get_plan_artifact_payload(run_ctx, "plan.action_plan")
     if plan is None:
@@ -338,6 +467,7 @@ def handle_plan_execute(
     transition_run_status_fn: Callable[..., None],
     summary_with_counters_fn: Callable[..., Dict[str, Any]],
     persist_run_output_fn: Callable[..., None],
+    skip_envelope_validation: bool = False,
 ) -> Optional[str]:
     """
     Handle a PLAN_EXECUTE step.
@@ -359,10 +489,30 @@ def handle_plan_execute(
         transition_run_status_fn: Function to transition run status
         summary_with_counters_fn: Function to build summary with counters
         persist_run_output_fn: Function to persist run output
+        skip_envelope_validation: If True, skip semantic envelope validation (testing only)
 
     Returns:
         "continue" to proceed, status string on failure/pause, None to continue processing
     """
+    # ORC-SEM-ENV-001: Validate semantic envelope before plan execution
+    if not skip_envelope_validation:
+        try:
+            validate_semantic_envelope(run_ctx, emit_event_fn)
+        except SemanticEnvelopeRequiredError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_required",
+                message="Plan execution requires a valid semantic envelope",
+            )
+        except SemanticEnvelopeNotValidatedError:
+            return fail_step_fn(
+                run_ctx=run_ctx,
+                step_id=step_id,
+                reason="semantic_envelope_not_validated",
+                message="Semantic envelope must be validated before plan execution",
+            )
+    
     # Get the gate result artifact
     gate = get_plan_artifact_payload(run_ctx, "plan.gate_result")
     if gate is None:

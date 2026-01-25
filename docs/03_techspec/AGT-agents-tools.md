@@ -1,9 +1,9 @@
 # Agents and Tools Technical Specification
 
 > **Document ID**: AGT / TOOL  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-25  
 
 ---
 
@@ -14,6 +14,7 @@
 | 1.0.0 | 2026-01-12 | Initial release |
 | 1.1.0 | 2026-01-13 | Added §2.4 Reasoning & Intelligence Boundaries, §2.5 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-25 | Added §13 Discovery Descriptor Requirements (BRD-AUTO-DISC-001-008) |
 
 ---
 
@@ -426,5 +427,65 @@ perform computations.
 | LLM-REQ-006 | `LLMReasoner` MUST return `POLICY_BLOCKED` error if governance denies model call | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | LLM-REQ-007 | `LLMReasoner` MUST coerce results to `ReasoningOutput` schema for `plan_proposal` step types | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 
+---
+
+## 13. Discovery Descriptor Requirements
+
+This section defines the explicit capability descriptor contracts that tools and agents MUST implement to support dynamic discovery by the orchestration engine. These descriptors are the foundation for intent-filtered, eligibility-checked discovery as specified in BRD-AUTO-DISC-001-008.
+
+### 13.1 Tool Descriptor Contract
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| AGT-DISC-TOOL-001 | Every tool class MUST expose a `descriptor` property returning `ToolDescriptor` schema | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Enables registry population |
+| AGT-DISC-TOOL-002 | `ToolDescriptor.name` MUST be a globally unique identifier string | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Registry key constraint |
+| AGT-DISC-TOOL-003 | `ToolDescriptor.description` MUST contain human-readable capability summary | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Used for intent matching |
+| AGT-DISC-TOOL-004 | `ToolDescriptor.capability_tags` MUST be a list of semantic capability labels | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Enables tag-based filtering |
+| AGT-DISC-TOOL-005 | `ToolDescriptor.input_schema` MUST reference a Pydantic model or JSON Schema for input validation | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Contract enforcement |
+| AGT-DISC-TOOL-006 | `ToolDescriptor.output_schema` MUST reference a Pydantic model or JSON Schema for output validation | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Contract enforcement |
+| AGT-DISC-TOOL-007 | `ToolDescriptor.side_effects` MUST declare boolean or enum indicating mutation capability | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Governance filtering |
+| AGT-DISC-TOOL-008 | `ToolDescriptor.deterministic` MUST declare boolean indicating determinism guarantee | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Reproducibility support |
+| AGT-DISC-TOOL-009 | `ToolDescriptor.domain_tags` SHOULD contain product/domain scope labels | SHOULD | BRD-AUTO-DISC-001, BRD-AUTO-DISC-007 | 1.3 | 25 Jan 2026 | Product-controlled exposure |
+| AGT-DISC-TOOL-010 | `ToolDescriptor.version` MUST contain semantic version string | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Versioned discovery |
+| AGT-DISC-TOOL-011 | `ToolDescriptor.deprecation` SHOULD contain deprecation notice if tool is deprecated | SHOULD | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Lifecycle management |
+| AGT-DISC-TOOL-012 | Tool descriptor MUST be accessible without instantiating tool execution context | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Registry scalability |
+
+### 13.2 Agent Descriptor Contract
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| AGT-DISC-AGT-001 | Every agent class MUST expose a `descriptor` property returning `AgentDescriptor` schema | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Enables registry population |
+| AGT-DISC-AGT-002 | `AgentDescriptor.name` MUST be a globally unique identifier string | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Registry key constraint |
+| AGT-DISC-AGT-003 | `AgentDescriptor.description` MUST contain human-readable capability summary | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Used for intent matching |
+| AGT-DISC-AGT-004 | `AgentDescriptor.capability_tags` MUST be a list of semantic capability labels | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Enables tag-based filtering |
+| AGT-DISC-AGT-005 | `AgentDescriptor.input_schema` MUST reference input contract for agent invocation | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Contract enforcement |
+| AGT-DISC-AGT-006 | `AgentDescriptor.output_schema` MUST reference output contract for agent results | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Contract enforcement |
+| AGT-DISC-AGT-007 | `AgentDescriptor.reasoning_type` MUST declare reasoning mode enum (advisory, critic, ladder, etc.) | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Discovery categorization |
+| AGT-DISC-AGT-008 | `AgentDescriptor.domain_tags` MUST contain product/domain scope labels | MUST | BRD-AUTO-DISC-001, BRD-AUTO-DISC-007 | 1.3 | 25 Jan 2026 | Product-controlled exposure |
+| AGT-DISC-AGT-009 | `AgentDescriptor.version` MUST contain semantic version string | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Versioned discovery |
+| AGT-DISC-AGT-010 | `AgentDescriptor.requires_context_pack` MUST declare boolean for context pack dependency | MUST | BRD-AUTO-DISC-001, BRD-AUTO-DISC-004 | 1.3 | 25 Jan 2026 | Eligibility pre-check |
+| AGT-DISC-AGT-011 | `AgentDescriptor.min_confidence_threshold` SHOULD declare minimum input confidence | SHOULD | BRD-AUTO-DISC-001, BRD-AUTO-DISC-004 | 1.3 | 25 Jan 2026 | Eligibility pre-check |
+| AGT-DISC-AGT-012 | Agent descriptor MUST be accessible without instantiating agent execution context | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Registry scalability |
+
+### 13.3 Descriptor Validation
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| AGT-DISC-VAL-001 | Registry MUST validate all descriptors against Pydantic schema on registration | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Schema enforcement |
+| AGT-DISC-VAL-002 | Registration MUST fail if `name` conflicts with existing registered entity | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Uniqueness constraint |
+| AGT-DISC-VAL-003 | Registration MUST fail if required descriptor fields are missing or malformed | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Contract enforcement |
+| AGT-DISC-VAL-004 | Registry MUST log validation errors with descriptor name and field details | MUST | BRD-AUTO-DISC-002 | 1.3 | 25 Jan 2026 | Debuggability |
+| AGT-DISC-VAL-005 | Descriptor schema version MUST be checked for compatibility on registration | MUST | BRD-AUTO-DISC-008 | 1.3 | 25 Jan 2026 | Extensibility support |
+| AGT-DISC-VAL-006 | Optional/experimental descriptor fields MUST NOT cause validation failure | MUST | BRD-AUTO-DISC-008 | 1.3 | 25 Jan 2026 | Forward compatibility |
+
+### 13.4 Descriptor Schema Definition
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| AGT-DISC-SCHEMA-001 | `ToolDescriptor` Pydantic model MUST be defined in `core/contracts/descriptors_schema.py` | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Canonical location |
+| AGT-DISC-SCHEMA-002 | `AgentDescriptor` Pydantic model MUST be defined in `core/contracts/descriptors_schema.py` | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Canonical location |
+| AGT-DISC-SCHEMA-003 | Descriptor models MUST use strict Pydantic validation mode | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Type safety |
+| AGT-DISC-SCHEMA-004 | Descriptor models MUST be frozen (immutable after creation) | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Registry consistency |
+| AGT-DISC-SCHEMA-005 | Descriptor models MUST support JSON serialization for external tooling | MUST | BRD-AUTO-DISC-001 | 1.3 | 25 Jan 2026 | Interoperability |
 
 ---

@@ -1,8 +1,8 @@
 # TechSpec Coverage Matrix
 
 > **Document ID**: TS-COVERAGE  
-> **Version**: V1.3  
-> **Last Updated**: 2026-01-20  
+> **Version**: V1.4  
+> **Last Updated**: 2026-01-25  
 > **Status**: V1 Release  
 
 ---
@@ -14,6 +14,7 @@
 | 1.1 | 2026-01-13 | Initial coverage mapping |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 | V1.3 | 2026-01-20 | Added BRD V1.2 requirements: BRD-AUTO-028/029, BRD-AUTO-047...052, BRD-GOV-054, BRD-OPS-060/061 with TechSpec mappings |
+| V1.4 | 2026-01-25 | Added BRD V1.3 requirements: BRD-AUTO-SEM-011-013, BRD-AUTO-DISC-001-008, BRD-AUTO-053-054, BRD-GOV-007-008, BRD-GOV-015-017, BRD-GOV-028-029, BRD-GOV-035, BRD-GOV-064, BRD-GOV-GATE-001-005, BRD-GOV-EVID-001-003, BRD-GOV-CONF-008-010, BRD-INV-027-030 |
 
 ---
 
@@ -30,24 +31,24 @@ This document provides **complete traceability** from BRD requirements to TechSp
 
 | BRD Document | BRD Req Count | TechSpec Coverage | Status |
 |--------------|---------------|-------------------|--------|
-| BRD-automation.md | ~56 | 8 TechSpecs | ✅ Full |
-| BRD-governance.md | ~47 | 4 TechSpecs | ✅ Full |
+| BRD-automation.md | ~70 | 8 TechSpecs | ✅ Full |
+| BRD-governance.md | ~65 | 4 TechSpecs | ✅ Full |
 | BRD-experience.md | ~44 | 3 TechSpecs | ✅ Full |
-| BRD-operations.md | ~53 | 3 TechSpecs | ✅ Full |
-| **Total** | **~200** | **8 TechSpecs** | ✅ **100%** |
+| BRD-operations.md | ~57 | 3 TechSpecs | ✅ Full |
+| **Total** | **~236** | **8 TechSpecs** | ✅ **100%** |
 
 ### TechSpec Utilization
 
 | TechSpec Document | Requirement Count | Primary BRD Sources |
 |-------------------|-------------------|---------------------|
-| ORC-orchestration.md | ~60 | BRD-AUTO, BRD-GOV |
-| AGT-agents-tools.md | ~85 | BRD-AUTO |
-| GOV-governance.md | ~120 | BRD-GOV, BRD-AUTO |
+| ORC-orchestration.md | ~105 | BRD-AUTO, BRD-GOV |
+| AGT-agents-tools.md | ~120 | BRD-AUTO |
+| GOV-governance.md | ~185 | BRD-GOV, BRD-AUTO |
 | MEM-memory.md | ~45 | BRD-OPS |
-| INT-intelligence.md | ~105 | BRD-AUTO |
+| INT-intelligence.md | ~140 | BRD-AUTO |
 | GW-gateway.md | ~130 | BRD-EXP |
 | PROD-products.md | ~55 | BRD-EXP, BRD-AUTO |
-| ACC-acceptance.md | ~30 | BRD-OPS, all |
+| ACC-acceptance.md | ~52 | BRD-OPS, all |
 
 ---
 
@@ -177,6 +178,39 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-AUTO-STOP-008 | semantic_stop_issued trace event | ORC-SEM-043 | Trace event |
 | BRD-AUTO-STOP-009 | Paused runs resumable | ORC-RESUME-001...010 | Resume mechanism |
 
+### 1.9 Semantic Envelope Enforcement (BRD-AUTO-SEM-011 to BRD-AUTO-SEM-013, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-SEM-011 | Semantic envelope all_constraints_satisfiable SHALL control continue/abort | ORC-SEM-ENV-001...005 | Envelope field binds execution |
+| BRD-AUTO-SEM-012 | Confidence gate at semantic phase exit | ORC-SEM-CONF-GATE-001...008 | Gate checks before planning |
+| BRD-AUTO-SEM-013 | Ambiguity detection with resolution triggers | ORC-SEM-AMB-001...006 | Ambiguity → clarification |
+
+### 1.10 Minimum Reasoning Contract (BRD-AUTO-053, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-053 | All runs SHALL include minimum reasoning (intent + selection + confidence + critique) | ORC-REASON-CONTRACT-001...010 | Reasoning is non-optional |
+
+### 1.11 Intent Sufficiency Gate (BRD-AUTO-054, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-054 | Sufficiency gate SHALL be checked before tool selection | ORC-SUFF-GATE-001...008 | Sufficiency required before action |
+
+### 1.12 Tool & Agent Discovery (BRD-AUTO-DISC-001 to BRD-AUTO-DISC-008, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-AUTO-DISC-001 | Tools and agents SHALL have explicit capability descriptors | INT-DISC-001...010, AGT-DISC-TOOL-001...012, AGT-DISC-AGT-001...012 | Descriptor contracts |
+| BRD-AUTO-DISC-002 | Centralized registry for all discoverable entities | INT-DISC-011...018, AGT-DISC-VAL-001...006 | Registry with validation |
+| BRD-AUTO-DISC-003 | Intent-filtered discovery with capability matching | INT-DISC-019...028 | Semantic matching |
+| BRD-AUTO-DISC-004 | Eligibility checks (budget, confidence, context) | INT-DISC-029...037 | Pre-selection filtering |
+| BRD-AUTO-DISC-005 | Discovery and selection as separate phases | INT-DISC-038...045 | Phased approach |
+| BRD-AUTO-DISC-006 | Extensibility for custom discovery strategies | INT-DISC-046...054 | Strategy pattern |
+| BRD-AUTO-DISC-007 | Product-controlled tool/agent exposure | INT-DISC-055...063, AGT-DISC-TOOL-009, AGT-DISC-AGT-008 | Domain scoping |
+| BRD-AUTO-DISC-008 | Deterministic discovery with version/hash | INT-DISC-064...073, AGT-DISC-SCHEMA-001...005 | Reproducible selection |
+
 ---
 
 ## 2. BRD-governance.md → TechSpec Mapping
@@ -268,6 +302,61 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-GOV-CONF-005 | check_semantic_confidence hook | GOV-SEM-CONF-005, GOV-HOOK-SEM-* | Governance hook |
 | BRD-GOV-CONF-006 | Effective = min(envelope, validation) | GOV-SEM-CONF-006 | Calculation rule |
 | BRD-GOV-CONF-007 | Threshold logged with values | GOV-SEM-CONF-007, ORC-SEM-041 | Trace events |
+
+### 2.9 HITL Binding Requirements (BRD-GOV-007 to BRD-GOV-008, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-007 | HITL escalation binding — cannot be disabled at runtime | GOV-HITL-BIND-001...007 | Immutable escalation paths |
+| BRD-GOV-008 | HITL conditions SHALL be declared at product registration | GOV-HITL-DECL-001...005 | Upfront declaration |
+
+### 2.10 Enhanced Security & Privacy (BRD-GOV-015 to BRD-GOV-017, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-015 | PII detection SHALL include named entity recognition | GOV-SEC-PII-001...005 | NER-based detection |
+| BRD-GOV-016 | Credential patterns SHALL include cloud provider formats | GOV-SEC-CRED-001...005 | Cloud credential patterns |
+| BRD-GOV-017 | Redaction SHALL be applied automatically on all outputs | GOV-SEC-AUTO-001...005 | Automatic enforcement |
+
+### 2.11 Policy Enforcement Enhancements (BRD-GOV-028 to BRD-GOV-029, BRD-GOV-035, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-028 | Policy SHALL NOT be bypassable via configuration | GOV-POL-NOBYPASS-001...005 | No override mechanisms |
+| BRD-GOV-029 | Policy violation SHALL block immediately (no grace) | GOV-POL-BLOCK-001...005 | Fail-fast enforcement |
+| BRD-GOV-035 | Budget limits SHALL be hard limits (no overdraft) | GOV-BUD-HARD-001...005 | Strict budget enforcement |
+
+### 2.12 Semantic Gate Enforcement (BRD-GOV-GATE-001 to BRD-GOV-GATE-005, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-GATE-001 | Semantic gate SHALL validate envelope completeness | GOV-GATE-SEM-001...008 | Envelope validation |
+| BRD-GOV-GATE-002 | Semantic gate SHALL enforce confidence thresholds | GOV-GATE-SEM-009...012 | Confidence gating |
+| BRD-GOV-GATE-003 | Semantic gate SHALL verify intent sufficiency | GOV-GATE-SUFF-001...006 | Sufficiency check |
+| BRD-GOV-GATE-004 | Gate rejection SHALL produce structured rejection artifact | GOV-GATE-REJ-001...005 | Rejection artifacts |
+| BRD-GOV-GATE-005 | Gate trace events SHALL include all gate inputs | GOV-GATE-REJ-006...010 | Full traceability |
+
+### 2.13 Evidence Requirements (BRD-GOV-EVID-001 to BRD-GOV-EVID-003, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-EVID-001 | All decisions SHALL cite supporting evidence | GOV-EVID-001...005 | Evidence-based decisions |
+| BRD-GOV-EVID-002 | Evidence confidence SHALL propagate to decision confidence | GOV-EVID-CONF-001...005 | Confidence propagation |
+| BRD-GOV-EVID-003 | Missing evidence SHALL trigger clarification | GOV-EVID-TRACE-001...005 | Evidence gaps → HITL |
+
+### 2.14 Decision Records (BRD-GOV-064, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-064 | All decisions SHALL be recorded as structured artifacts | GOV-DEC-RECORD-001...010 | Decision audit trail |
+
+### 2.15 Confidence Governance Enhancements (BRD-GOV-CONF-008 to BRD-GOV-CONF-010, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-GOV-CONF-008 | Multi-source confidence aggregation with min/max/weighted options | GOV-SEM-CONF-008...010 | Aggregation strategies |
+| BRD-GOV-CONF-009 | Confidence decay over reasoning iterations | GOV-SEM-CONF-011...014 | Iteration impact |
+| BRD-GOV-CONF-010 | Confidence floor (minimum acceptable) per product | GOV-SEM-CONF-015...018 | Product-specific floors |
 
 ---
 
@@ -449,6 +538,15 @@ This document provides **complete traceability** from BRD requirements to TechSp
 | BRD-OPS-060 | Post-hoc explainability | MEM-EXPLAIN-001...005 | Recorded reasoning traces support audit and explanation |
 | BRD-OPS-061 | Reproducibility (versions, inputs, hashes) | MEM-REPRO-001...005, ORC-REPRO-001...003 | Input/output hashing, version recording, deterministic replay |
 
+### 4.10 Executable Invariant Enforcement (BRD-INV-027 to BRD-INV-030, Added V1.3)
+
+| BRD ID | Description | Derived TechSpec | Rationale |
+|--------|-------------|------------------|-----------|
+| BRD-INV-027 | Platform invariants SHALL be executable (tests, runtime checks, gates) | ACC-INV-EXEC-001...006 | Invariants as code |
+| BRD-INV-028 | Products SHALL NOT re-implement semantic/validation/confidence logic | ACC-INV-EXEC-007...009 | No product duplication |
+| BRD-INV-029 | Architecture tests SHALL verify no product duplication | ACC-INV-EXEC-010...012 | Automated detection |
+| BRD-INV-030 | Invariant violations SHALL block CI/CD pipelines | ACC-INV-EXEC-013...015, ACC-CI-INV-001...007 | No deployment with failures |
+
 ---
 
 ## 5. Gap Analysis
@@ -483,10 +581,10 @@ All TechSpec requirements are implementation details of higher-level BRD require
 
 ## 6. TechSpec Document Summary
 
-### 6.1 ORC-orchestration.md (~60 requirements)
+### 6.1 ORC-orchestration.md (~105 requirements)
 
 **Primary Coverage**:
-- BRD-AUTO: Semantic phase, workflow execution, state machine
+- BRD-AUTO: Semantic phase, workflow execution, state machine, reasoning contract, sufficiency gate
 - BRD-GOV: Pause/resume, HITL integration
 
 **Key Sections**:
@@ -494,22 +592,26 @@ All TechSpec requirements are implementation details of higher-level BRD require
 - §3: Semantic Interpretation (ORC-SEM-001...043)
 - §4: Step Execution (ORC-STEP-001...031)
 - §5: Pause/Resume (ORC-PAUSE-001...015, ORC-RESUME-001...010)
+- §19: Semantic Envelope Enforcement (ORC-SEM-ENV-*, ORC-SEM-CONF-GATE-*, ORC-SEM-AMB-*) *(V1.4)*
+- §20: Minimum Reasoning Contract (ORC-REASON-CONTRACT-*) *(V1.4)*
+- §21: Intent Sufficiency Gate (ORC-SUFF-GATE-*) *(V1.4)*
 
-### 6.2 AGT-agents-tools.md (~85 requirements)
+### 6.2 AGT-agents-tools.md (~120 requirements)
 
 **Primary Coverage**:
-- BRD-AUTO: Agent contracts, tool contracts, reasoning constraints
+- BRD-AUTO: Agent contracts, tool contracts, reasoning constraints, discovery descriptors
 
 **Key Sections**:
 - §2: BaseAgent Contract (AGT-BASE-001...005, AGT-RUN-001...004)
 - §2.4: Reasoning Boundaries (AGT-REASON-001...005, AGT-CRIT-001...005)
 - §4: BaseTool Contract (TOOL-BASE-001...003, TOOL-RUN-001...003)
 - §6: Registry Pattern (REG-BASE-001...004)
+- §13: Discovery Descriptor Requirements (AGT-DISC-TOOL-*, AGT-DISC-AGT-*, AGT-DISC-VAL-*, AGT-DISC-SCHEMA-*) *(V1.3)*
 
-### 6.3 GOV-governance.md (~120 requirements)
+### 6.3 GOV-governance.md (~185 requirements)
 
 **Primary Coverage**:
-- BRD-GOV: All governance requirements
+- BRD-GOV: All governance requirements including V1.3 additions
 
 **Key Sections**:
 - §2: Governance Hooks (GOV-HOOK-001...052)
@@ -517,7 +619,13 @@ All TechSpec requirements are implementation details of higher-level BRD require
 - §4: Security Redaction (GOV-SEC-001...041)
 - §5: Budget Enforcement (GOV-BUD-001...041)
 - §6: Gate Validation (GOV-GATE-001...035)
-- §12: Semantic Confidence (GOV-SEM-CONF-001...007)
+- §12: Semantic Confidence (GOV-SEM-CONF-001...018)
+- §15: HITL Binding (GOV-HITL-BIND-*, GOV-HITL-DECL-*) *(V1.4)*
+- §16: Enhanced Security (GOV-SEC-PII-*, GOV-SEC-CRED-*, GOV-SEC-AUTO-*) *(V1.4)*
+- §17: Policy Enforcement (GOV-POL-NOBYPASS-*, GOV-POL-BLOCK-*, GOV-BUD-HARD-*) *(V1.4)*
+- §18: Semantic Gate (GOV-GATE-SEM-*, GOV-GATE-SUFF-*, GOV-GATE-REJ-*) *(V1.4)*
+- §19: Evidence Requirements (GOV-EVID-*) *(V1.4)*
+- §20: Decision Records (GOV-DEC-RECORD-*) *(V1.4)*
 
 ### 6.4 MEM-memory.md (~45 requirements)
 
@@ -530,10 +638,10 @@ All TechSpec requirements are implementation details of higher-level BRD require
 - §4: SQLite Backend (MEM-SQL-001...025)
 - §12: Semantic Trace Events (MEM-TRACE-SEM-*)
 
-### 6.5 INT-intelligence.md (~105 requirements)
+### 6.5 INT-intelligence.md (~140 requirements)
 
 **Primary Coverage**:
-- BRD-AUTO: Intelligence layer, reasoning ladder, critic
+- BRD-AUTO: Intelligence layer, reasoning ladder, critic, tool & agent discovery
 
 **Key Sections**:
 - §2: Advisory Agents (INT-ADV-001...008, INT-TS-001...006)
@@ -541,6 +649,7 @@ All TechSpec requirements are implementation details of higher-level BRD require
 - §4: Critic Evaluator (INT-CRIT-001...005)
 - §5: Context Pack (INT-CP-001...007)
 - §8: Failure Modes (INT-EXIT-001...010)
+- §10: Tool & Agent Discovery (INT-DISC-001...073) *(V1.4)*
 
 ### 6.6 GW-gateway.md (~130 requirements)
 
@@ -566,17 +675,19 @@ All TechSpec requirements are implementation details of higher-level BRD require
 - §6: Product Catalog (PROD-CAT-001...022)
 - §12.3: Semantic Adapter Isolation (PROD-SEM-*)
 
-### 6.8 ACC-acceptance.md (~30 requirements)
+### 6.8 ACC-acceptance.md (~52 requirements)
 
 **Primary Coverage**:
-- BRD-OPS: Quality assurance, architecture tests
+- BRD-OPS: Quality assurance, architecture tests, executable invariants
 
 **Key Sections**:
 - §2: Test Categories (ACC-UNIT-001...006, ACC-INT-001...005)
 - §2.5: Semantic Tests (ACC-SEM-001...005)
 - §2.6: Semantic Coverage (ACC-SEM-COV-001...007)
 - §2.7: Invariant Tests (ACC-INV-001...007)
+- §2.8: Executable Invariant Enforcement (ACC-INV-EXEC-001...015) *(V1.3)*
 - §3: Coverage Requirements (ACC-COV-001...010)
+- §7.3: Invariant CI/CD Gate (ACC-CI-INV-001...007) *(V1.3)*
 
 ---
 
@@ -585,3 +696,4 @@ All TechSpec requirements are implementation details of higher-level BRD require
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-13 | Platform Team | Initial coverage matrix |
+| V1.4 | 2026-01-25 | Platform Team | Added BRD V1.3 mappings: Semantic Envelope Enforcement, Tool & Agent Discovery, HITL Binding, Enhanced Security, Policy Enforcement, Semantic Gate, Evidence Requirements, Decision Records, Confidence Governance, Executable Invariants |

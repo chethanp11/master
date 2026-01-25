@@ -1,8 +1,8 @@
 # BRD: Intelligent Automation
 
 > **Document ID**: BRD-AUTO  
-> **Version**: 1.2
-> **Last Updated**: 2026-01-13 
+> **Version**: V1.3
+> **Last Updated**: 2026-01-25 
 
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
 
@@ -14,6 +14,7 @@
 |---------|------|---------|
 | 1.0 | 2026-01-12 | Initial release |
 | 1.1 | 2026-01-13 | Added §3.6 Semantic Interpretation Phase, §3.7 Product Semantic Adapter, §3.8 Stop/Pause Mechanism |
+| V1.3 | 2026-01-25 | Added §3.12 Tool & Agent Discovery, §3.13 Minimum Reasoning Contract, §3.14 Intent Sufficiency Gate; closed coverage gaps for INT-AUTO-SEM-012/013/014 |
 
 ---
 
@@ -159,6 +160,9 @@ A platform that provides structured, composable, and governed AI agents that can
 | **BRD-AUTO-SEM-008** | Entities must be deduplicated (same type+value → single entity with highest confidence) | P1 | INT-AUTO-SEM-008 | 1.1 | Added: 2026-01-13 |
 | **BRD-AUTO-SEM-009** | Constraints must be merged deterministically with stable key ordering | P1 | INT-AUTO-SEM-009 | 1.1 | Added: 2026-01-13 |
 | **BRD-AUTO-SEM-010** | Type coercion must be supported for schema-declared types (string→int, string→date) | P1 | INT-AUTO-SEM-010 | 1.1 | Added: 2026-01-13 |
+| **BRD-AUTO-SEM-011** | Semantic envelope SHALL be the only handoff to planning phase — raw text input MUST NOT proceed directly to planning | P0 | INT-AUTO-SEM-012 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-SEM-012** | Confidence gates SHALL control execution — low-confidence interpretations MUST NOT proceed without intervention | P0 | INT-AUTO-SEM-013 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-SEM-013** | Ambiguities SHALL be explicit — all detected ambiguities MUST be surfaced in the semantic envelope as structured data | P0 | INT-AUTO-SEM-014 | V1.3 | Added: 2026-01-25 |
 
 **Contracts (New: 2026-01-13)**:
 | Contract | Purpose | Fields |
@@ -246,6 +250,37 @@ A platform that provides structured, composable, and governed AI agents that can
 | **BRD-AUTO-051** | Platform must construct and freeze a ContextPack before planning or execution, consolidating data availability, evidence, constraints, and quality limitations | P0 | PLAT-EXEC-001 | 1.2 | Added: 2026-01-18 |
 | **BRD-AUTO-052** | Platform must define and enforce explicit terminal outcomes (SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT) with required explanations and artifacts | P0 | PLAT-EXEC-002 | 1.2 | Added: 2026-01-18 |
 
+### 3.12 Tool & Agent Discovery (Added: 2026-01-25)
+
+> **Source**: [PLAT-AUTO-DISC](../01_vision_and_intent/intent-automation.md#plat-auto-disc--tool--agent-discovery)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-DISC-001** | Every tool and agent SHALL declare capabilities explicitly via structured descriptors — no implicit capability assumptions are permitted | P0 | INT-AUTO-DISC-001 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-002** | Platform SHALL own and maintain a centralized registry for all tools and agents — this registry is the single source of truth for discovery | P0 | INT-AUTO-DISC-002 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-003** | Discovery SHALL be intent-filtered — tools and agents SHALL be discoverable only when relevant to the current intent context | P0 | INT-AUTO-DISC-003 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-004** | Platform SHALL perform explicit eligibility checks before tool or agent execution — policy, budget, and capability requirements SHALL be validated prior to invocation | P0 | INT-AUTO-DISC-004 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-005** | Discovery and selection SHALL be separate concerns — discovery returns candidates, selection applies ranking and policy | P1 | INT-AUTO-DISC-005 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-006** | Platform SHALL provide first-class support for tool and agent extension — products SHALL be able to register additional capabilities via standard interfaces | P1 | INT-AUTO-DISC-006 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-007** | Tool and agent exposure SHALL be governed by product — products SHALL control which of their capabilities are discoverable by other products | P1 | INT-AUTO-DISC-007 | V1.3 | Added: 2026-01-25 |
+| **BRD-AUTO-DISC-008** | Tool and agent discovery SHALL be deterministic — same intent context and product configuration SHALL yield same discovery results | P0 | INT-AUTO-DISC-008 | V1.3 | Added: 2026-01-25 |
+
+### 3.13 Minimum Reasoning Contract (Added: 2026-01-25)
+
+> **Source**: [PLAT-AUTO-REASON](../01_vision_and_intent/intent-automation.md#plat-auto-reason--reasoning-quality)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-053** | Platform SHALL define and enforce a Minimum Reasoning Contract for all products — products SHALL NOT bypass or reduce reasoning phases below platform-mandated minimums | P0 | INT-AUTO-034 | V1.3 | Added: 2026-01-25 |
+
+### 3.14 Intent Sufficiency Gate (Added: 2026-01-25)
+
+> **Source**: [PLAT-ORCH](../01_vision_and_intent/intent-automation.md#plat-orch--orchestrator-controlled-reasoning)
+
+| ID | Requirement | Priority | Source | Ver | Date |
+|----|-------------|----------|--------|-----|------|
+| **BRD-AUTO-054** | Intent sufficiency SHALL be a first-class orchestration responsibility — orchestrator SHALL track, evaluate, and gate execution based on sufficiency state | P0 | PLAT-ORCH-003 | V1.3 | Added: 2026-01-25 |
+
 ---
 
 ## 4. User Stories
@@ -305,6 +340,9 @@ A platform that provides structured, composable, and governed AI agents that can
 | BRD-AUTO-SEM-* | Semantic interpretation phase | ORC-SEM-001...010, SEM-ENV-* | 1.1 |
 | BRD-AUTO-ADAPT-* | Product semantic adapter | PROD-SEM-ADAPT-*, ORC-SEM-ADAPTER-* | 1.1 |
 | BRD-AUTO-STOP-* | Stop/pause mechanism | ORC-SEM-STOP-*, ORC-PAUSE-SEM-* | 1.1 |
+| BRD-AUTO-DISC-* | Tool & agent discovery | TOOL-DISC-*, AGT-DISC-*, REG-DISC-* | V1.3 |
+| BRD-AUTO-053 | Minimum reasoning contract | ORC-REASON-CONTRACT-* | V1.3 |
+| BRD-AUTO-054 | Intent sufficiency gate | ORC-SUFF-GATE-* | V1.3 |
 
 ---
 
@@ -366,6 +404,9 @@ A platform that provides structured, composable, and governed AI agents that can
 | Semantic phase is mandatory | Steps execute only after interpretation | 1.1 |
 | Stop blocks all steps | ASK_USER/ABORT prevent any step execution | 1.1 |
 | Product adapters are isolated | No cross-layer imports between core and products | 1.1 |
+| Envelope is only planning handoff | Raw text cannot proceed directly to planning | V1.3 |
+| Discovery is deterministic | Same context yields same discovery results | V1.3 |
+| Reasoning contract is enforced | Products cannot bypass minimum reasoning phases | V1.3 |
 
 ---
 

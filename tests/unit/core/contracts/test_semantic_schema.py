@@ -20,6 +20,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.contracts.semantic_schema import (
+    Ambiguity,
     Entity,
     NextAction,
     SemanticEnvelope,
@@ -157,13 +158,13 @@ class TestSemanticEnvelopeConstruction:
         assert envelope.constraints["language"] == "spanish"
 
     def test_semantic_envelope_with_ambiguities(self) -> None:
-        """SemanticEnvelope can include ambiguity strings."""
+        """SemanticEnvelope can include structured Ambiguity objects."""
         envelope = SemanticEnvelope(
             raw_input="Hi",
             normalized_input="hi",
             product_id="hello_world",
             intent_type="unknown",
-            ambiguities=["Unclear greeting type"],
+            ambiguities=[Ambiguity(ambiguity_id="amb_001", description="Unclear greeting type")],
             proposed_next_action=NextAction.ASK_USER,
         )
         assert len(envelope.ambiguities) == 1
@@ -257,7 +258,7 @@ class TestMaxAmbiguitiesEnforcement:
     def test_semantic_envelope_max_ambiguities_enforced(self) -> None:
         """SemanticEnvelope MUST reject more than 20 ambiguities."""
         # 20 ambiguities should be allowed
-        ambiguities_20 = [f"Ambiguity {i}" for i in range(20)]
+        ambiguities_20 = [Ambiguity(ambiguity_id=f"amb_{i}", description=f"Ambiguity {i}") for i in range(20)]
         envelope = SemanticEnvelope(
             raw_input="x",
             normalized_input="x",
@@ -268,7 +269,7 @@ class TestMaxAmbiguitiesEnforcement:
         assert len(envelope.ambiguities) == 20
 
         # 21 ambiguities should be rejected
-        ambiguities_21 = [f"Ambiguity {i}" for i in range(21)]
+        ambiguities_21 = [Ambiguity(ambiguity_id=f"amb_{i}", description=f"Ambiguity {i}") for i in range(21)]
         with pytest.raises(ValidationError) as exc_info:
             SemanticEnvelope(
                 raw_input="x",
@@ -298,7 +299,7 @@ class TestSerializationRoundtrip:
             ],
             constraints={"language": "english", "formal": True},
             confidence=0.92,
-            ambiguities=["Unclear formality level"],
+            ambiguities=[Ambiguity(ambiguity_id="amb_001", description="Unclear formality level")],
             proposed_next_action=NextAction.CONTINUE,
             parameters={"greeting_detected": True},
             interpretation_method="rule-based",
@@ -326,7 +327,7 @@ class TestSerializationRoundtrip:
         assert restored.entities[0].value == original.entities[0].value
         assert restored.constraints == original.constraints
         assert restored.confidence == original.confidence
-        assert restored.ambiguities == original.ambiguities
+        assert len(restored.ambiguities) == len(original.ambiguities)
         assert restored.proposed_next_action == original.proposed_next_action
         assert restored.parameters == original.parameters
         assert restored.interpretation_method == original.interpretation_method

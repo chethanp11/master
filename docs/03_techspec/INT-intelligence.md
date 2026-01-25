@@ -1,9 +1,9 @@
 # Intelligence Layer Technical Specification
 
 > **Document ID**: INT  
-> **Version**: V1.3  
+> **Version**: V1.4  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-20  
+> **Last Updated**: 2026-01-25  
 
 ---
 
@@ -15,6 +15,7 @@
 | 1.1.0 | 2026-01-13 | Added §8 Failure Modes & Safe Exits, §9 Explicit Non-Goals, updated BRD mappings |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
 | V1.3 | 2026-01-20 | Added §6A Hypothesis Management (BRD-AUTO-028), §6B Sufficiency State (BRD-AUTO-029), §6C Confidence as Runtime Signal (BRD-AUTO-049), §6D ContextPack Freeze (BRD-AUTO-051) |
+| V1.4 | 2026-01-25 | Added §10 Tool & Agent Discovery (BRD-AUTO-DISC-001-008) |
 
 ---
 
@@ -513,5 +514,88 @@ This layer enhances decision quality while maintaining governance constraints.
 | Hidden heuristics | All decisions must be auditable (INV-4) | Undocumented scoring algorithm |
 | Treating LLM output as truth | Interpretations are hypotheses (INV-3) | Using raw LLM response as fact |
 | Unbounded exploration | Reasoning is bounded (INV-1) | Infinite reasoning loops |
+
+---
+
+## 10. Tool & Agent Discovery (Added: 2026-01-25)
+
+> **Source**: BRD-AUTO-DISC-001 through BRD-AUTO-DISC-008
+
+### 10.1 Explicit Capability Descriptors
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-001 | Every tool and agent SHALL declare capabilities explicitly via structured descriptors — no implicit capability assumptions are permitted | MUST | BRD-AUTO-DISC-001 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-002 | Tool descriptor MUST include: `name`, `description`, `capability_tags`, `input_schema`, `output_schema`, `side_effects`, `deterministic` | MUST | BRD-AUTO-DISC-001 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-003 | Agent descriptor MUST include: `name`, `description`, `capability_tags`, `input_schema`, `output_schema`, `reasoning_type`, `domain_tags` | MUST | BRD-AUTO-DISC-001 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-004 | `capability_tags` MUST be a list of standardized capability identifiers from platform vocabulary | MUST | BRD-AUTO-DISC-001 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-005 | Tools or agents without complete descriptors MUST NOT be discoverable | MUST | BRD-AUTO-DISC-001 | 1.4 | 25 Jan 2026 | — |
+
+### 10.2 Centralized Registry
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-010 | Platform SHALL own and maintain a centralized registry for all tools and agents — this registry is the single source of truth for discovery | MUST | BRD-AUTO-DISC-002 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-011 | Registry MUST be implemented as `CapabilityRegistry` in `core/knowledge/` | MUST | BRD-AUTO-DISC-002 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-012 | Registry MUST support: `register(descriptor)`, `discover(intent_context)`, `get(name)`, `list_all()` | MUST | BRD-AUTO-DISC-002 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-013 | Registry MUST be populated at platform startup from product manifests and core definitions | MUST | BRD-AUTO-DISC-002 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-014 | Direct tool/agent invocation bypassing registry MUST be prohibited | MUST | BRD-AUTO-DISC-002 | 1.4 | 25 Jan 2026 | — |
+
+### 10.3 Intent-Filtered Discovery
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-020 | Discovery SHALL be intent-filtered — tools and agents SHALL be discoverable only when relevant to the current intent context | MUST | BRD-AUTO-DISC-003 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-021 | `discover(intent_context)` MUST filter by: `SemanticEnvelope.intent_type`, `entities`, `constraints` | MUST | BRD-AUTO-DISC-003 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-022 | Discovery MUST return only tools/agents whose `capability_tags` match intent requirements | MUST | BRD-AUTO-DISC-003 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-023 | Discovery results MUST include relevance scores for each candidate | MUST | BRD-AUTO-DISC-003 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-024 | Discovery MUST emit `discovery_completed` trace event with `intent_hash`, `candidates_found`, `filtered_count` | MUST | BRD-AUTO-DISC-003 | 1.4 | 25 Jan 2026 | — |
+
+### 10.4 Pre-Execution Eligibility Checks
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-030 | Platform SHALL perform explicit eligibility checks before tool or agent execution — policy, budget, and capability requirements SHALL be validated prior to invocation | MUST | BRD-AUTO-DISC-004 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-031 | Eligibility check MUST verify: tool/agent is registered, policy allows invocation, budget permits execution | MUST | BRD-AUTO-DISC-004 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-032 | Eligibility check MUST verify: required capabilities are present, input schema is satisfied | MUST | BRD-AUTO-DISC-004 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-033 | Eligibility failures MUST produce structured error with `ineligibility_reason`, `missing_requirements` | MUST | BRD-AUTO-DISC-004 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-034 | Eligibility check MUST emit `eligibility_checked` trace event with `result`, `reason` | MUST | BRD-AUTO-DISC-004 | 1.4 | 25 Jan 2026 | — |
+
+### 10.5 Discovery and Selection Separation
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-040 | Discovery and selection SHALL be separate concerns — discovery returns candidates, selection applies ranking and policy | MUST | BRD-AUTO-DISC-005 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-041 | `CapabilityRegistry.discover()` MUST return unranked candidate list | MUST | BRD-AUTO-DISC-005 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-042 | `ToolSelector` and `AgentSelector` MUST perform ranking and policy application on discovered candidates | MUST | BRD-AUTO-DISC-005 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-043 | Selection phase MUST apply product-specific allow/block lists from policy | MUST | BRD-AUTO-DISC-005 | 1.4 | 25 Jan 2026 | — |
+
+### 10.6 Extensibility Support
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-050 | Platform SHALL provide first-class support for tool and agent extension — products SHALL be able to register additional capabilities via standard interfaces | MUST | BRD-AUTO-DISC-006 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-051 | Products MUST register tools via product manifest `tools` section | MUST | BRD-AUTO-DISC-006 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-052 | Products MUST register agents via product manifest `agents` section | MUST | BRD-AUTO-DISC-006 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-053 | Extension registration MUST emit `capability_registered` trace event with `product`, `name`, `type` | MUST | BRD-AUTO-DISC-006 | 1.4 | 25 Jan 2026 | — |
+
+### 10.7 Product-Controlled Exposure
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-060 | Tool and agent exposure SHALL be governed by product — products SHALL control which of their capabilities are discoverable by other products | MUST | BRD-AUTO-DISC-007 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-061 | Product manifest MUST include `exposure` field with values: `private`, `platform`, or list of product names | MUST | BRD-AUTO-DISC-007 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-062 | `private` exposure MUST restrict discovery to same product only | MUST | BRD-AUTO-DISC-007 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-063 | `platform` exposure MUST allow discovery by all products | MUST | BRD-AUTO-DISC-007 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-064 | Discovery MUST respect product exposure settings — cross-product discovery of `private` capabilities MUST be blocked | MUST | BRD-AUTO-DISC-007 | 1.4 | 25 Jan 2026 | — |
+
+### 10.8 Deterministic Discovery
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| INT-DISC-070 | Tool and agent discovery SHALL be deterministic — same intent context and product configuration SHALL yield same discovery results | MUST | BRD-AUTO-DISC-008 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-071 | Discovery results MUST be sorted deterministically (e.g., alphabetically by name) | MUST | BRD-AUTO-DISC-008 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-072 | Discovery MUST NOT include randomness or time-dependent factors in candidate selection | MUST | BRD-AUTO-DISC-008 | 1.4 | 25 Jan 2026 | — |
+| INT-DISC-073 | Discovery results MUST be content-hashed for reproducibility verification | MUST | BRD-AUTO-DISC-008 | 1.4 | 25 Jan 2026 | — |
 
 ---

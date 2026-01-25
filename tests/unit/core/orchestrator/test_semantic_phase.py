@@ -23,7 +23,7 @@ import pytest
 from core.config.schema import Settings
 from core.contracts.flow_schema import AutonomyLevel, FlowDef, StepDef, StepType
 from core.contracts.run_schema import RunStatus
-from core.contracts.semantic_schema import NextAction, SemanticEnvelope
+from core.contracts.semantic_schema import Ambiguity, NextAction, SemanticEnvelope
 from core.governance.security import SecurityRedactor
 from core.memory.in_memory import InMemoryBackend
 from core.memory.router import MemoryRouter
@@ -282,7 +282,10 @@ class TestSemanticAbortAction:
             product_id="hello_world",
             intent_type="unknown",
             confidence=0.2,
-            ambiguities=["Cannot understand request", "No valid intent detected"],
+            ambiguities=[
+                Ambiguity(ambiguity_id="amb_1", description="Cannot understand request"),
+                Ambiguity(ambiguity_id="amb_2", description="No valid intent detected"),
+            ],
             proposed_next_action=NextAction.ABORT,
         )
         

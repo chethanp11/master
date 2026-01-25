@@ -1,9 +1,9 @@
 # Acceptance Criteria Technical Specification
 
 > **Document ID**: ACC  
-> **Version**: V1.2  
+> **Version**: V1.3  
 > **Status**: V1 Release  
-> **Last Updated**: 2026-01-13  
+> **Last Updated**: 2026-01-25  
 
 ## Version History
 
@@ -12,6 +12,7 @@
 | 1.0.0 | 2026-01-12 | Initial V1 specification |
 | 1.1.0 | 2026-01-13 | Added: §2.6 Semantic Phase Coverage, §2.7 Architecture Invariant Tests, §12.1 Explicit Non-Goals, §16 BRD Requirement Mapping |
 | V1.2 | 2026-01-20 | Normalized tables to canonical TSD format; merged/removed non-TSD sections; mapping hygiene |
+| V1.3 | 2026-01-25 | Added: §2.8 Executable Invariant Enforcement (BRD-INV-027-030), §7.3 Invariant CI/CD Gate |
 
 ---
 
@@ -103,6 +104,30 @@ tests pass at the specified coverage levels.
 | ACC-INV-005 | `test_inv5_orchestrator_control` MUST verify iteration is orchestrator-owned | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ACC-INV-006 | `test_inv6_explicit_platform_laws` MUST verify governance cannot be bypassed | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ACC-INV-007 | `test_inv7_reasoning_observability` MUST verify all reasoning is traced | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+### 2.8 Executable Invariant Enforcement (Added: 2026-01-25)
+
+> **Source**: BRD-INV-027, BRD-INV-028, BRD-INV-029, BRD-INV-030
+
+This section defines TSD requirements ensuring platform invariants are executable, enforced via automated tests, and block CI/CD on failure.
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-INV-EXEC-001 | Architecture tests MUST exist for each platform invariant (INV-1 through INV-10+) | MUST | BRD-INV-027 | 1.3 | 25 Jan 2026 | Invariants as code |
+| ACC-INV-EXEC-002 | Invariant tests MUST be located in `tests/architecture/test_invariants.py` | MUST | BRD-INV-027 | 1.3 | 25 Jan 2026 | Canonical location |
+| ACC-INV-EXEC-003 | Invariant tests MUST be marked with `@pytest.mark.invariant` | MUST | BRD-INV-027 | 1.3 | 25 Jan 2026 | CI gate filtering |
+| ACC-INV-EXEC-004 | Invariant tests MUST run on every CI build (not optional) | MUST | BRD-INV-027, BRD-INV-030 | 1.3 | 25 Jan 2026 | Blocking gate |
+| ACC-INV-EXEC-005 | Invariant test failure MUST block merge/deployment | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | No bypass allowed |
+| ACC-INV-EXEC-006 | Invariant tests MUST NOT be skipped without P0 approval | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Skip requires escalation |
+| ACC-INV-EXEC-007 | `test_products_no_semantic_reimplementation` MUST verify products import semantic logic from `core/` | MUST | BRD-INV-028 | 1.3 | 25 Jan 2026 | No product duplication |
+| ACC-INV-EXEC-008 | `test_products_no_validation_reimplementation` MUST verify products import validation from `core/contracts/` | MUST | BRD-INV-028 | 1.3 | 25 Jan 2026 | No product duplication |
+| ACC-INV-EXEC-009 | `test_products_no_confidence_reimplementation` MUST verify products import confidence logic from `core/knowledge/` | MUST | BRD-INV-028 | 1.3 | 25 Jan 2026 | No product duplication |
+| ACC-INV-EXEC-010 | Duplication detection test MUST scan product directories for semantic/validation patterns | MUST | BRD-INV-029 | 1.3 | 25 Jan 2026 | Automated detection |
+| ACC-INV-EXEC-011 | Duplication detection test MUST fail if product defines own SemanticEnvelope, Confidence, or Validation classes | MUST | BRD-INV-029 | 1.3 | 25 Jan 2026 | Pattern blocklist |
+| ACC-INV-EXEC-012 | Duplication detection test MUST verify product imports use `from core.` prefix | MUST | BRD-INV-029 | 1.3 | 25 Jan 2026 | Import verification |
+| ACC-INV-EXEC-013 | CI/CD pipeline MUST include dedicated "invariant-check" stage | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Explicit gate stage |
+| ACC-INV-EXEC-014 | Invariant-check stage MUST run before integration/deployment stages | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Fail-fast ordering |
+| ACC-INV-EXEC-015 | Invariant failures MUST produce structured error report with violation details | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Actionable diagnostics |
 
 ---
 
@@ -234,6 +259,20 @@ tests pass at the specified coverage levels.
 | ACC-CI-011 | Test markers MUST be used for categorization | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ACC-CI-012 | Slow tests MUST be marked with `@pytest.mark.slow` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
 | ACC-CI-013 | Tests requiring external services MUST be marked with `@pytest.mark.integration` | MUST | TBD (Mapping Gap) | 1.1 | 13 Jan 2026 | — |
+
+### 7.3 Invariant CI/CD Gate (Added: 2026-01-25)
+
+> **Source**: BRD-INV-027, BRD-INV-030
+
+| TSD ID | Technical Specification | Level | BRD Mapping (BRD ID) | Version | Date added | Notes |
+|--------|--------------------------|-------|----------------------|---------|------------|-------|
+| ACC-CI-INV-001 | CI pipeline MUST include `invariant-check` job/stage | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Dedicated gate |
+| ACC-CI-INV-002 | `invariant-check` job MUST run `pytest -m invariant tests/architecture/` | MUST | BRD-INV-027 | 1.3 | 25 Jan 2026 | Marker-based execution |
+| ACC-CI-INV-003 | `invariant-check` job MUST execute before `deploy` stage | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Fail-fast ordering |
+| ACC-CI-INV-004 | `invariant-check` failure MUST set pipeline status to FAILED | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | Blocking behavior |
+| ACC-CI-INV-005 | `invariant-check` job MUST NOT have `allow_failure: true` | MUST | BRD-INV-030 | 1.3 | 25 Jan 2026 | No soft failure |
+| ACC-CI-INV-006 | `invariant-check` results MUST be uploaded as CI artifact | MUST | BRD-INV-027 | 1.3 | 25 Jan 2026 | Audit trail |
+| ACC-CI-INV-007 | Invariant test coverage report MUST be included in CI summary | SHOULD | BRD-INV-027 | 1.3 | 25 Jan 2026 | Visibility |
 
 
 ---

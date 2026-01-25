@@ -21,7 +21,7 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Type, Union
 
-from core.contracts.semantic_schema import Entity, SemanticEnvelope
+from core.contracts.semantic_schema import Ambiguity, Entity, SemanticEnvelope
 
 
 # ==============================
@@ -214,8 +214,8 @@ def apply_stable_ordering(envelope: SemanticEnvelope) -> SemanticEnvelope:
     # Sort entities by name
     sorted_entities = sorted(envelope.entities, key=lambda e: e.name)
     
-    # Sort ambiguities alphabetically
-    sorted_ambiguities = sorted(envelope.ambiguities)
+    # Sort ambiguities by description (Ambiguity objects)
+    sorted_ambiguities = sorted(envelope.ambiguities, key=lambda a: a.description)
     
     # Sort constraint keys (create new ordered dict)
     sorted_constraints = dict(sorted(envelope.constraints.items()))
