@@ -3,8 +3,18 @@
 > **Document**: Product Developer Intent  
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Last Updated**: 2026-01-18  
-> **Status**: V1.2 Release
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.3 Release
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|--------|
+| 1.3 | 2026-01-21 | Added INT-OVERVIEW-007 (analysis-agnostic extensibility) |
+| 1.2 | 2026-01-18 | Added INT-OBJ-008 |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -51,6 +61,7 @@ There is no tool that:
 | **INT-OVERVIEW-004** | Confidence, assumptions, and limitations must be explicit — Transparency requirement | — | 2026-01-13 | V1.1 | — |
 | **INT-OVERVIEW-005** | Plans must require human approval before execution — Human oversight by design | — | 2026-01-13 | V1.1 | — |
 | **INT-OVERVIEW-006** | Analyst questions must be semantically interpreted — Enable natural language interaction | — | 2026-01-13 | V1.1 | — |
+| **INT-OVERVIEW-007** | ADE SHALL remain analysis-agnostic and extensible across use cases: ADE SHALL support exploratory analysis, risk review, fraud inspection, and business summarization without hard-coding a single analytical worldview — Analysis-agnostic extensibility | — | 2026-01-21 | V1.3 | Source: BULLET-10 |
 
 ### The One-Liner
 

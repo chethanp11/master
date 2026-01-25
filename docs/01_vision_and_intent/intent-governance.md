@@ -1,7 +1,17 @@
 # Developer Intent: Governance & Compliance (INT-GOV)
 
 > **Maps to**: [BRD-governance.md](../02_brd/BRD-governance.md)  
-> **Version**: 1.2  
+> **Version**: 1.3  
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.3 | 2026-01-21 | Added PLAT-GOV-GATE (Semantic Gate Enforcement), PLAT-GOV-EVID (Evidence Requirements), enhanced PLAT-GOV-HUMAN with HITL binding intents |
+| 1.2 | 2026-01-18 | Added PLAT-AUD, PLAT-POL sections |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -28,6 +38,8 @@ Define platform-level governance, security, and compliance intent that constrain
 | INT-GOV-004 | Approval decisions SHALL be recorded with approver identity and timestamp — Complete audit trail | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
 | INT-GOV-005 | Workflows SHALL pause gracefully while awaiting approval — No orphaned or stuck processes | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
 | INT-GOV-006 | Workflows SHALL resume correctly after approval/rejection — Seamless continuation | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
+| INT-GOV-007 | HITL decisions SHALL be structurally binding: execution SHALL NOT proceed until human decision is recorded — HITL is a gate, not a suggestion | — | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-008 | HITL requirements SHALL be declared at flow design time, not inferred at runtime — Deterministic governance | — | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
 
 ---
 
@@ -132,6 +144,32 @@ Define platform-level governance, security, and compliance intent that constrain
 | ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
 |----|--------|----------------------|------------|---------|-------|
 | PLAT-POL-001 | Platform SHALL prevent runtime learning or self-modification during execution — Preserve determinism and auditability | PLAT-CTRL-001 | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
+
+---
+
+## PLAT-GOV-GATE — Semantic Gate Enforcement
+
+### Intent
+
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| INT-GOV-GATE-001 | Platform SHALL enforce a mandatory semantic gate before any flow execution begins — Prevent unvalidated execution | PLAT-CTRL-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-GATE-002 | Semantic gate SHALL validate intent sufficiency, confidence thresholds, and constraint satisfaction before proceeding — Comprehensive pre-execution validation | INT-GOV-GATE-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-GATE-003 | Execution SHALL be blocked when semantic assumptions are implicit or inferred rather than explicitly validated — No implicit assumption execution | INT-GOV-GATE-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-GATE-004 | Platform SHALL provide an Intent Sufficiency Gate that enforces hard fail on insufficient intent — Make sufficiency a blocking gate | INT-GOV-GATE-002 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-GATE-005 | Semantic gate failures SHALL produce structured rejection artifacts with gap identification and remediation paths — Actionable failure responses | INT-GOV-GATE-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+
+---
+
+## PLAT-GOV-EVID — Evidence Requirements
+
+### Intent
+
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| INT-GOV-EVID-001 | All decision artifacts SHALL include evidence references that support the decision — No decision without evidence | PLAT-AUD-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-EVID-002 | Confidence scores SHALL be tied to evidence completeness: incomplete evidence SHALL result in proportionally reduced confidence — Evidence-driven confidence | INT-GOV-EVID-001, PLAT-CTRL-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-GOV-EVID-003 | Evidence references SHALL be traceable, typed, and queryable for audit — Evidence as first-class artifact | INT-GOV-EVID-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
 
 ---
 

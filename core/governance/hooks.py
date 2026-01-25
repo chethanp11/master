@@ -313,6 +313,11 @@ class GovernanceHooks:
         }
         return self._decision(decision.allow, decision.reason, decision.details, scrubbed)
 
+    def _get_max_payload_bytes(self, product: str) -> Optional[int]:
+        """Get max_payload_bytes with per-product override support."""
+        policy = self.engine._policy_for_product(product)
+        return policy.get("max_payload_bytes")
+
     def before_user_input_response(
         self,
         *,
@@ -320,7 +325,7 @@ class GovernanceHooks:
         response: Any,
         ctx: StepContext,
     ) -> HookDecision:
-        limit = self.settings.policies.max_payload_bytes
+        limit = self._get_max_payload_bytes(self._product(ctx.run))
         payload = {"request": request, "response": response}
         if limit is not None and self._payload_size_bytes(response) > limit:
             return self._decision(
@@ -337,7 +342,7 @@ class GovernanceHooks:
         )
 
     def before_run_output(self, *, output: Dict[str, Any], run_ctx: RunContext) -> HookDecision:
-        limit = self.settings.policies.max_payload_bytes
+        limit = self._get_max_payload_bytes(self._product(run_ctx))
         if limit is not None and self._payload_size_bytes(output) > limit:
             return self._decision(
                 allowed=False,
@@ -353,7 +358,7 @@ class GovernanceHooks:
         )
 
     def before_output_files(self, *, files: Any, run_ctx: RunContext) -> HookDecision:
-        limit = self.settings.policies.max_payload_bytes
+        limit = self._get_max_payload_bytes(self._product(run_ctx))
         if limit is not None and self._payload_size_bytes(files) > limit:
             return self._decision(
                 allowed=False,
@@ -407,6 +412,10 @@ class GovernanceHooks:
 
     @staticmethod
     def _product(run_ctx: RunContext) -> str:
+        # Try direct attribute first (RunContext has product directly)
+        if hasattr(run_ctx, "product") and run_ctx.product:
+            return run_ctx.product
+        # Fall back to run_record for compatibility
         record = getattr(run_ctx, "run_record", None)
         return getattr(record, "product", "unknown_product")
 

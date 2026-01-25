@@ -1,7 +1,17 @@
 # Developer Intent: Intelligent Automation (INT-AUTO)
 
 > **Maps to**: [BRD-automation.md](../02_brd/BRD-automation.md)  
-> **Version**: 1.2  
+> **Version**: 1.3  
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.3 | 2026-01-21 | Added PLAT-AUTO-DISC (Tool/Agent Discovery), enhanced PLAT-ORCH with Intent Sufficiency, enhanced PLAT-AUTO-REASON with Minimum Reasoning Contract |
+| 1.2 | 2026-01-18 | Added PLAT-ORCH, PLAT-CTRL, PLAT-EXEC sections |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -147,6 +157,7 @@ Define platform-level intent for intelligent automation that drives BRD derivati
 | INT-AUTO-031 | Proposals SHALL be evaluated by critic before execution — Quality gate before action | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
 | INT-AUTO-032 | Context SHALL be enriched with relevant knowledge before reasoning — Better context yields better decisions | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
 | INT-AUTO-033 | Reasoning failures SHALL trigger appropriate escalation — Fail gracefully, not silently | — | 2026-01-13 | V1.1 | ID NEEDS NORMALIZATION |
+| INT-AUTO-034 | Platform SHALL define and enforce a Minimum Reasoning Contract for all products: products SHALL NOT bypass or reduce reasoning phases below platform-mandated minimums — Consistent reasoning quality | PLAT-ORCH-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
 
 ---
 
@@ -158,6 +169,7 @@ Define platform-level intent for intelligent automation that drives BRD derivati
 |----|--------|----------------------|------------|---------|-------|
 | PLAT-ORCH-001 | Platform SHALL provide a central, reusable reasoning lifecycle (interpret → propose → critique → recommend) that is orchestrator-controlled, bounded, and non-autonomous — Make reasoning a governed platform primitive | PLAT-AUTO-001 | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
 | PLAT-ORCH-002 | Orchestrator SHALL support bounded reasoning iteration with deterministic stop conditions based on sufficiency, budget, iteration limits, or human intervention — Prevent runaway reasoning loops | PLAT-AUTO-002 | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
+| PLAT-ORCH-003 | Intent sufficiency SHALL be a first-class orchestration responsibility: orchestrator SHALL track, evaluate, and gate execution based on sufficiency state — Sufficiency as control signal | PLAT-ORCH-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
 
 ---
 
@@ -180,6 +192,23 @@ Define platform-level intent for intelligent automation that drives BRD derivati
 |----|--------|----------------------|------------|---------|-------|
 | PLAT-EXEC-001 | Platform SHALL construct and freeze a ContextPack before planning or execution, consolidating data availability, evidence, constraints, and quality limitations — Provide a consistent decision context before execution | PLAT-AUTO-002 | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
 | PLAT-EXEC-002 | Platform SHALL define and enforce explicit terminal outcomes (SUCCESS, PARTIAL_SUCCESS, ASK_USER, ABORT) with required explanations and artifacts — Make termination semantics consistent and auditable | PLAT-CTRL-001 | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
+
+---
+
+## PLAT-AUTO-DISC — Tool & Agent Discovery
+
+### Intent
+
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| INT-AUTO-DISC-001 | Every tool and agent SHALL declare its capabilities explicitly via structured descriptors — No implicit capability assumptions | INT-AUTO-010 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-002 | Platform SHALL own and maintain a centralized registry for all tools and agents — Single source of truth for discovery | INT-AUTO-DISC-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-003 | Discovery SHALL be intent-filtered: tools and agents SHALL be discoverable only when relevant to the current intent context — No global visibility without purpose | INT-AUTO-DISC-002 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-004 | Platform SHALL perform explicit eligibility checks before tool or agent execution: policy, budget, and capability requirements SHALL be validated — Pre-execution validation | INT-AUTO-DISC-002 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-005 | Discovery and selection SHALL be separate concerns: discovery returns candidates, selection applies ranking and policy — Clear separation of responsibilities | INT-AUTO-DISC-003 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-006 | Platform SHALL provide first-class support for tool and agent extension: products SHALL be able to register additional capabilities via standard interfaces — Extensibility as a platform feature | INT-AUTO-DISC-002 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-007 | Tool and agent exposure SHALL be governed by product: products SHALL control which of their capabilities are discoverable by other products — Product-controlled visibility | INT-AUTO-DISC-002 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| INT-AUTO-DISC-008 | Tool and agent discovery SHALL be deterministic: same intent context and product configuration SHALL yield same discovery results — Reproducible discovery | INT-AUTO-DISC-003 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
 
 ---
 
@@ -210,3 +239,4 @@ This document derives the following in [BRD-automation.md](../02_brd/BRD-automat
 - INT-AUTO-SEM-* → BRD-AUTO-SEM-*
 - INT-AUTO-ADAPT-* → BRD-AUTO-ADAPT-*
 - INT-AUTO-STOP-* → BRD-AUTO-STOP-*
+- INT-AUTO-DISC-* → BRD-AUTO-DISC-*

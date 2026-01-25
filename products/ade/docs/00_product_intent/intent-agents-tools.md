@@ -3,8 +3,18 @@
 > **Document**: Product Developer Intent  
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Last Updated**: 2026-01-18  
-> **Status**: V1.2 Release
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.3 Release
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|--------|
+| 1.3 | 2026-01-21 | Added INT-AGENTS-001 (agent as specialist), INT-TOOL-006 through INT-TOOL-013 (tool binding, discovery, eligibility) |
+| 1.2 | 2026-01-18 | Initial sections |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -24,6 +34,7 @@ This file contains sections 3, 4 from the ADE Developer Intent.
 
 | ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
 |----|--------|----------------------|------------|---------|-------|
+| **INT-AGENTS-001** | ADE SHALL treat agents as specialists performing scoped tasks (e.g., "summarize risk signals", "interpret intent"): orchestrator SHALL control sequencing and authority, agents SHALL NOT control flow or make autonomous decisions — Agents as specialists | — | 2026-01-21 | V1.3 | Source: BULLET-15 |
 
 ### Agent Summary
 
@@ -160,6 +171,13 @@ Raw data needs narrative interpretation for human consumption.
 | **INT-TOOL-003** | Tools must produce deterministic outputs — Audit requirement | — | 2026-01-13 | V1.1 | — |
 | **INT-TOOL-004** | Same inputs must produce same outputs — Reproducibility | — | 2026-01-13 | V1.1 | — |
 | **INT-TOOL-005** | Tools must produce evidence items — Traceability | — | 2026-01-13 | V1.1 | — |
+| **INT-TOOL-006** | ADE SHALL bind tool selection directly to declared intent: analytical tools (anomaly detection, aggregation, visualization) SHALL only be invoked if explicitly justified by the resolved intent and constraints — Intent-bound tool selection | INT-TOOL-001 | 2026-01-21 | V1.3 | Source: BULLET-04 |
+| **INT-TOOL-007** | ADE SHALL reject tool execution based on mere availability: tools SHALL NOT be selected simply because they exist; every tool invocation SHALL map to an intent dimension and be auditable — No availability-based selection | INT-TOOL-006 | 2026-01-21 | V1.3 | Source: BULLET-05 |
+| **INT-TOOL-008** | ADE SHALL never hard-code tool lists: ADE SHALL request eligible tools from the platform per run and use only what is surfaced — Dynamic tool discovery | INT-TOOL-006 | 2026-01-21 | V1.3 | Source: BULLET-11 |
+| **INT-TOOL-009** | ADE SHALL bind tools to intent-derived steps: tools SHALL be invoked because intent demands them, not because they exist or are convenient — Intent-driven invocation | INT-TOOL-006 | 2026-01-21 | V1.3 | Source: BULLET-12 |
+| **INT-TOOL-010** | ADE SHALL declare tool intent at call time: each tool invocation SHALL specify "why this tool" and "what intent dimension it satisfies" — Documented tool rationale | INT-TOOL-009 | 2026-01-21 | V1.3 | Source: BULLET-13 |
+| **INT-TOOL-011** | ADE SHALL fail if no eligible tools exist for the resolved intent: if intent cannot be satisfied with available tools, ADE SHALL stop, explain, and ask user — Fail on tool unavailability | INT-TOOL-008 | 2026-01-21 | V1.3 | Source: BULLET-14 |
+| **INT-TOOL-012** | ADE SHALL never infer permissions: if a tool is not discoverable from the platform, it is not usable; ADE SHALL NOT use fallback logic that bypasses platform discovery — No permission inference | INT-TOOL-008 | 2026-01-21 | V1.3 | Source: BULLET-16 |
 
 ### Constraints (Non-Negotiable)
 

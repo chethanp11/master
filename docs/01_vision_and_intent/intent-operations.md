@@ -1,8 +1,18 @@
 # Developer Intent: Operational Excellence (INT-OPS)
 
 > **Maps to**: [BRD-operations.md](../02_brd/BRD-operations.md)  
-> **Version**: 1.2  
+> **Version**: 1.3  
 > **Source**: Extracted from [intent.md](intent.md) § 4
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.3 | 2026-01-21 | Added PLAT-INV-027 through PLAT-INV-030 for executable invariants and product boundary enforcement |
+| 1.2 | 2026-01-18 | Added PLAT-OPS-REPRO section |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -235,6 +245,17 @@ Intent signal: Safety is enforced by structure, not convention.
 
 Intent signal: "Why" matters as much as "what happened".
 
+### INV-8: Executable Invariants
+
+| ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
+|----|--------|----------------------|------------|---------|-------|
+| PLAT-INV-027 | Platform invariants SHALL be executable: invariants SHALL be enforced via automated tests, runtime checks, and architecture gates — Invariants are code, not documentation | PLAT-INV-022 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| PLAT-INV-028 | Products SHALL NOT re-implement semantic interpretation, validation, or confidence logic: these capabilities SHALL be consumed from platform primitives — Prevent capability duplication | PLAT-INV-001 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| PLAT-INV-029 | Architecture tests SHALL verify that products do not duplicate platform semantic or validation logic — Automated duplication detection | PLAT-INV-027, PLAT-INV-028 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+| PLAT-INV-030 | Invariant violations SHALL block CI/CD pipelines: no deployment SHALL proceed with invariant failures — Invariants as hard gates | PLAT-INV-027 | 2026-01-21 | V1.3 | V1.3, 2026-01-21 |
+
+Intent signal: If an invariant isn't enforced by code, it's not an invariant.
+
 ---
 
 ## Removed / Quarantined Content (Out of Platform Scope)
@@ -250,3 +271,4 @@ This document derives the following in [BRD-operations.md](../02_brd/BRD-operati
 - INT-OPS-* → BRD-OPS-*
 - INT-OPS-SEM-* → BRD-OPS-SEM-*
 - INT-OPS-ARCH-* → BRD-OPS-ARCH-*
+- PLAT-INV-* → BRD-INV-*

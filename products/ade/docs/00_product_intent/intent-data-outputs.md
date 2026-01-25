@@ -3,8 +3,18 @@
 > **Document**: Product Developer Intent  
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Last Updated**: 2026-01-18  
-> **Status**: V1.2 Release
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.3 Release
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|--------|
+| 1.3 | 2026-01-21 | Added INT-FMT-006 (transaction-level data default), INT-OUT-018 (reasoning narrative artifact) |
+| 1.2 | 2026-01-18 | Initial sections |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -29,6 +39,7 @@ This file contains sections 5, 6 from the ADE Developer Intent.
 | **INT-FMT-003** | Parse standard CSV headers — Schema extraction | — | 2026-01-13 | V1.1 | — |
 | **INT-FMT-004** | Handle quoted fields — Format robustness | — | 2026-01-13 | V1.1 | — |
 | **INT-FMT-005** | Handle empty values — Data quality | — | 2026-01-13 | V1.1 | — |
+| **INT-FMT-006** | ADE SHALL treat all datasets as transaction-level by default: row-level analysis SHALL be assumed unless a valid time field and aggregation grain are explicitly confirmed through semantic interpretation — Transaction-level default | — | 2026-01-21 | V1.3 | Source: BULLET-02 |
 
 ### Location Rules
 
@@ -178,6 +189,7 @@ blocking_questions: List[str]
 | **INT-OUT-015** | Include evidence sections — Traceability | — | 2026-01-13 | V1.1 | — |
 | **INT-OUT-016** | Include assumptions — Transparency | — | 2026-01-13 | V1.1 | — |
 | **INT-OUT-017** | Include limitations — Transparency | — | 2026-01-13 | V1.1 | — |
+| **INT-OUT-018** | ADE SHALL declare "Reasoning Narrative" as a required output artifact: every ADE run SHALL produce a coherent, human-readable reasoning narrative explaining why each analysis or decision was made — Required reasoning narrative | INT-OUT-001 | 2026-01-21 | V1.3 | Source: BULLET-06 |
 
 ### Output Summary
 

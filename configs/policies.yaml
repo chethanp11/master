@@ -48,3 +48,5 @@ by_product:
   ade:
     max_steps: 25
     max_tool_calls: 25
+    # HTML reports can exceed 64KB; allow up to 2MB for ADE output files
+    max_payload_bytes: 2097152

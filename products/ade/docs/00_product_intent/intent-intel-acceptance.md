@@ -3,8 +3,18 @@
 > **Document**: Product Developer Intent  
 > **Product**: Analytical Decision Engine (ADE)  
 > **Platform**: MASTER — Managed AI Systems for Trusted Execution & Reasoning  
-> **Last Updated**: 2026-01-18  
-> **Status**: V1.2 Release
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.3 Release
+
+---
+
+## Version Control
+
+| Version | Date | Changes |
+|---------|------|--------|
+| 1.3 | 2026-01-21 | Added INT-SEM-011 (intent-derived behavior), INT-FAIL section (failure modes), enhanced INT-FRI/INT-ALIGN with platform reliance and separation intents |
+| 1.2 | 2026-01-18 | Added critique integration, context pack grounding, terminal outcomes |
+| 1.1 | 2026-01-13 | Initial release |
 
 ---
 
@@ -36,6 +46,7 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 | **INT-SEM-008** | Ambiguous inputs SHALL be captured in ambiguities list — Transparency | — | 2026-01-13 | V1.1 | — |
 | **INT-SEM-009** | Semantic interpretation SHALL run BEFORE planning phase — Correct ordering | — | 2026-01-13 | V1.1 | — |
 | **INT-SEM-010** | Semantic interpretation SHALL be traced with structured events — Observability | — | 2026-01-13 | V1.1 | — |
+| **INT-SEM-011** | ADE SHALL derive analytical behavior strictly from resolved user intent: analysis types (trend, anomaly, delta) SHALL NOT be assumed unless explicitly specified in the resolved semantic intent — No implicit analysis assumptions | INT-SEM-001 | 2026-01-21 | V1.3 | Source: BULLET-01 |
 
 ### Intent Type Requirements
 
@@ -126,6 +137,9 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 
 | ID | Intent | Depends on (intent ID) | Added Date | Version | Notes |
 |----|--------|----------------------|------------|---------|-------|
+| **INT-FAIL-001** | ADE SHALL fail fast when resolved intent is incompatible with the provided data structure: if the intent cannot be executed on the dataset (e.g., anomaly detection without numeric measures, trend analysis without time field), ADE SHALL halt and explain why — Fail-fast on incompatibility | INT-SEM-011, INT-SUFF-001 | 2026-01-21 | V1.3 | Source: BULLET-09 |
+| **INT-FAIL-002** | ADE SHALL NOT proceed with analysis when required data dimensions are missing: execution SHALL be blocked with structured explanation of the gap — No incomplete analysis | INT-FAIL-001 | 2026-01-21 | V1.3 | Source: BULLET-09 |
+| **INT-FAIL-003** | ADE SHALL prohibit time-series or period-over-period analysis without explicit approval: ADE SHALL stop and request clarification before performing any temporal aggregation, trend analysis, or delta computation — Explicit temporal approval | INT-SEM-011 | 2026-01-21 | V1.3 | Source: BULLET-03 |
 
 ## 7.7 Output Quality Gates
 
@@ -174,6 +188,7 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 | **INT-ALIGN-001** | All reasoning, iteration, critique, and governance patterns SHALL rely on framework-provided primitives — Framework leverage | — | 2026-01-13 | V1.1 | — |
 | **INT-ALIGN-002** | If a product needs to re-implement these mechanisms, it indicates a framework gap—not a product feature — Gap detection | — | 2026-01-13 | V1.1 | — |
 | **INT-ALIGN-003** | ADE SHALL consume platform-provided reasoning outputs without altering their structure or semantics — Preserve platform meaning | — | 2026-01-18 | V1.2 | V1.2, 2026-01-18 |
+| **INT-ALIGN-004** | ADE SHALL separate reasoning and business conclusions from HTML or visualization rendering: reasoning artifacts SHALL be generated independently from presentation to ensure auditability and reuse — Reasoning-presentation separation | INT-ALIGN-001 | 2026-01-21 | V1.3 | Source: BULLET-07 |
 
 ## 7.12 Framework Reliance Invariant (P0)
 
@@ -188,6 +203,7 @@ This file contains sections 7, 8, 9, 10 from the ADE Developer Intent.
 | **INT-FRI-003** | Product SHALL NOT re-implement reasoning ladder semantics already provided by MASTER framework — No shadow reasoning | — | 2026-01-13 | V1.1 | — |
 | **INT-FRI-004** | Product SHALL NOT bypass framework governance hooks — Governance integrity | — | 2026-01-13 | V1.1 | — |
 | **INT-FRI-005** | Any product requirement that cannot be satisfied using existing framework primitives SHALL be treated as a framework gap and escalated, not worked around — Gap escalation | — | 2026-01-13 | V1.1 | — |
+| **INT-FRI-006** | ADE SHALL consume platform-provided semantic envelopes and validation outputs: ADE SHALL NOT re-implement semantic parsing, intent extraction, or validation logic inside product code — Platform semantic reliance | INT-FRI-001 | 2026-01-21 | V1.3 | Source: BULLET-08 |
 
 ### Violation Examples
 
