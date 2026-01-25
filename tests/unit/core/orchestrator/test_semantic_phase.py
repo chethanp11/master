@@ -337,7 +337,9 @@ class TestSemanticAskUserAction:
             product_id="hello_world",
             intent_type="ambiguous",
             confidence=0.5,
-            ambiguities=["Unclear intent - did you mean X or Y?"],
+            ambiguities=[
+                Ambiguity(ambiguity_id="amb_1", description="Unclear intent - did you mean X or Y?"),
+            ],
             proposed_next_action=NextAction.ASK_USER,
         )
 
