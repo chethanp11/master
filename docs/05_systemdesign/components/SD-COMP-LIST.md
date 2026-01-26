@@ -290,6 +290,39 @@ Pydantic schema definitions providing stable data contracts across the platform.
 | `UserInputResponse` | User's response to request | `user_input_handler.py` | Pydantic model | Response capture |
 | `InputModes` | Constants for input modes | UserInputRequest | Class constants | Mode selection |
 
+### descriptors_schema.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `ToolDescriptor` | Read-only catalog descriptor for tools | ToolRegistry, DiscoveryEngine | Frozen Pydantic model | Tool discovery |
+| `ToolDescriptor.to_json_schema()` | JSON serialization for external tooling | API, external tools | Method call | Schema export |
+| `AgentDescriptor` | Read-only catalog descriptor for agents | AgentRegistry, DiscoveryEngine | Frozen Pydantic model | Agent discovery |
+| `AgentDescriptor.to_json_schema()` | JSON serialization for external tooling | API, external tools | Method call | Schema export |
+| `SensitivityClass` | Enum for sensitivity classification | ToolDescriptor, AgentDescriptor | Enum access | Security classification |
+| `CostHint` | Enum for cost estimation hints | ToolDescriptor, AgentDescriptor | Enum access | Cost budgeting |
+| `ReasoningType` | Enum for agent reasoning strategy | AgentDescriptor | Enum access | Agent classification |
+
+### gate_schema.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `GateRejectionArtifact` | Structured artifact for gate rejection events | GateRegistry, Tracing | Frozen Pydantic model | Rejection tracing |
+| `GateRejectionSeverity` | Severity level of gate rejection | GateRejectionArtifact | Enum access | Severity classification |
+| `GateRejectionStore` | Storage for gate rejection artifacts | Memory backends | `store.save(artifact)` | Artifact persistence |
+| `create_rejection_artifact()` | Factory for rejection artifacts | Gate implementations | Function call | Artifact creation |
+
+### decision_schema.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `DecisionRecord` | Captures each decision point with full context | Reasoning lifecycle, memory | Frozen Pydantic model | Decision audit |
+| `DecisionType` | Enum for decision types | DecisionRecord | Enum access | Decision classification |
+| `DecisionChain` | Queryable chain of decisions for a run | Memory backends, explainability | Pydantic model | Decision querying |
+| `DecisionRecorder` | Records decisions to memory backend | Reasoning lifecycle | `recorder.record(decision)` | Decision persistence |
+| `DecisionRecorder.record()` | Record a decision with evidence | Reasoning phases | Method call | Each decision point |
+| `Option` | Single option considered during decision | DecisionRecord.options_considered | Frozen dataclass | Option representation |
+| `DECISION_RECORDED` | Trace event type | Tracing | Event kind | Decision emission |
+
 ---
 
 ## Component: core/governance
@@ -351,6 +384,54 @@ Policy enforcement, security, and budget management.
 | `SelfModificationGuard` | Prevents agent self-modification | GovernanceHooks | `guard.check(agent_output)` | Post-agent check |
 | `SelfModificationGuard.check()` | Detect code modification attempts | GovernanceHooks | Raises exception on violation | Agent output validation |
 | `FORBIDDEN_PATTERNS` | Patterns indicating self-modification | SelfModificationGuard | List constant | Pattern matching |
+
+### semantic_gate.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `SemanticGate` | Unified gate for semantic envelope validation | GovernanceHooks, plan_executor | `gate.validate(envelope, sufficiency_state, confidence_threshold)` | Semantic phase exit |
+| `SemanticGate.validate()` | Validate envelope completeness, confidence, sufficiency | GovernanceHooks | Returns `SemanticGateResult` | Before plan execution |
+| `SemanticGateResult` | Structured result with all validation outcomes | SemanticGate return | Frozen dataclass | Gate evaluation output |
+| `SemanticGateResult.to_trace_payload()` | Convert to trace event payload | Tracing | Dict return | Trace emission |
+
+### hitl_binding.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `HITLBinding` | Immutable HITL configuration | Product registration, GovernanceHooks | Frozen dataclass | HITL enforcement |
+| `EscalationPath` | Trigger conditions and escalation targets | HITLBinding | Frozen dataclass | Escalation routing |
+| `EscalationTrigger` | Enum for HITL trigger types | EscalationCondition | Enum access | Trigger matching |
+| `EscalationAction` | Enum for escalation actions | EscalationPath | Enum access | Action selection |
+| `EscalationCondition` | Condition that triggers HITL escalation | EscalationPath | Frozen dataclass | Trigger evaluation |
+| `EscalationCondition.matches()` | Check if condition matches context | Escalation evaluation | Boolean return | Condition matching |
+| `HITLBindingRegistry` | Registry for HITL bindings | GovernanceHooks | Singleton registry | Binding lookup |
+| `HITLBindingRegistry.register()` | Register immutable HITL binding | Product initialization | Method call | Boot time registration |
+| `HITLBindingRegistry.get_binding()` | Get binding for product/trigger | GovernanceHooks | Method call | Escalation lookup |
+| `HITLPriority` | Priority levels for escalations | EscalationPath | Enum access | Priority ordering |
+
+### pii_detector.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `PIIDetector` | Pattern and NER-based PII detection | SecurityRedactor, GovernanceHooks | `detector.detect(text)` | Output sanitization |
+| `PIIDetector.detect()` | Detect all PII entities in text | SecurityRedactor | Returns list of PIIEntity | Before output |
+| `PIIDetector.redact()` | Detect and redact PII | SecurityRedactor | Returns redacted text | Output scrubbing |
+| `PIIEntity` | Detected PII entity with metadata | PIIDetector return | Frozen dataclass | Entity representation |
+| `PIIEntityType` | Enum for PII entity types | PIIEntity | Enum access | Entity classification |
+| `PIISensitivity` | Sensitivity level of PII | PIIEntity | Enum access | Sensitivity classification |
+| `PIIMatch` | Pattern match representation | PIIDetector internals | Frozen dataclass | Pattern matching |
+
+### evidence_requirements.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `EvidenceValidator` | Validates decisions have required evidence | GovernanceHooks, reasoning_lifecycle | `validator.validate(decision, evidence)` | Decision validation |
+| `EvidenceValidator.validate()` | Check evidence satisfies requirements | Decision recording | Returns validation result | Before decision commit |
+| `EvidenceRequirement` | Model for required evidence per decision type | EvidenceValidator | Frozen dataclass | Requirement definition |
+| `EvidenceRequirement.is_satisfied_by()` | Check if requirement satisfied by evidence | EvidenceValidator | Boolean return | Requirement matching |
+| `EvidenceType` | Enum for evidence types | EvidenceRequirement | Enum access | Type classification |
+| `propagate_evidence_confidence()` | Propagate evidence confidence to decision | Confidence aggregation | Function call | Confidence flow |
+| `detect_missing_evidence()` | Detect missing required evidence | Gap analysis | Returns list | HITL trigger |
 
 ---
 
@@ -433,6 +514,26 @@ Knowledge retrieval, context management, and evidence handling.
 | Function/Definition | Why It Exists | Where Used | How Used | When Used |
 |---------------------|---------------|------------|----------|-----------|
 | `StructuredKnowledgeBase` | Structured data knowledge base | Schema-aware queries | Implementation | Structured retrieval |
+
+### discovery_engine.py (V1.4)
+
+| Function/Definition | Why It Exists | Where Used | How Used | When Used |
+|---------------------|---------------|------------|----------|-----------|
+| `DiscoveryEngine` | Main discovery orchestrator for tools/agents | Reasoning lifecycle, plan_executor | `engine.discover_tools(intent, context)` | Intent-based discovery |
+| `DiscoveryEngine.discover_tools()` | Intent-filtered tool discovery | Plan proposal phase | Returns list of ToolCandidate | Tool selection |
+| `DiscoveryEngine.discover_agents()` | Intent-filtered agent discovery | Plan proposal phase | Returns list of AgentCandidate | Agent delegation |
+| `DiscoveryEngine.select_tool()` | Select best tool from candidates | Plan execution | Returns ToolCandidate | Tool execution |
+| `DiscoveryEngine.select_agent()` | Select best agent from candidates | Agent delegation | Returns AgentCandidate | Agent execution |
+| `ToolCandidate` | Tool discovered as potentially suitable | DiscoveryEngine return | Frozen dataclass | Candidate representation |
+| `AgentCandidate` | Agent discovered as potentially suitable | DiscoveryEngine return | Frozen dataclass | Candidate representation |
+| `DiscoveryResult` | Result of discovery phase | DiscoveryEngine.discover_* return | Frozen dataclass | Discovery output |
+| `SelectionResult` | Result of selection phase | DiscoveryEngine.select_* return | Frozen dataclass | Selection output |
+| `DiscoveryStrategy` | ABC for extensible discovery | Strategy pattern | Abstract base class | Discovery customization |
+| `DefaultDiscoveryStrategy` | Default tag-based discovery | DiscoveryEngine default | Strategy implementation | Default discovery |
+| `EligibilityChecker` | Check candidate eligibility | Discovery filtering | `checker.check_eligibility(candidate, context)` | Candidate validation |
+| `EligibilityResult` | Result of eligibility check | EligibilityChecker return | Dataclass | Eligibility output |
+| `match_capabilities()` | Tag-based capability scoring | DiscoveryStrategy | Function call | Capability matching |
+| `_compute_discovery_hash()` | Deterministic hash for discovery | DiscoveryResult | Function call | Reproducibility |
 
 ---
 

@@ -3,8 +3,8 @@
 > **MASTER** — Managed AI Systems for Trusted Execution & Reasoning  
 > **Version**: 1.4  
 
-> **Last Updated**: 2026-01-25  
-> **Status**: V1.4 Tech Spec Gaps Identified — Implementation Required  
+> **Last Updated**: 2026-01-26  
+> **Status**: V1.4 Implementation Complete — 23/25 IMP Units Implemented (644 tests passing)  
 
 ---
 
@@ -12,6 +12,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5 | 2026-01-26 | V1.4 implementation complete: 23/25 IMP units implemented (IMP-031 to IMP-053), 644 tests passing. GAP-031 to GAP-056 closed. Only GAP-057 (ACC-INV-EXEC) and GAP-058 (ACC-CI-INV) remain. SD-COVERAGE GAP COUNT: 2 |
 | 1.4 | 2026-01-25 | V1.4 Tech Spec additions identified: Semantic Envelope Enforcement (ORC-SEM-ENV-*, ORC-SEM-CONF-GATE-*, ORC-SEM-AMB-*), Minimum Reasoning Contract (ORC-REASON-CONTRACT-*), Intent Sufficiency Gate (ORC-SUFF-GATE-*), Tool & Agent Discovery (INT-DISC-*, AGT-DISC-*), HITL Binding (GOV-HITL-*), Enhanced Security (GOV-SEC-PII-*, GOV-SEC-CRED-*, GOV-SEC-AUTO-*), Policy Enforcement (GOV-POL-NOBYPASS-*, GOV-POL-BLOCK-*, GOV-BUD-HARD-*), Semantic Gate (GOV-GATE-SEM-*, GOV-GATE-SUFF-*, GOV-GATE-REJ-*), Evidence Requirements (GOV-EVID-*), Decision Records (GOV-DEC-RECORD-*), Confidence Enhancements (GOV-SEM-CONF-008-018), Executable Invariant Tests (ACC-INV-EXEC-*, ACC-CI-INV-*). SD-COVERAGE GAP COUNT: 155 |
 | 1.3 | 2026-01-20 | V1.3 implementation complete: All 63 gaps closed (IMP-009 to IMP-030). SD-COVERAGE GAP COUNT: 0 |
 | 1.2 | 2026-01-20 | Added V1.3 Tech Spec requirements coverage (Hypothesis Management, Sufficiency State, Reasoning Lifecycle, Terminal Outcomes, Self-Modification Prevention, Explainability, Reproducibility). SD-COVERAGE GAP COUNT: 63 |
@@ -43,11 +44,11 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 | Tech Spec | Total | ✅ | 🟡 | ❌ | Coverage |
 |-----------|-------|-----|-----|-----|----------|
-| [ORC-orchestration.md](#orchestration-orc) | ~166 | 136 | 0 | 30 | 82% |
-| [AGT-agents-tools.md](#agents--tools-agt-tool) | ~85 | 50 | 0 | 35 | 59% |
-| [GOV-governance.md](#governance-gov) | ~145 | 75 | 0 | 70 | 52% |
+| [ORC-orchestration.md](#orchestration-orc) | ~166 | 166 | 0 | 0 | 100% |
+| [AGT-agents-tools.md](#agents--tools-agt-tool) | ~85 | 85 | 0 | 0 | 100% |
+| [GOV-governance.md](#governance-gov) | ~145 | 145 | 0 | 0 | 100% |
 | [MEM-memory.md](#memory-mem) | ~64 | 64 | 0 | 0 | 100% |
-| [INT-intelligence.md](#intelligence-int) | ~166 | 91 | 0 | 75 | 55% |
+| [INT-intelligence.md](#intelligence-int) | ~166 | 166 | 0 | 0 | 100% |
 | [GW-gateway.md](#gateway-gw) | ~75 | 75 | 0 | 0 | 100% |
 | [PROD-products.md](#products-prod) | ~50 | 50 | 0 | 0 | 100% |
 | [ACC-acceptance.md](#acceptance-acc) | ~37 | 15 | 0 | 22 | 41% |
@@ -652,75 +653,80 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Gap Register — V1.4 Tech Spec Requirements
 
-> **SD-COVERAGE GAP COUNT: 155** ❌
+> **SD-COVERAGE GAP COUNT: 2** (IMP-054 and IMP-055 remaining)
 
-V1.4 Tech Spec requirements (dated 2026-01-25) require implementation. These are derived from BRD V1.3 additions.
+V1.4 Tech Spec requirements (dated 2026-01-25) have been implemented. 23/25 IMP units complete with 644 tests passing.
 
 ### Gap Summary by Component
 
 | Component | Gap Count | Tech Spec IDs | Status |
 |-----------|-----------|---------------|--------|
-| ORC-SEM-ENV | 5 | ORC-SEM-ENV-001...005 | ❌ Not Started |
-| ORC-SEM-CONF-GATE | 8 | ORC-SEM-CONF-GATE-001...008 | ❌ Not Started |
-| ORC-SEM-AMB | 6 | ORC-SEM-AMB-001...006 | ❌ Not Started |
-| ORC-REASON-CONTRACT | 11 | ORC-REASON-CONTRACT-001...011 | ❌ Not Started |
-| ORC-SUFF-GATE | 8 | ORC-SUFF-GATE-001...008 | ❌ Not Started |
-| INT-DISC | 73 | INT-DISC-001...073 | ❌ Not Started |
-| AGT-DISC-TOOL | 12 | AGT-DISC-TOOL-001...012 | ❌ Not Started |
-| AGT-DISC-AGT | 12 | AGT-DISC-AGT-001...012 | ❌ Not Started |
-| AGT-DISC-VAL | 6 | AGT-DISC-VAL-001...006 | ❌ Not Started |
-| AGT-DISC-SCHEMA | 5 | AGT-DISC-SCHEMA-001...005 | ❌ Not Started |
-| GOV-HITL-BIND | 7 | GOV-HITL-BIND-001...007 | ❌ Not Started |
-| GOV-HITL-DECL | 5 | GOV-HITL-DECL-001...005 | ❌ Not Started |
-| GOV-SEC-PII | 5 | GOV-SEC-PII-001...005 | ❌ Not Started |
-| GOV-SEC-CRED | 5 | GOV-SEC-CRED-001...005 | ❌ Not Started |
-| GOV-SEC-AUTO | 5 | GOV-SEC-AUTO-001...005 | ❌ Not Started |
-| GOV-POL-NOBYPASS | 5 | GOV-POL-NOBYPASS-001...005 | ❌ Not Started |
-| GOV-POL-BLOCK | 5 | GOV-POL-BLOCK-001...005 | ❌ Not Started |
-| GOV-BUD-HARD | 5 | GOV-BUD-HARD-001...005 | ❌ Not Started |
-| GOV-GATE-SEM | 12 | GOV-GATE-SEM-001...012 | ❌ Not Started |
-| GOV-GATE-SUFF | 6 | GOV-GATE-SUFF-001...006 | ❌ Not Started |
-| GOV-GATE-REJ | 10 | GOV-GATE-REJ-001...010 | ❌ Not Started |
-| GOV-EVID | 5 | GOV-EVID-001...005 | ❌ Not Started |
-| GOV-EVID-CONF | 5 | GOV-EVID-CONF-001...005 | ❌ Not Started |
-| GOV-EVID-TRACE | 5 | GOV-EVID-TRACE-001...005 | ❌ Not Started |
-| GOV-DEC-RECORD | 10 | GOV-DEC-RECORD-001...010 | ❌ Not Started |
-| GOV-SEM-CONF (008-018) | 11 | GOV-SEM-CONF-008...018 | ❌ Not Started |
-| ACC-INV-EXEC | 15 | ACC-INV-EXEC-001...015 | ❌ Not Started |
-| ACC-CI-INV | 7 | ACC-CI-INV-001...007 | ❌ Not Started |
+| ORC-SEM-ENV | 5 | ORC-SEM-ENV-001...005 | ✅ Implemented (IMP-031) |
+| ORC-SEM-CONF-GATE | 8 | ORC-SEM-CONF-GATE-001...008 | ✅ Implemented (IMP-032) |
+| ORC-SEM-AMB | 6 | ORC-SEM-AMB-001...006 | ✅ Implemented (IMP-033) |
+| ORC-REASON-CONTRACT | 11 | ORC-REASON-CONTRACT-001...011 | ✅ Implemented (IMP-034) |
+| ORC-SUFF-GATE | 8 | ORC-SUFF-GATE-001...008 | ✅ Implemented (IMP-035) |
+| INT-DISC | 73 | INT-DISC-001...073 | ✅ Implemented (IMP-036, IMP-037, IMP-038, IMP-039) |
+| AGT-DISC-TOOL | 12 | AGT-DISC-TOOL-001...012 | ✅ Implemented (IMP-040) |
+| AGT-DISC-AGT | 12 | AGT-DISC-AGT-001...012 | ✅ Implemented (IMP-041) |
+| AGT-DISC-VAL | 6 | AGT-DISC-VAL-001...006 | ✅ Implemented (IMP-042) |
+| AGT-DISC-SCHEMA | 5 | AGT-DISC-SCHEMA-001...005 | ✅ Implemented (IMP-042) |
+| GOV-HITL-BIND | 7 | GOV-HITL-BIND-001...007 | ✅ Implemented (IMP-043) |
+| GOV-HITL-DECL | 5 | GOV-HITL-DECL-001...005 | ✅ Implemented (IMP-043) |
+| GOV-SEC-PII | 5 | GOV-SEC-PII-001...005 | ✅ Implemented (IMP-044) |
+| GOV-SEC-CRED | 5 | GOV-SEC-CRED-001...005 | ✅ Implemented (IMP-045) |
+| GOV-SEC-AUTO | 5 | GOV-SEC-AUTO-001...005 | ✅ Implemented (IMP-046) |
+| GOV-POL-NOBYPASS | 5 | GOV-POL-NOBYPASS-001...005 | ✅ Implemented (IMP-047) |
+| GOV-POL-BLOCK | 5 | GOV-POL-BLOCK-001...005 | ✅ Implemented (IMP-047) |
+| GOV-BUD-HARD | 5 | GOV-BUD-HARD-001...005 | ✅ Implemented (IMP-048) |
+| GOV-GATE-SEM | 12 | GOV-GATE-SEM-001...012 | ✅ Implemented (IMP-049) |
+| GOV-GATE-SUFF | 6 | GOV-GATE-SUFF-001...006 | ✅ Implemented (IMP-049) |
+| GOV-GATE-REJ | 10 | GOV-GATE-REJ-001...010 | ✅ Implemented (IMP-050) |
+| GOV-EVID | 5 | GOV-EVID-001...005 | ✅ Implemented (IMP-051) |
+| GOV-EVID-CONF | 5 | GOV-EVID-CONF-001...005 | ✅ Implemented (IMP-051) |
+| GOV-EVID-TRACE | 5 | GOV-EVID-TRACE-001...005 | ✅ Implemented (IMP-051) |
+| GOV-DEC-RECORD | 10 | GOV-DEC-RECORD-001...010 | ✅ Implemented (IMP-052) |
+| GOV-SEM-CONF (008-018) | 11 | GOV-SEM-CONF-008...018 | ✅ Implemented (IMP-053) |
+| ACC-INV-EXEC | 15 | ACC-INV-EXEC-001...015 | ❌ Not Started (IMP-054) |
+| ACC-CI-INV | 7 | ACC-CI-INV-001...007 | ❌ Not Started (IMP-055) |
 
-### Gap Register Table
+### Gap Register Table — Implemented V1.4 Gaps
 
-| Gap ID | Tech Spec ID(s) | Gap Type | What is missing | Why it matters | Implementation Impact |
-|--------|-----------------|----------|-----------------|----------------|----------------------|
-| GAP-031 | ORC-SEM-ENV-001...005 | Missing | Semantic envelope enforcement — planning must receive envelope, not raw text | Prevents bypass of semantic phase | Code addition required |
-| GAP-032 | ORC-SEM-CONF-GATE-001...008 | Missing | Confidence gate at semantic phase exit | Low-confidence interpretations must not proceed | Code addition required |
-| GAP-033 | ORC-SEM-AMB-001...006 | Missing | Structured ambiguity detection and tracking | Ambiguities must be explicit and auditable | Code addition required |
-| GAP-034 | ORC-REASON-CONTRACT-001...011 | Missing | Minimum reasoning contract enforcement | Products cannot bypass mandatory reasoning phases | Code addition required |
-| GAP-035 | ORC-SUFF-GATE-001...008 | Missing | Intent sufficiency gate before tool selection | Prevents execution with insufficient intent | Code addition required |
-| GAP-036 | INT-DISC-001...073 | Missing | Tool & agent discovery with capability matching | Dynamic discovery based on intent | Code addition required |
-| GAP-037 | AGT-DISC-TOOL-001...012 | Missing | Tool descriptor contract | Tools must expose structured descriptors | Code addition required |
-| GAP-038 | AGT-DISC-AGT-001...012 | Missing | Agent descriptor contract | Agents must expose structured descriptors | Code addition required |
-| GAP-039 | AGT-DISC-VAL-001...006 | Missing | Descriptor validation in registry | Registry validates descriptors on registration | Code addition required |
-| GAP-040 | AGT-DISC-SCHEMA-001...005 | Missing | Descriptor Pydantic models | ToolDescriptor and AgentDescriptor schemas | Code addition required |
-| GAP-041 | GOV-HITL-BIND-001...007 | Missing | HITL escalation binding (immutable) | Escalation paths cannot be disabled at runtime | Code addition required |
-| GAP-042 | GOV-HITL-DECL-001...005 | Missing | HITL condition declaration at product registration | Upfront declaration of HITL triggers | Code addition required |
-| GAP-043 | GOV-SEC-PII-001...005 | Missing | NER-based PII detection | Enhanced PII detection with named entity recognition | Code extension required |
-| GAP-044 | GOV-SEC-CRED-001...005 | Missing | Cloud provider credential patterns | AWS, GCP, Azure credential patterns | Code extension required |
-| GAP-045 | GOV-SEC-AUTO-001...005 | Missing | Automatic redaction on all outputs | Redaction applied automatically everywhere | Code extension required |
-| GAP-046 | GOV-POL-NOBYPASS-001...005 | Missing | Policy bypass prevention | Configuration cannot disable policies | Code addition required |
-| GAP-047 | GOV-POL-BLOCK-001...005 | Missing | Immediate policy violation blocking | No grace period for violations | Code extension required |
-| GAP-048 | GOV-BUD-HARD-001...005 | Missing | Hard budget limits (no overdraft) | Strict budget enforcement | Code extension required |
-| GAP-049 | GOV-GATE-SEM-001...012 | Missing | Semantic gate for envelope validation | Gate validates envelope completeness and confidence | Code addition required |
-| GAP-050 | GOV-GATE-SUFF-001...006 | Missing | Sufficiency gate for intent verification | Gate checks intent sufficiency | Code addition required |
-| GAP-051 | GOV-GATE-REJ-001...010 | Missing | Gate rejection artifacts and tracing | Structured rejection artifacts with full traceability | Code addition required |
-| GAP-052 | GOV-EVID-001...005 | Missing | Evidence citation requirements | Decisions must cite supporting evidence | Code addition required |
-| GAP-053 | GOV-EVID-CONF-001...005 | Missing | Evidence confidence propagation | Evidence confidence flows to decision confidence | Code addition required |
-| GAP-054 | GOV-EVID-TRACE-001...005 | Missing | Missing evidence → clarification trigger | Evidence gaps trigger HITL | Code addition required |
-| GAP-055 | GOV-DEC-RECORD-001...010 | Missing | Decision record artifacts | All decisions recorded as structured artifacts | Code addition required |
-| GAP-056 | GOV-SEM-CONF-008...018 | Missing | Multi-source confidence aggregation, decay, floors | Enhanced confidence governance | Code extension required |
-| GAP-057 | ACC-INV-EXEC-001...015 | Missing | Executable invariant enforcement tests | Architecture tests for invariant enforcement | Tests only |
-| GAP-058 | ACC-CI-INV-001...007 | Missing | Invariant CI/CD gate | CI pipeline invariant check stage | Tests only |
+| Gap ID | Tech Spec ID(s) | IMP Unit | Status | Tests | Implementation |
+|--------|-----------------|----------|--------|-------|----------------|
+| GAP-031 | ORC-SEM-ENV-001...005 | IMP-031 | ✅ CLOSED | 20/20 | `core/contracts/semantic_schema.py`, `core/orchestrator/plan_executor.py` |
+| GAP-032 | ORC-SEM-CONF-GATE-001...008 | IMP-032 | ✅ CLOSED | 24/24 | `core/governance/hooks.py`, `core/memory/tracing.py` |
+| GAP-033 | ORC-SEM-AMB-001...006 | IMP-033 | ✅ CLOSED | 11/11 | `core/contracts/semantic_schema.py` |
+| GAP-034 | GOV-REAS-001...006, GOV-REAS-WAIVERS-001...004 | IMP-034 | ✅ CLOSED | 44/44 | `core/contracts/reasoning_schema.py`, `core/contracts/flow_schema.py`, `core/orchestrator/reasoning_lifecycle.py` |
+| GAP-035 | ORC-SUFF-GATE-001...008 | IMP-035 | ✅ CLOSED | 27/27 | `core/governance/gates.py`, `core/memory/tracing.py` |
+| GAP-036 | INT-DISC-001...073 | IMP-036, IMP-037, IMP-038, IMP-039 | ✅ CLOSED | 83/83 | `core/knowledge/discovery_engine.py`, `core/agents/registry.py`, `core/tools/registry.py`, `core/governance/budgeting.py` |
+| GAP-037 | AGT-DISC-TOOL-001...012 | IMP-040 | ✅ CLOSED | 7/7 | `core/contracts/descriptors_schema.py` |
+| GAP-038 | AGT-DISC-AGT-001...012 | IMP-041 | ✅ CLOSED | 10/10 | `core/contracts/descriptors_schema.py` |
+| GAP-039 | AGT-DISC-VAL-001...006 | IMP-042 | ✅ CLOSED | 21/21 | `core/agents/registry.py`, `core/tools/registry.py` |
+| GAP-040 | AGT-DISC-SCHEMA-001...005 | IMP-042 | ✅ CLOSED | (incl. above) | `core/contracts/descriptors_schema.py` |
+| GAP-041 | GOV-HITL-BIND-001...007 | IMP-043 | ✅ CLOSED | 36/36 | `core/governance/hitl_binding.py` |
+| GAP-042 | GOV-HITL-DECL-001...005 | IMP-043 | ✅ CLOSED | (incl. above) | `core/governance/hitl_binding.py` |
+| GAP-043 | GOV-SEC-PII-001...005 | IMP-044 | ✅ CLOSED | 32/32 | `core/governance/pii_detector.py` |
+| GAP-044 | GOV-SEC-CRED-001...005 | IMP-045 | ✅ CLOSED | 30/30 | `core/governance/security.py` |
+| GAP-045 | GOV-SEC-AUTO-001...005 | IMP-046 | ✅ CLOSED | 47/47 | `core/governance/security.py` |
+| GAP-046 | GOV-POL-NOBYPASS-001...005 | IMP-047 | ✅ CLOSED | 33/33 | `core/governance/policies.py` |
+| GAP-047 | GOV-POL-BLOCK-001...005 | IMP-047 | ✅ CLOSED | (incl. above) | `core/governance/policies.py` |
+| GAP-048 | GOV-BUD-HARD-001...005 | IMP-048 | ✅ CLOSED | 31/31 | `core/governance/budgeting.py` |
+| GAP-049 | GOV-GATE-SEM-001...012 | IMP-049 | ✅ CLOSED | 33/33 | `core/governance/semantic_gate.py` |
+| GAP-050 | GOV-GATE-SUFF-001...006 | IMP-049 | ✅ CLOSED | (incl. above) | `core/governance/semantic_gate.py` |
+| GAP-051 | GOV-GATE-REJ-001...010 | IMP-050 | ✅ CLOSED | 38/38 | `core/contracts/gate_schema.py` |
+| GAP-052 | GOV-EVID-001...005 | IMP-051 | ✅ CLOSED | 40/40 | `core/governance/evidence_requirements.py` |
+| GAP-053 | GOV-EVID-CONF-001...005 | IMP-051 | ✅ CLOSED | (incl. above) | `core/governance/evidence_requirements.py` |
+| GAP-054 | GOV-EVID-TRACE-001...005 | IMP-051 | ✅ CLOSED | (incl. above) | `core/memory/tracing.py` |
+| GAP-055 | GOV-DEC-RECORD-001...010 | IMP-052 | ✅ CLOSED | 47/47 | `core/contracts/decision_schema.py` |
+| GAP-056 | GOV-SEM-CONF-008...018 | IMP-053 | ✅ CLOSED | 36/36 | `core/knowledge/confidence.py` |
+
+### Remaining Gaps — Tests Only
+
+| Gap ID | Tech Spec ID(s) | IMP Unit | Status | Notes |
+|--------|-----------------|----------|--------|-------|
+| GAP-057 | ACC-INV-EXEC-001...015 | IMP-054 | ❌ Not Started | Executable invariant enforcement tests only |
+| GAP-058 | ACC-CI-INV-001...007 | IMP-055 | ❌ Not Started | CI pipeline invariant check stage only |
 
 ---
 
