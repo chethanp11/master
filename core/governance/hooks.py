@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.config.schema import Settings
 from core.contracts.agent_schema import find_control_fields, validate_agent_output_payload
@@ -31,6 +31,47 @@ from core.governance.gates import validate_branch_conditions, validate_loop_cond
 from core.governance.security import SecurityRedactor
 from core.governance.budgeting import consume_budget
 from core.orchestrator.context import RunContext, StepContext
+
+
+# ==============================
+# Confidence Gate Decision (IMP-032)
+# ==============================
+@dataclass(frozen=True)
+class ConfidenceGateDecision:
+    """
+    Structured decision result from confidence gate evaluation.
+    
+    ORC-SEM-CONF-GATE-001...008: Confidence gate at semantic phase exit.
+    
+    Attributes:
+        proceed: True if confidence threshold passed, False otherwise
+        reason: Human-readable explanation of decision
+        effective_confidence: The evaluated confidence score
+        threshold: The threshold used for comparison
+        entity_threshold: Per-entity confidence threshold used
+        failing_entities: List of entities that failed threshold
+        bypass_allowed: Always False - gate cannot be bypassed (ORC-SEM-CONF-GATE-006)
+    """
+    proceed: bool
+    reason: str
+    effective_confidence: float
+    threshold: float
+    entity_threshold: float
+    failing_entities: List[str]
+    bypass_allowed: bool = False  # Always False - gate cannot be bypassed
+    
+    def to_trace_payload(self) -> Dict[str, Any]:
+        """Convert to trace event payload format."""
+        return {
+            "proceed": self.proceed,
+            "reason": self.reason,
+            "effective_confidence": self.effective_confidence,
+            "threshold": self.threshold,
+            "entity_threshold": self.entity_threshold,
+            "failing_entities": self.failing_entities,
+            "bypass_allowed": self.bypass_allowed,
+            "decision": "proceed" if self.proceed else "pause",
+        }
 
 _INJECTION_PATTERNS = (
     "ignore previous instructions",
@@ -47,33 +88,43 @@ def check_semantic_confidence(
     threshold: Optional[float] = None,
     entity_threshold: Optional[float] = None,
     settings: Optional[Settings] = None,
-) -> Tuple[bool, Optional[str]]:
+    bypass_allowed: bool = False,  # ORC-SEM-CONF-GATE-006: Always False - gate cannot be bypassed
+) -> ConfidenceGateDecision:
     """
     Check if semantic interpretation meets confidence threshold.
     
-    ORC-SEM-GATE: Governance hook for semantic confidence gating.
+    ORC-SEM-CONF-GATE-001...008: Governance gate for semantic confidence at phase exit.
     
     Args:
         envelope: The SemanticEnvelope to check
         threshold: Overall confidence threshold (default: 0.7 or from settings)
         entity_threshold: Per-entity confidence threshold (default: 0.5 or from settings)
         settings: Optional Settings to read thresholds from policies config
+        bypass_allowed: Always ignored - gate cannot be bypassed per spec
         
     Returns:
-        Tuple of (passed, reason):
-        - passed: True if confidence check passed
-        - reason: None if passed, otherwise explanation string
+        ConfidenceGateDecision with:
+        - proceed: True if confidence check passed
+        - reason: Explanation string
+        - effective_confidence: Evaluated confidence score
+        - threshold: Threshold used
+        - entity_threshold: Entity threshold used
+        - failing_entities: Entities that failed their threshold
+        - bypass_allowed: Always False
         
     Examples:
         >>> env = SemanticEnvelope(confidence=0.8, ...)
-        >>> passed, reason = check_semantic_confidence(env)
-        >>> assert passed is True
+        >>> decision = check_semantic_confidence(env)
+        >>> assert decision.proceed is True
         
         >>> env = SemanticEnvelope(confidence=0.5, ...)
-        >>> passed, reason = check_semantic_confidence(env, threshold=0.7)
-        >>> assert passed is False
-        >>> assert "Low confidence" in reason
+        >>> decision = check_semantic_confidence(env, threshold=0.7)
+        >>> assert decision.proceed is False
+        >>> assert "Low confidence" in decision.reason
     """
+    # ORC-SEM-CONF-GATE-006: bypass_allowed is always False regardless of parameter
+    _ = bypass_allowed  # Ignore parameter - gate cannot be bypassed
+    
     # Resolve thresholds from settings if provided
     if settings is not None:
         if threshold is None:
@@ -87,24 +138,64 @@ def check_semantic_confidence(
     if entity_threshold is None:
         entity_threshold = 0.5
     
+    failing_entities: List[str] = []
+    
     # Check 1: Overall envelope confidence
     if envelope.confidence < threshold:
-        return (
-            False,
-            f"Low confidence: {envelope.confidence:.2f} < {threshold:.2f}",
+        return ConfidenceGateDecision(
+            proceed=False,
+            reason=f"Low confidence: {envelope.confidence:.2f} < {threshold:.2f}",
+            effective_confidence=envelope.confidence,
+            threshold=threshold,
+            entity_threshold=entity_threshold,
+            failing_entities=[],
+            bypass_allowed=False,
         )
     
     # Check 2: Per-entity confidence
     for entity in envelope.entities:
         if entity.confidence < entity_threshold:
-            return (
-                False,
-                f"Low entity confidence: entity '{entity.name}' has confidence "
-                f"{entity.confidence:.2f} < {entity_threshold:.2f}",
-            )
+            failing_entities.append(entity.name)
+    
+    if failing_entities:
+        return ConfidenceGateDecision(
+            proceed=False,
+            reason=f"Low entity confidence: entities {failing_entities} below {entity_threshold:.2f}",
+            effective_confidence=envelope.confidence,
+            threshold=threshold,
+            entity_threshold=entity_threshold,
+            failing_entities=failing_entities,
+            bypass_allowed=False,
+        )
     
     # All checks passed
-    return (True, None)
+    return ConfidenceGateDecision(
+        proceed=True,
+        reason="Confidence threshold passed",
+        effective_confidence=envelope.confidence,
+        threshold=threshold,
+        entity_threshold=entity_threshold,
+        failing_entities=[],
+        bypass_allowed=False,
+    )
+
+
+# Legacy tuple-based function for backward compatibility
+def check_semantic_confidence_legacy(
+    envelope: SemanticEnvelope,
+    threshold: Optional[float] = None,
+    entity_threshold: Optional[float] = None,
+    settings: Optional[Settings] = None,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Legacy version returning tuple for backward compatibility.
+    
+    Deprecated: Use check_semantic_confidence() which returns ConfidenceGateDecision.
+    """
+    decision = check_semantic_confidence(envelope, threshold, entity_threshold, settings)
+    if decision.proceed:
+        return (True, None)
+    return (False, decision.reason)
 
 
 @dataclass(frozen=True)

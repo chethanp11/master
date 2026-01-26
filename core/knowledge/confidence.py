@@ -5,11 +5,15 @@
 Confidence propagation and threshold management.
 
 IMP-018 (INT-CONF-001..005): Confidence as runtime signal.
+IMP-053 (GOV-SEM-CONF-008..018): Enhanced confidence aggregation.
 
 This module provides:
 - `aggregate_confidence`: Weighted product of component confidences
+- `aggregate_multi_source`: Multi-strategy aggregation
+- `apply_confidence_decay`: Iteration-based decay
 - `ConfidenceResult`: Result of confidence evaluation
 - `ConfidenceThresholdAction`: Actions when confidence is below threshold
+- `ConfidenceAggregationStrategy`: Strategy enum for aggregation
 - Event payload generators for confidence-related trace events
 """
 
@@ -27,6 +31,28 @@ from core.contracts.reasoning_schema import (
     ProposeOutput,
     RecommendOutput,
 )
+
+
+# ==============================
+# Constants (IMP-053)
+# ==============================
+# Governance floor: minimum confidence that can be accepted
+CONFIDENCE_FLOOR = 0.5
+
+
+# ==============================
+# Aggregation Strategy (IMP-053)
+# ==============================
+class ConfidenceAggregationStrategy(str, Enum):
+    """
+    Strategies for aggregating multiple confidence values.
+    
+    GOV-SEM-CONF-008: Multiple aggregation strategies.
+    """
+    MIN = "min"  # Take minimum confidence
+    MAX = "max"  # Take maximum confidence
+    WEIGHTED = "weighted"  # Weighted average
+    PRODUCT = "product"  # Weighted geometric mean (product)
 
 
 # ==============================
@@ -151,6 +177,205 @@ def aggregate_confidence(
         component_count=n,
         weights_used=weights,
     )
+
+
+# ==============================
+# Multi-Source Aggregation (IMP-053)
+# ==============================
+def aggregate_multi_source(
+    confidences: List[float],
+    strategy: ConfidenceAggregationStrategy = ConfidenceAggregationStrategy.WEIGHTED,
+    weights: Optional[List[float]] = None,
+    emit_event_fn: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+) -> float:
+    """
+    Aggregate multiple confidence values using specified strategy.
+    
+    GOV-SEM-CONF-009: Multi-source aggregation with strategy selection.
+    
+    Args:
+        confidences: List of confidence values (0.0 to 1.0).
+        strategy: Aggregation strategy to use.
+        weights: Optional weights for WEIGHTED strategy.
+        emit_event_fn: Optional function to emit trace events.
+    
+    Returns:
+        Aggregated confidence value.
+    
+    Example:
+        >>> aggregate_multi_source([0.9, 0.8, 0.7], ConfidenceAggregationStrategy.MIN)
+        0.7
+    """
+    if not confidences:
+        return 1.0
+    
+    # Clamp all confidences to valid range
+    clamped = [max(0.0, min(1.0, c)) for c in confidences]
+    
+    if strategy == ConfidenceAggregationStrategy.MIN:
+        result = min(clamped)
+    elif strategy == ConfidenceAggregationStrategy.MAX:
+        result = max(clamped)
+    elif strategy == ConfidenceAggregationStrategy.WEIGHTED:
+        # Weighted average
+        n = len(clamped)
+        if weights is None:
+            weights = [1.0 / n] * n
+        else:
+            # Normalize weights
+            weight_sum = sum(weights)
+            if weight_sum > 0:
+                weights = [w / weight_sum for w in weights]
+            else:
+                weights = [1.0 / n] * n
+        
+        # Ensure weights match length
+        if len(weights) < n:
+            remaining = 1.0 - sum(weights)
+            extra = n - len(weights)
+            weights = list(weights) + [remaining / extra] * extra
+        elif len(weights) > n:
+            weights = weights[:n]
+            weight_sum = sum(weights)
+            if weight_sum > 0:
+                weights = [w / weight_sum for w in weights]
+        
+        result = sum(c * w for c, w in zip(clamped, weights))
+    elif strategy == ConfidenceAggregationStrategy.PRODUCT:
+        # Weighted geometric mean (existing aggregate_confidence behavior)
+        conf_result = aggregate_confidence(clamped, weights)
+        result = conf_result.confidence
+    else:
+        # Fallback to weighted average
+        result = sum(clamped) / len(clamped)
+    
+    result = round(result, 6)
+    
+    # Emit trace event
+    if emit_event_fn:
+        emit_event_fn(
+            "confidence_aggregated",
+            {
+                "strategy": strategy.value,
+                "source_count": len(confidences),
+                "result": result,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    
+    return result
+
+
+def apply_confidence_decay(
+    confidence: float,
+    iteration: int,
+    decay_rate: float = 0.05,
+) -> float:
+    """
+    Apply iteration-based decay to confidence.
+    
+    GOV-SEM-CONF-013: Confidence decay over iterations.
+    
+    Formula: C_decayed = C * (1 - decay_rate) ^ iteration
+    
+    Args:
+        confidence: Initial confidence value.
+        iteration: Current iteration number (0-indexed).
+        decay_rate: Per-iteration decay rate (default 0.05 = 5%).
+    
+    Returns:
+        Decayed confidence value, clamped to valid range.
+    
+    Example:
+        >>> apply_confidence_decay(0.9, 3, 0.05)
+        0.77
+    """
+    if iteration <= 0:
+        return max(0.0, min(1.0, confidence))
+    
+    if decay_rate <= 0:
+        return max(0.0, min(1.0, confidence))
+    
+    # Apply exponential decay
+    decay_factor = (1.0 - decay_rate) ** iteration
+    decayed = confidence * decay_factor
+    
+    return round(max(0.0, min(1.0, decayed)), 6)
+
+
+def validate_confidence_floor(
+    confidence: float,
+    floor: float = CONFIDENCE_FLOOR,
+) -> float:
+    """
+    Validate confidence against floor, clamp if below.
+    
+    GOV-SEM-CONF-015: Confidence floor enforcement.
+    
+    Args:
+        confidence: Confidence value to validate.
+        floor: Minimum acceptable confidence (default 0.5).
+    
+    Returns:
+        Confidence value clamped to floor if below.
+    
+    Example:
+        >>> validate_confidence_floor(0.3, 0.5)
+        0.5
+    """
+    return max(floor, min(1.0, confidence))
+
+
+def is_below_confidence_floor(
+    confidence: float,
+    floor: float = CONFIDENCE_FLOOR,
+) -> bool:
+    """
+    Check if confidence is below floor.
+    
+    GOV-SEM-CONF-016: Floor violation detection.
+    
+    Args:
+        confidence: Confidence value to check.
+        floor: Minimum acceptable confidence.
+    
+    Returns:
+        True if confidence is below floor.
+    """
+    return confidence < floor
+
+
+def get_confidence_aggregated_payload(
+    confidences: List[float],
+    strategy: ConfidenceAggregationStrategy,
+    result: float,
+    source_labels: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Get payload for confidence_aggregated trace event.
+    
+    GOV-SEM-CONF-018: Trace event for aggregation.
+    
+    Args:
+        confidences: Source confidence values.
+        strategy: Strategy used for aggregation.
+        result: Resulting aggregated confidence.
+        source_labels: Optional labels for sources.
+    
+    Returns:
+        Dict with event payload.
+    """
+    return {
+        "source_count": len(confidences),
+        "strategy": strategy.value,
+        "result": result,
+        "sources": [
+            {"label": source_labels[i] if source_labels and i < len(source_labels) else f"source_{i}",
+             "confidence": c}
+            for i, c in enumerate(confidences)
+        ],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def get_phase_confidence(
@@ -297,8 +522,8 @@ def get_confidence_below_threshold_payload(
 # ==============================
 # Threshold Resolution (IMP-019)
 # ==============================
-# Governance floor: minimum allowed threshold
-CONFIDENCE_THRESHOLD_FLOOR = 0.5
+# Governance floor: minimum allowed threshold (use CONFIDENCE_FLOOR from IMP-053)
+CONFIDENCE_THRESHOLD_FLOOR = CONFIDENCE_FLOOR
 
 
 def resolve_confidence_threshold(
@@ -329,7 +554,7 @@ def resolve_confidence_threshold(
             threshold = product_config["reasoning_confidence_threshold"]
     
     # Apply governance floor (INT-CONF-THR-005)
-    return max(threshold, CONFIDENCE_THRESHOLD_FLOOR)
+    return max(threshold, CONFIDENCE_FLOOR)
 
 
 def get_threshold_violated_payload(

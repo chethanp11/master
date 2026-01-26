@@ -1,8 +1,8 @@
 # ADE Output Business Requirements
 
 > **Document**: Business Requirements — Outputs  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Added BRD-OUT-018 (reasoning narrative), BRD-FAIL-001...003 (failure modes), BRD-FRI-006, BRD-ALIGN-004 |
 
 ## 1. Primary Output Requirements
 
@@ -40,6 +41,12 @@
 | BRD-OUT-015 | Packet MUST include evidence sections | INT-OUT-015 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-OUT-016 | Packet MUST include assumptions | INT-OUT-016 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-OUT-017 | Packet MUST include limitations | INT-OUT-017 | P0 | 2026-01-13 | V1.1 | — |
+
+### 1.3 Reasoning Narrative
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-OUT-018 | ADE MUST declare "Reasoning Narrative" as a required output artifact; every ADE run SHALL produce a coherent, human-readable reasoning narrative explaining why each analysis or decision was made | INT-OUT-018 | P0 | 2026-01-21 | V1.3 | — |
 
 ---
 
@@ -145,6 +152,25 @@
 | BRD-DAB-003 | Outputs MUST NOT trigger downstream actions without explicit approval | INT-DAB-005 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-DAB-004 | Confidence language MUST avoid implying autonomous decisions | INT-DAB-003 | P1 | 2026-01-13 | V1.1 | — |
 | BRD-DAB-005 | Recommendations MUST be presented as advisory | INT-DAB-001 | P0 | 2026-01-13 | V1.1 | — |
+
+---
+
+## 9. Failure Mode Requirements
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-FAIL-001 | ADE MUST fail fast when resolved intent is incompatible with the provided data structure; if the intent cannot be executed on the dataset (e.g., anomaly detection without numeric measures, trend analysis without time field), ADE SHALL halt and explain why | INT-FAIL-001 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-FAIL-002 | ADE MUST NOT proceed with analysis when required data dimensions are missing; execution SHALL be blocked with structured explanation of the gap | INT-FAIL-002 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-FAIL-003 | ADE MUST prohibit time-series or period-over-period analysis without explicit approval; ADE SHALL stop and request clarification before performing any temporal aggregation, trend analysis, or delta computation | INT-FAIL-003 | P0 | 2026-01-21 | V1.3 | — |
+
+---
+
+## 10. Framework Alignment Requirements
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-ALIGN-004 | ADE MUST separate reasoning and business conclusions from HTML or visualization rendering; reasoning artifacts SHALL be generated independently from presentation to ensure auditability and reuse | INT-ALIGN-004 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-FRI-006 | ADE MUST consume platform-provided semantic envelopes and validation outputs; ADE SHALL NOT re-implement semantic parsing, intent extraction, or validation logic inside product code | INT-FRI-006 | P0 | 2026-01-21 | V1.3 | — |
 
 ---
 

@@ -115,6 +115,58 @@ class TraceEventType(str, Enum):
     # Confidence threshold events (IMP-019: INT-CONF-THR-001..005)
     CONFIDENCE_THRESHOLD_VIOLATED = "confidence_threshold_violated"
     
+    # Confidence gate events (IMP-032: ORC-SEM-CONF-GATE-001..008)
+    CONFIDENCE_GATE_EVALUATED = "confidence_gate_evaluated"
+    
+    # Sufficiency gate events (IMP-035: ORC-SUFF-GATE-001..008)
+    SUFFICIENCY_GATE_EVALUATED = "sufficiency_gate_evaluated"
+    SUFFICIENCY_GATE_BLOCKED = "sufficiency_gate_blocked"
+    
+    # Semantic gate events (IMP-049: GOV-GATE-SEM-001..012)
+    SEMANTIC_GATE_EVALUATED = "semantic_gate_evaluated"
+    SEMANTIC_GATE_REJECTED = "semantic_gate_rejected"
+    
+    # Gate rejection artifact events (IMP-050: GOV-GATE-REJ-001..010)
+    GATE_REJECTION_ARTIFACT_CREATED = "gate_rejection_artifact_created"
+    
+    # HITL binding events (IMP-043: GOV-HITL-BIND-001..007)
+    HITL_BINDING_MODIFICATION_BLOCKED = "hitl_binding_modification_blocked"
+    HITL_ESCALATION_TRIGGERED = "hitl_escalation_triggered"
+    
+    # PII detection events (IMP-044: GOV-SEC-PII-001..005)
+    PII_DETECTED = "pii_detected"
+    
+    # Cloud credential events (IMP-045: GOV-SEC-CRED-001..005)
+    CLOUD_CREDENTIAL_REDACTED = "cloud_credential_redacted"
+    
+    # Auto-redaction events (IMP-046: GOV-SEC-AUTO-001..005)
+    AUTO_REDACTION_APPLIED = "auto_redaction_applied"
+    
+    # Policy enforcement events (IMP-047: GOV-POL-NOBYPASS-001..005, GOV-POL-BLOCK-001..005)
+    POLICY_BYPASS_BLOCKED = "policy_bypass_blocked"
+    POLICY_VIOLATION_BLOCKED = "policy_violation_blocked"
+    
+    # Hard budget events (IMP-048: GOV-BUD-HARD-001..005)
+    BUDGET_LIMIT_REACHED = "budget_limit_reached"
+    BUDGET_OPERATION_REJECTED = "budget_operation_rejected"
+    
+    # Reasoning contract events (IMP-034: ORC-REASON-CONTRACT-001..011)
+    CRITIQUE_PHASE_WAIVED = "critique_phase_waived"
+    REASONING_CONTRACT_VALIDATED = "reasoning_contract_validated"
+    
+    # Discovery phase events (IMP-039: INT-DISC-055..073)
+    DISCOVERY_PHASE_STARTED = "discovery_phase_started"
+    DISCOVERY_PHASE_COMPLETED = "discovery_phase_completed"
+    SELECTION_PHASE_STARTED = "selection_phase_started"
+    SELECTION_PHASE_COMPLETED = "selection_phase_completed"
+    
+    # Evidence validation events (IMP-051: GOV-EVID-001..005)
+    EVIDENCE_VALIDATION_COMPLETED = "evidence_validation_completed"
+    MISSING_EVIDENCE_DETECTED = "missing_evidence_detected"
+    
+    # Decision record events (IMP-052: GOV-DEC-RECORD-001..010)
+    DECISION_RECORDED = "decision_recorded"
+    
     # ContextPack freeze events (IMP-021: INT-CP-FREEZE-LC-001..003)
     CONTEXT_PACK_FROZEN = "context_pack_frozen"
     

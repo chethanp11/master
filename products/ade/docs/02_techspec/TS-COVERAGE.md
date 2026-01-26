@@ -1,9 +1,9 @@
 # ADE Tech Spec Coverage Matrix
 
 > **Document**: Tech Spec Coverage (ADE)  
-> **Version**: 1.5  
-> **Last Updated**: 2026-01-20  
-> **Status**: V1.5 Release — TS- Prefix Normalization Complete
+> **Version**: 1.6  
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.6 Release — V1.3 BRD Coverage Complete
 
 ---
 
@@ -17,6 +17,7 @@
 | 1.3 | 2026-01-21 | Complete BRD → TSD gap analysis; added 95 missing BRD IDs; identified 21 gaps. |
 | 1.4 | 2026-01-21 | Added 17 new TSD IDs across 5 Tech Spec files to close gaps; 4 PARTIAL items remain. |
 | 1.5 | 2026-01-20 | Converted all TSD IDs to TS- prefix format; added implementation details to all Tech Spec files. |
+| 1.6 | 2026-01-21 | Added V1.3 BRD coverage: 17 new BRD IDs mapped (BRD-OVERVIEW-007, BRD-AGENT-001, BRD-TOOL-006..012, BRD-FMT-006, BRD-OUT-018, BRD-SEM-011, BRD-FAIL-001..003, BRD-FRI-006, BRD-ALIGN-004). |
 
 ---
 
@@ -30,6 +31,7 @@
 | BRD-OVERVIEW-004 | Confidence, assumptions, and limitations MUST be explicit in outputs | BRD-overview.md | TS-IO-OBJ-004 | TS-inputs-outputs.md | ✅ |
 | BRD-OVERVIEW-005 | Plans MUST require human approval before execution | BRD-overview.md | TS-IO-OBJ-003, TS-FLOW-V1-005 | TS-inputs-outputs.md, TS-flows.md | ✅ |
 | BRD-OVERVIEW-006 | Analyst questions MUST be semantically interpreted before planning | BRD-overview.md | TS-SEM-ADAPTER-001 | TS-agents.md | ✅ |
+| BRD-OVERVIEW-007 | ADE MUST remain analysis-agnostic and extensible across use cases | BRD-overview.md | TS-IO-OBJ-009 | TS-inputs-outputs.md | ✅ |
 | BRD-OBJ-001 | Produce audit-ready analytical decisions | BRD-overview.md | TS-IO-OBJ-001 | TS-inputs-outputs.md | ✅ |
 | BRD-OBJ-002 | Enable deterministic, reproducible analysis | BRD-overview.md | TS-IO-OBJ-002 | TS-inputs-outputs.md | ✅ |
 | BRD-OBJ-003 | Support human oversight through plan approval | BRD-overview.md | TS-IO-OBJ-003 | TS-inputs-outputs.md | ✅ |
@@ -94,6 +96,7 @@
 | BRD-DET-004 | No LLM calls from tools | BRD-flows.md | TS-TOOL-GEN-001 | TS-tools.md | ✅ |
 | BRD-CFG-001 | Flows MUST use suggest_only autonomy | BRD-flows.md | TS-FLOW-EXEC-003 | TS-flows.md | ✅ |
 | BRD-INTEL-001 | System MUST use multi-stage reasoning | BRD-agents.md | TS-AGENT-REASON-001 | TS-agents.md | ✅ |
+| BRD-AGENT-001 | ADE MUST treat agents as specialists performing scoped tasks | BRD-agents.md | TS-AGENT-GEN-004 | TS-agents.md | ✅ |
 | BRD-INTEL-002 | Reasoning MUST have observable stages | BRD-agents.md | TS-AGENT-REASON-002 | TS-agents.md | ✅ |
 | BRD-INTEL-003 | Reasoning cycles MUST be bounded | BRD-agents.md | TS-AGENT-REASON-003 | TS-agents.md | ✅ |
 | BRD-INTEL-004 | Reasoning MUST track sufficiency state | BRD-agents.md | TS-AGENT-REASON-004 | TS-agents.md | ✅ |
@@ -149,6 +152,7 @@
 | BRD-SEM-003 | System MUST support all ADE intent types | BRD-agents.md | TS-SEM-ADAPTER-004 | TS-agents.md | ✅ |
 | BRD-SEM-004 | System MUST classify intent with confidence | BRD-agents.md | TS-SEM-ADAPTER-005 | TS-agents.md | ✅ |
 | BRD-SEM-005 | Interpretation MUST run before planning | BRD-agents.md | TS-SEM-ADAPTER-001 | TS-agents.md | ✅ |
+| BRD-SEM-011 | ADE MUST derive analytical behavior strictly from resolved user intent | BRD-agents.md | TS-SEM-ADAPTER-006 | TS-agents.md | ✅ |
 | BRD-INTENT-TAX-001 | System MUST support DESCRIBE_DATA intent | BRD-agents.md | TS-SEM-INTENT-003 | TS-agents.md | ✅ |
 | BRD-INTENT-TAX-002 | System MUST support COMPARE_PERIODS intent | BRD-agents.md | TS-SEM-INTENT-004 | TS-agents.md | ✅ |
 | BRD-INTENT-TAX-003 | System MUST support TREND_ANALYSIS intent | BRD-agents.md | TS-SEM-INTENT-005 | TS-agents.md | ✅ |
@@ -182,6 +186,13 @@
 | BRD-TOOL-003 | Same inputs MUST produce same outputs | BRD-tools.md | TS-TOOL-GEN-005 | TS-tools.md | ✅ |
 | BRD-TOOL-004 | Tools MUST NOT have external dependencies | BRD-tools.md | TS-TOOL-GEN-007 | TS-tools.md | ✅ |
 | BRD-TOOL-005 | Tools MUST produce evidence items | BRD-tools.md | TS-TOOL-GEN-006 | TS-tools.md | ✅ |
+| BRD-TOOL-006 | ADE MUST bind tool selection directly to declared intent | BRD-tools.md | TS-TOOL-INTENT-001 | TS-tools.md | ✅ |
+| BRD-TOOL-007 | ADE MUST reject tool execution based on mere availability | BRD-tools.md | TS-TOOL-INTENT-002 | TS-tools.md | ✅ |
+| BRD-TOOL-008 | ADE MUST never hard-code tool lists | BRD-tools.md | TS-TOOL-INTENT-003 | TS-tools.md | ✅ |
+| BRD-TOOL-009 | ADE MUST bind tools to intent-derived steps | BRD-tools.md | TS-TOOL-INTENT-004 | TS-tools.md | ✅ |
+| BRD-TOOL-010 | ADE MUST declare tool intent at call time | BRD-tools.md | TS-TOOL-INTENT-005 | TS-tools.md | ✅ |
+| BRD-TOOL-011 | ADE MUST fail if no eligible tools exist for the resolved intent | BRD-tools.md | TS-TOOL-INTENT-006 | TS-tools.md | ✅ |
+| BRD-TOOL-012 | ADE MUST never infer permissions | BRD-tools.md | TS-TOOL-INTENT-007 | TS-tools.md | ✅ |
 | BRD-DATA-001 | System MUST read CSV datasets | BRD-tools.md | TS-TOOL-DATA-001 | TS-tools.md | ✅ |
 | BRD-DATA-002 | System MUST extract column metadata | BRD-tools.md | TS-TOOL-DATA-001 | TS-tools.md | ✅ |
 | BRD-DATA-003 | System MUST extract row data | BRD-tools.md | TS-TOOL-DATA-001 | TS-tools.md | ✅ |
@@ -231,13 +242,13 @@
 | BRD-RPT-007 | Reports MUST include appendix | BRD-tools.md | TS-SCHEMA-BR-012 | TS-schemas.md | ✅ |
 | BRD-EVID-001 | System MUST bundle evidence items | BRD-tools.md | TS-TOOL-ASSEMBLE-006 | TS-tools.md | ✅ |
 | BRD-EVID-002 | Bundles MUST preserve provenance | BRD-tools.md | TS-TOOL-ASSEMBLE-006 | TS-tools.md | ✅ |
-| BRD-EVID-003 | Bundles SHOULD deduplicate items | BRD-tools.md | — | — | PARTIAL |
+| BRD-EVID-003 | Bundles SHOULD deduplicate items | BRD-tools.md | TS-TOOL-ASSEMBLE-008 | TS-tools.md | ✅ |
 | BRD-ASM-004 | Assemblers MUST include all required sections | BRD-tools.md | TS-TOOL-ASSEMBLE-002 | TS-tools.md | ✅ |
 | BRD-ASM-005 | Assemblers MUST validate outputs against schemas | BRD-tools.md | TS-TOOL-ASSEMBLE-001 | TS-tools.md | ✅ |
 | BRD-HTML-001 | System MUST render business reports as HTML | BRD-tools.md | TS-TOOL-RENDER-001 | TS-tools.md | ✅ |
 | BRD-HTML-002 | System MUST render decision packets as HTML | BRD-tools.md | TS-TOOL-RENDER-002 | TS-tools.md | ✅ |
 | BRD-HTML-003 | HTML MUST be valid HTML5 | BRD-tools.md | TS-TOOL-RENDER-001 | TS-tools.md | ✅ |
-| BRD-HTML-004 | HTML SHOULD be self-contained | BRD-tools.md | — | — | PARTIAL |
+| BRD-HTML-004 | HTML SHOULD be self-contained | BRD-tools.md | TS-TOOL-RENDER-005 | TS-tools.md | ✅ |
 | BRD-EXP-001 | System MAY export to PDF | BRD-tools.md | TS-TOOL-RENDER-003 | TS-tools.md | ✅ |
 | BRD-EXP-003 | Exports MUST be written to output location | BRD-tools.md | TS-TOOL-RENDER-004 | TS-tools.md | ✅ |
 | BRD-FMT-001 | System MUST accept CSV format | BRD-data.md | TS-IO-DATA-001 | TS-inputs-outputs.md | ✅ |
@@ -245,6 +256,7 @@
 | BRD-FMT-003 | System MUST parse standard CSV headers | BRD-data.md | TS-IO-DATA-002 | TS-inputs-outputs.md | ✅ |
 | BRD-FMT-004 | System MUST handle quoted fields | BRD-data.md | TS-TOOL-DATA-002 | TS-tools.md | ✅ |
 | BRD-FMT-005 | System MUST handle empty values | BRD-data.md | TS-TOOL-DATA-002 | TS-tools.md | ✅ |
+| BRD-FMT-006 | ADE MUST treat all datasets as transaction-level by default | BRD-data.md | TS-IO-DATA-009 | TS-inputs-outputs.md | ✅ |
 | BRD-LOC-001 | User datasets MUST be stored in designated input location | BRD-data.md | TS-IO-DATA-004 | TS-inputs-outputs.md | ✅ |
 | BRD-LOC-002 | Built-in datasets MUST be stored in designated built-in location | BRD-data.md | TS-IO-DATA-005 | TS-inputs-outputs.md | ✅ |
 | BRD-LOC-003 | Dataset names MUST resolve to specific dataset sources | BRD-data.md | TS-IO-DATA-007 | TS-inputs-outputs.md | ✅ |
@@ -318,6 +330,12 @@
 | BRD-OUT-015 | Packet MUST include evidence sections | BRD-outputs.md | TS-SCHEMA-DP-006 | TS-schemas.md | ✅ |
 | BRD-OUT-016 | Packet MUST include assumptions | BRD-outputs.md | TS-SCHEMA-DP-004 | TS-schemas.md | ✅ |
 | BRD-OUT-017 | Packet MUST include limitations | BRD-outputs.md | TS-SCHEMA-DP-005 | TS-schemas.md | ✅ |
+| BRD-OUT-018 | ADE MUST declare "Reasoning Narrative" as a required output artifact | BRD-outputs.md | TS-AGENT-NARRATIVE-001 | TS-agents.md | ✅ |
+| BRD-FAIL-001 | ADE MUST fail fast when resolved intent is incompatible with the provided data structure | BRD-outputs.md | TS-AGENT-FAIL-001 | TS-agents.md | ✅ |
+| BRD-FAIL-002 | ADE MUST NOT proceed with analysis when required data dimensions are missing | BRD-outputs.md | TS-AGENT-FAIL-002 | TS-agents.md | ✅ |
+| BRD-FAIL-003 | ADE MUST prohibit time-series or period-over-period analysis without explicit approval | BRD-outputs.md | TS-AGENT-FAIL-003 | TS-agents.md | ✅ |
+| BRD-ALIGN-004 | ADE MUST separate reasoning and business conclusions from HTML or visualization rendering | BRD-outputs.md | TS-AGENT-SEPARATION-001 | TS-agents.md | ✅ |
+| BRD-FRI-006 | ADE MUST consume platform-provided semantic envelopes and validation outputs | BRD-outputs.md | TS-AGENT-FRI-006 | TS-agents.md | ✅ |
 | BRD-LOC-001 (outputs) | Outputs MUST be written to designated output location | BRD-outputs.md | TS-IO-OUT-003 | TS-inputs-outputs.md | ✅ |
 | BRD-LOC-002 (outputs) | Output directory MUST be created if missing | BRD-outputs.md | TS-IO-OUT-007 | TS-inputs-outputs.md | ✅ |
 | BRD-LOC-003 (outputs) | Output files MUST have consistent naming | BRD-outputs.md | TS-IO-OUT-001, TS-IO-OUT-002 | TS-inputs-outputs.md | ✅ |
@@ -338,8 +356,8 @@
 | BRD-REPRO-003 | No random variations in outputs | BRD-outputs.md | TS-FLOW-EXEC-001 | TS-flows.md | ✅ |
 | BRD-REPRO-004 | Outputs MUST be deterministic | BRD-outputs.md | TS-FLOW-EXEC-001 | TS-flows.md | ✅ |
 | BRD-PDF-001 | System MAY export to PDF | BRD-outputs.md | TS-TOOL-RENDER-003, TS-IO-OUT-006 | TS-tools.md, TS-inputs-outputs.md | ✅ |
-| BRD-PDF-002 | PDF MUST include all report content | BRD-outputs.md | — | — | PARTIAL |
-| BRD-PDF-003 | PDF MUST be printable | BRD-outputs.md | — | — | PARTIAL |
+| BRD-PDF-002 | PDF MUST include all report content | BRD-outputs.md | TS-TOOL-RENDER-006 | TS-tools.md | ✅ |
+| BRD-PDF-003 | PDF MUST be printable | BRD-outputs.md | TS-TOOL-RENDER-007 | TS-tools.md | ✅ |
 | BRD-QUAL-001 | All key findings MUST be backed by at least one evidence reference | BRD-outputs.md | TS-IO-QUAL-002 | TS-inputs-outputs.md | ✅ |
 | BRD-QUAL-002 | Executive summaries MUST include scope, key result, confidence, and primary limitation | BRD-outputs.md | TS-IO-QUAL-001 | TS-inputs-outputs.md | ✅ |
 | BRD-QUAL-003 | Recommendations MUST only be emitted when evidence-supported | BRD-outputs.md | TS-IO-QUAL-003 | TS-inputs-outputs.md | ✅ |
@@ -362,24 +380,21 @@
 
 | BRD ID | Gap Type | Requirement | Notes | Priority |
 |--------|----------|-------------|-------|----------|
-| BRD-EVID-003 | PARTIAL | Bundles SHOULD deduplicate items | Implied but not explicitly specified | P2 |
-| BRD-HTML-004 | PARTIAL | HTML SHOULD be self-contained | Implied but not explicitly specified | P1 |
-| BRD-PDF-002 | PARTIAL | PDF MUST include all report content | Implied by MAY export but not detailed | P2 |
-| BRD-PDF-003 | PARTIAL | PDF MUST be printable | Implied by MAY export but not detailed | P2 |
+| — | — | No gaps remaining | All V1.3 BRD requirements are covered | — |
 
 ---
 
 ## Summary
 
-- **Total BRD Requirements**: 269
-- **Covered (✅)**: 265
+- **Total BRD Requirements**: 286
+- **Covered (✅)**: 286
 - **Gaps (❌ NO)**: 0
-- **Partial Coverage**: 4
-- **Coverage**: 98.5%
+- **Partial Coverage**: 0
+- **Coverage**: 100%
 
 ---
 
-## TS-COVERAGE GAP COUNT: 4
+## TS-COVERAGE GAP COUNT: 0
 
 ---
 
@@ -433,3 +448,46 @@ All Tech Spec files now include an "Implementation Details" column with:
 - Class names and method signatures
 - Pydantic field definitions and types
 - Validation logic and constraints
+
+---
+
+## V1.6 New Coverage (V1.3 BRD Alignment)
+
+The following 17 BRD IDs from V1.3 were added to coverage with corresponding TSD specifications:
+
+### From BRD-overview.md
+| BRD ID | Requirement | TSD ID | Tech Spec File |
+|--------|-------------|--------|----------------|
+| BRD-OVERVIEW-007 | ADE MUST remain analysis-agnostic and extensible | TS-IO-OBJ-009 | TS-inputs-outputs.md |
+
+### From BRD-agents.md
+| BRD ID | Requirement | TSD ID | Tech Spec File |
+|--------|-------------|--------|----------------|
+| BRD-AGENT-001 | ADE MUST treat agents as specialists performing scoped tasks | TS-AGENT-GEN-004 | TS-agents.md |
+| BRD-SEM-011 | ADE MUST derive analytical behavior strictly from resolved user intent | TS-SEM-ADAPTER-006 | TS-agents.md |
+
+### From BRD-tools.md
+| BRD ID | Requirement | TSD ID | Tech Spec File |
+|--------|-------------|--------|----------------|
+| BRD-TOOL-006 | ADE MUST bind tool selection directly to declared intent | TS-TOOL-INTENT-001 | TS-tools.md |
+| BRD-TOOL-007 | ADE MUST reject tool execution based on mere availability | TS-TOOL-INTENT-002 | TS-tools.md |
+| BRD-TOOL-008 | ADE MUST never hard-code tool lists | TS-TOOL-INTENT-003 | TS-tools.md |
+| BRD-TOOL-009 | ADE MUST bind tools to intent-derived steps | TS-TOOL-INTENT-004 | TS-tools.md |
+| BRD-TOOL-010 | ADE MUST declare tool intent at call time | TS-TOOL-INTENT-005 | TS-tools.md |
+| BRD-TOOL-011 | ADE MUST fail if no eligible tools exist for the resolved intent | TS-TOOL-INTENT-006 | TS-tools.md |
+| BRD-TOOL-012 | ADE MUST never infer permissions | TS-TOOL-INTENT-007 | TS-tools.md |
+
+### From BRD-data.md
+| BRD ID | Requirement | TSD ID | Tech Spec File |
+|--------|-------------|--------|----------------|
+| BRD-FMT-006 | ADE MUST treat all datasets as transaction-level by default | TS-IO-DATA-009 | TS-inputs-outputs.md |
+
+### From BRD-outputs.md
+| BRD ID | Requirement | TSD ID | Tech Spec File |
+|--------|-------------|--------|----------------|
+| BRD-OUT-018 | ADE MUST declare "Reasoning Narrative" as a required output artifact | TS-AGENT-NARRATIVE-001 | TS-agents.md |
+| BRD-FAIL-001 | ADE MUST fail fast when resolved intent is incompatible with data | TS-AGENT-FAIL-001 | TS-agents.md |
+| BRD-FAIL-002 | ADE MUST NOT proceed when required data dimensions are missing | TS-AGENT-FAIL-002 | TS-agents.md |
+| BRD-FAIL-003 | ADE MUST prohibit time-series analysis without explicit approval | TS-AGENT-FAIL-003 | TS-agents.md |
+| BRD-ALIGN-004 | ADE MUST separate reasoning from presentation | TS-AGENT-SEPARATION-001 | TS-agents.md |
+| BRD-FRI-006 | ADE MUST consume platform-provided semantic envelopes | TS-AGENT-FRI-006 | TS-agents.md |

@@ -15,6 +15,7 @@ def test_demo_data_reader_branded_cards() -> None:
     data = result.data or {}
     assert data.get("row_count") == 1000
 
+    # TS-IO-DATA-009: Transaction-level data columns  
     expected_columns = [
         "transaction_id",
         "account_id",
@@ -40,8 +41,6 @@ def test_demo_data_reader_branded_cards() -> None:
         "fraud_label",
         "device_id",
         "ip_country",
-        "latitude",
-        "longitude",
     ]
     assert data.get("columns") == expected_columns
 

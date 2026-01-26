@@ -1,8 +1,8 @@
 # ADE Data Business Requirements
 
 > **Document**: Business Requirements — Data  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Added BRD-FMT-006 (transaction-level default) |
 
 ## 1. Dataset Requirements
 
@@ -24,6 +25,7 @@
 | BRD-FMT-003 | System MUST parse standard CSV headers | INT-FMT-003 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-FMT-004 | System MUST handle quoted fields | INT-FMT-004 | P1 | 2026-01-13 | V1.1 | — |
 | BRD-FMT-005 | System MUST handle empty values | INT-FMT-005 | P1 | 2026-01-13 | V1.1 | — |
+| BRD-FMT-006 | ADE MUST treat all datasets as transaction-level by default; row-level analysis SHALL be assumed unless a valid time field and aggregation grain are explicitly confirmed through semantic interpretation | INT-FMT-006 | P0 | 2026-01-21 | V1.3 | — |
 
 ### 1.2 Location Requirements
 

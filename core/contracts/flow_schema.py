@@ -15,6 +15,8 @@ This module consolidates:
 Intended usage:
 - flow_loader parses YAML/JSON into FlowDef
 - orchestrator executes StepDef list/graph
+
+IMP-034: Added ReasoningContract to FlowDef.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from typing_extensions import Annotated, Literal
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, model_validator
 
 from core.contracts.user_input_schema import UserInputRequest
+from core.contracts.reasoning_schema import ReasoningContract
 
 
 # ==============================
@@ -352,6 +355,8 @@ class FlowDef(BaseModel):
     Declarative flow definition.
 
     The orchestrator treats this as the authoritative spec.
+    
+    IMP-034: Added reasoning_contract field for reasoning phase enforcement.
     """
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -369,6 +374,12 @@ class FlowDef(BaseModel):
 
     steps: List[StepDef] = Field(..., min_length=1, description="Ordered list or graph definition of steps.")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata for UI/runtime.")
+    
+    # IMP-034: Reasoning contract with mandatory phases and critique waiver
+    reasoning_contract: Optional[ReasoningContract] = Field(
+        default=None,
+        description="Reasoning contract defining mandatory phases and critique waiver. If None, default contract applies.",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Stable serialization wrapper."""
@@ -405,4 +416,6 @@ __all__ = [
     "ToolBatchItem",
     "ToolBatchStepDef",
     "FlowDef",
+    # Reasoning contract (IMP-034)
+    "ReasoningContract",
 ]

@@ -2,8 +2,8 @@
 
 > **Document**: Technical Specification — Tools  
 > **Prefix**: TS-TOOL-*  
-> **Version**: 1.4  
-> **Last Updated**: 2026-01-20
+> **Version**: 1.5  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -16,6 +16,7 @@
 | 1.2 | 2026-01-20 | Normalized ADE techspec tables to canonical TSD format; removed non-derivable sections; cleaned BRD mappings. |
 | 1.3 | 2026-01-21 | Added tool dependency and anomaly ranking requirements per gap analysis. |
 | 1.4 | 2026-01-20 | Converted all TSD IDs to TS- prefix; added implementation-level technical details (file paths, classes, methods, types). |
+| 1.5 | 2026-01-21 | Added V1.3 BRD coverage: TS-TOOL-INTENT-001..007 (intent-bound tool selection per BRD-TOOL-006..012). |
 
 ---
 
@@ -30,6 +31,20 @@
 | TS-TOOL-GEN-005 | Tools MUST produce deterministic outputs for identical inputs; `f(x) == f(x)` for all tool functions `f`. | Enforcement: No `random` module; No `datetime.now()` in computation logic; Determinism test suite | MUST | BRD-TOOL-002, BRD-TOOL-003 | — |
 | TS-TOOL-GEN-006 | Tools MUST produce `evidence_items: List[EvidenceItem]` in output for traceability. | Schema: `products/ade/schemas/evidence.py::EvidenceItem`; Field in output: `output.evidence_items: List[EvidenceItem]` | MUST | BRD-TOOL-005 | — |
 | TS-TOOL-GEN-007 | Tools MUST NOT have external network dependencies; all dependencies must be local Python packages version-pinned in `requirements.txt`. | Enforcement: No `requests`, `urllib`, `httpx` imports; No socket connections; CI check: `grep -r "import requests" products/ade/tools/` | MUST | BRD-TOOL-004 | — |
+
+---
+
+## 1.1 Intent-Bound Tool Selection (TS-TOOL-INTENT)
+
+| TSD ID | Technical Specification | Implementation Details | Level | BRD Mapping | Notes |
+|--------|------------------------|------------------------|-------|-------------|-------|
+| TS-TOOL-INTENT-001 | ADE MUST bind tool selection directly to declared intent; analytical tools (anomaly detection, aggregation, visualization) SHALL only be invoked if explicitly justified by the resolved intent and constraints. | File: `products/ade/tools/tool_selector.py`; Method: `select_tools(intent: SemanticEnvelope) -> List[ToolSpec]`; Logic: each tool in result must map to `intent.intent_type` or `intent.constraints`; Validation: `assert all(t.justification in intent.dimensions for t in selected_tools)` | MUST | BRD-TOOL-006 | Intent-bound selection |
+| TS-TOOL-INTENT-002 | ADE MUST reject tool execution based on mere availability; tools SHALL NOT be selected simply because they exist; every tool invocation SHALL map to an intent dimension and be auditable. | Method: `products/ade/tools/tool_selector.py::_validate_tool_justification(tool: ToolSpec, intent: SemanticEnvelope) -> bool`; Enforcement: No tool selected without `justification: str` field referencing intent dimension; Audit: `ToolInvocationRecord.intent_dimension: str` logged | MUST | BRD-TOOL-007 | No availability-based selection |
+| TS-TOOL-INTENT-003 | ADE MUST never hard-code tool lists; ADE SHALL request eligible tools from the platform per run and use only what is surfaced. | Method: `products/ade/tools/tool_discovery.py::discover_eligible_tools(intent: SemanticEnvelope) -> List[str]`; Source: `core.tools.registry.get_available_tools(capabilities=intent.required_capabilities)`; No `HARDCODED_TOOLS` constant allowed | MUST | BRD-TOOL-008 | Dynamic tool discovery |
+| TS-TOOL-INTENT-004 | ADE MUST bind tools to intent-derived steps; tools SHALL be invoked because intent demands them, not because they exist or are convenient. | Flow YAML: Each tool step includes `intent_justification: str`; Validation: `core.orchestrator.step_executor.validate_intent_binding(step, intent)` returns error if justification missing or invalid | MUST | BRD-TOOL-009 | Intent-derived binding |
+| TS-TOOL-INTENT-005 | ADE MUST declare tool intent at call time; each tool invocation SHALL specify "why this tool" and "what intent dimension it satisfies". | Schema: `ToolInvocation(tool_name: str, inputs: Dict, intent_dimension: str, justification: str)`; Logged to: `core.memory.tracing.emit_tool_invocation()`; Audit: all fields required | MUST | BRD-TOOL-010 | Call-time intent declaration |
+| TS-TOOL-INTENT-006 | ADE MUST fail if no eligible tools exist for the resolved intent; if intent cannot be satisfied with available tools, ADE SHALL stop, explain, and ask user. | Method: `products/ade/tools/tool_selector.py::select_tools(intent) -> List[ToolSpec] | TerminalOutcome`; Logic: `if len(eligible_tools) == 0: return TerminalOutcome.ASK_USER(explanation="No tools available to satisfy intent: {intent.intent_type}")` | MUST | BRD-TOOL-011 | Fail on missing tools |
+| TS-TOOL-INTENT-007 | ADE MUST never infer permissions; if a tool is not discoverable from the platform, it is not usable; ADE SHALL NOT use fallback logic that bypasses platform discovery. | Enforcement: No `try/except` blocks that fall back to default tools; No `DEFAULT_TOOLS` constant; Only tools from `discover_eligible_tools()` result | MUST | BRD-TOOL-012 | No permission inference |
 
 ---
 
@@ -82,6 +97,7 @@
 | TS-TOOL-ASSEMBLE-005 | `assemble_business_report` MUST output valid `BusinessReport` that passes `BusinessReport.model_validate()`. | File: `products/ade/tools/assemble_report.py`; Function: `def assemble_business_report(...) -> BusinessReport`; Validation: `BusinessReport.model_validate(output)` | MUST | BRD-RPT-001, BRD-ASM-005 | — |
 | TS-TOOL-ASSEMBLE-006 | `assemble_evidence_bundle` MUST aggregate `EvidenceItem` objects from multiple tool outputs with preserved `provenance: str` field. | File: `products/ade/tools/assemble_evidence.py`; Function: `def assemble_evidence_bundle(items: List[EvidenceItem]) -> EvidenceBundle`; Logic: `bundle = EvidenceBundle(items=[...], provenance_map={item.id: item.provenance for item in items})` | MUST | BRD-EVID-001, BRD-EVID-002 | — |
 | TS-TOOL-ASSEMBLE-007 | `assemble_insight_card` SHOULD create `InsightCard` with fields: `headline: str`, `value: str`, `context: str`, `evidence_refs: List[Dict]`. | File: `products/ade/tools/assemble_insight.py`; Function: `def assemble_insight_card(finding: Dict, evidence: List[EvidenceItem]) -> InsightCard` | SHOULD | BRD-RPT-003 | — |
+| TS-TOOL-ASSEMBLE-008 | `assemble_evidence_bundle` SHOULD deduplicate evidence items by `(dataset_id, columns, values)` tuple to avoid redundancy in outputs. | Method: `assemble_evidence_bundle._deduplicate(items: List[EvidenceItem]) -> List[EvidenceItem]`; Logic: `seen = set(); return [i for i in items if (key := (i.dataset_id, tuple(i.columns), str(i.values))) not in seen and not seen.add(key)]` | SHOULD | BRD-EVID-003 | Deduplication |
 
 ---
 
@@ -93,6 +109,9 @@
 | TS-TOOL-RENDER-002 | `render_decision_packet_html` MUST produce valid HTML5 with all packet sections and visible evidence references. | File: `products/ade/tools/render_packet.py`; Function: `def render_decision_packet_html(packet: DecisionPacket) -> str`; Template: `products/ade/templates/decision_packet.html.jinja2` | MUST | BRD-HTML-002, BRD-HTML-003 | — |
 | TS-TOOL-RENDER-003 | `export_pdf` MAY produce multiple output formats: `ade.pdf`, `ade.html`, `ade_stub.json` to `staging/output/`. | File: `products/ade/tools/export_pdf.py`; Function: `def export_pdf(report: BusinessReport, output_dir: str) -> ExportResult`; Outputs: list of written file paths | MAY | BRD-EXP-001 | — |
 | TS-TOOL-RENDER-004 | `export_pdf` MUST be the only tool with `side_effect=True`; writes files to `products/ade/staging/output/`. | Field: `TOOL_DESCRIPTORS["export_pdf"].side_effect = True`; Output path: `Path("products/ade/staging/output/")` | MUST | BRD-EXP-003 | — |
+| TS-TOOL-RENDER-005 | HTML outputs SHOULD be self-contained with embedded CSS and JavaScript; no external stylesheet or script references. | Template: All CSS inlined via `<style>` tags; All JS inlined via `<script>` tags; Validation: `assert "http://" not in html_output and "https://" not in html_output` (except for Vega-Lite schema URL) | SHOULD | BRD-HTML-004 | Self-contained HTML |
+| TS-TOOL-RENDER-006 | When PDF export is enabled, the exported PDF MUST include all report content (executive summary, findings, charts, anomalies, appendix). | Method: `export_pdf._validate_pdf_content(pdf: bytes, report: BusinessReport) -> bool`; Validation: PDF parser checks for all required sections | MUST | BRD-PDF-002 | PDF content completeness |
+| TS-TOOL-RENDER-007 | When PDF export is enabled, the exported PDF MUST be printable on standard paper sizes (A4, Letter) with proper margins and pagination. | Config: `products/ade/config/pdf.yaml::print_settings`; Settings: `page_size: "A4"`, `margins: {top: 1in, bottom: 1in, left: 0.75in, right: 0.75in}`, `pagination: true` | MUST | BRD-PDF-003 | PDF printability |
 
 ---
 

@@ -1,8 +1,8 @@
 # ADE Tool Business Requirements
 
 > **Document**: Business Requirements — Tools  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Added BRD-TOOL-006...012 (intent-bound tool selection, dynamic discovery, no availability-based selection) |
 
 ## 1. Tool Overview
 
@@ -27,6 +28,20 @@ Tools perform factual computation in ADE workflows:
 | BRD-TOOL-003 | Same inputs MUST produce same outputs | INT-TOOL-004 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-TOOL-004 | Tools MUST NOT have external dependencies | INT-TOOL-001 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-TOOL-005 | Tools MUST produce evidence items | INT-TOOL-005 | P0 | 2026-01-13 | V1.1 | — |
+
+---
+
+## 2.1 Intent-Bound Tool Selection Requirements
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-TOOL-006 | ADE MUST bind tool selection directly to declared intent; analytical tools (anomaly detection, aggregation, visualization) SHALL only be invoked if explicitly justified by the resolved intent and constraints | INT-TOOL-006 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-007 | ADE MUST reject tool execution based on mere availability; tools SHALL NOT be selected simply because they exist; every tool invocation SHALL map to an intent dimension and be auditable | INT-TOOL-007 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-008 | ADE MUST never hard-code tool lists; ADE SHALL request eligible tools from the platform per run and use only what is surfaced | INT-TOOL-008 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-009 | ADE MUST bind tools to intent-derived steps; tools SHALL be invoked because intent demands them, not because they exist or are convenient | INT-TOOL-009 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-010 | ADE MUST declare tool intent at call time; each tool invocation SHALL specify "why this tool" and "what intent dimension it satisfies" | INT-TOOL-010 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-011 | ADE MUST fail if no eligible tools exist for the resolved intent; if intent cannot be satisfied with available tools, ADE SHALL stop, explain, and ask user | INT-TOOL-011 | P0 | 2026-01-21 | V1.3 | — |
+| BRD-TOOL-012 | ADE MUST never infer permissions; if a tool is not discoverable from the platform, it is not usable; ADE SHALL NOT use fallback logic that bypasses platform discovery | INT-TOOL-012 | P0 | 2026-01-21 | V1.3 | — |
 
 ---
 

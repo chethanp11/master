@@ -2,8 +2,8 @@
 
 > **Document**: Technical Specification — Inputs and Outputs  
 > **Prefix**: TS-IO-*  
-> **Version**: 1.4  
-> **Last Updated**: 2026-01-20
+> **Version**: 1.5  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -16,6 +16,7 @@
 | 1.2 | 2026-01-20 | Normalized ADE techspec tables to canonical TSD format; removed non-derivable sections; cleaned BRD mappings. |
 | 1.3 | 2026-01-21 | Added objective expression, output directory, and low-confidence output requirements per gap analysis. |
 | 1.4 | 2026-01-20 | Converted all TSD IDs to TS- prefix; added implementation-level technical details (file paths, classes, methods, types). |
+| 1.5 | 2026-01-21 | Added V1.3 BRD coverage: TS-IO-OBJ-009 (analysis-agnostic extensibility), TS-IO-DATA-009 (transaction-level default). |
 
 ---
 
@@ -31,6 +32,7 @@
 | TS-IO-OBJ-006 | The ADE system MUST support at least 4 chart types (bar, line, area, scatter). | Enum: `ChartType = Literal["bar", "line", "area", "scatter"]`; Validation: `assert chart_type in ["bar", "line", "area", "scatter"]` | MUST | BRD-OBJ-006 | — |
 | TS-IO-OBJ-007 | The ADE system MUST allow users to toggle hypothesis checks on or off. | Field: `viz_preferences.include_hypothesis_checks: bool`; Tool param: `hypothesis_test_*.enabled: bool` | MUST | BRD-OBJ-007 | — |
 | TS-IO-OBJ-008 | Objectives MUST be expressed through explicit goals in configuration, not embedded logic or heuristics. | Config: `products/ade/config/goals.yaml`; No hardcoded objectives in `products/ade/agents/*.py` | MUST | BRD-OBJ-008 | — |
+| TS-IO-OBJ-009 | ADE MUST remain analysis-agnostic and extensible across use cases (exploratory analysis, risk review, fraud inspection, business summarization). | Architecture: No hardcoded analysis types; Config: `products/ade/config/analysis_types.yaml` defines available analysis modes; Extensibility: New analysis types added via config without code changes; Validation: `assert analysis_type in REGISTERED_ANALYSIS_TYPES` | MUST | BRD-OVERVIEW-007 | Analysis-agnostic design |
 
 ---
 
@@ -57,6 +59,7 @@
 | TS-IO-DATA-006 | The ADE system MUST provide the branded_cards_transactions dataset as a built-in dataset. | File: `products/ade/data/branded_cards_transactions.csv`; Validation: `assert Path("products/ade/data/branded_cards_transactions.csv").exists()` | MUST | BRD-BUILTIN-001 | — |
 | TS-IO-DATA-007 | The ADE system MUST resolve dataset names to file paths using case-sensitive matching. | Logic: `path = data_dir / f"{dataset}.csv"` (no `.lower()`); Error: `DatasetNotFoundError` if not found | MUST | BRD-LOC-003 | — |
 | TS-IO-DATA-008 | The ADE system MUST produce a clear error when a dataset file is missing. | Exception: `class DatasetNotFoundError(ADEError): pass`; Message: `f"Dataset '{dataset}' not found in {data_dir}"` | MUST | BRD-LOC-004 | — |
+| TS-IO-DATA-009 | ADE MUST treat all datasets as transaction-level by default; row-level analysis SHALL be assumed unless a valid time field and aggregation grain are explicitly confirmed through semantic interpretation. | Default: `DataReaderOutput.granularity = "transaction"`; Logic: `if not envelope.time_field or not envelope.aggregation_grain: treat as row-level`; Override: Only when `SemanticEnvelope.aggregation_grain` is explicitly set via user input | MUST | BRD-FMT-006 | Transaction-level default |
 
 ---
 

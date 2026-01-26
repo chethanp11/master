@@ -2,8 +2,8 @@
 
 > **Document**: Technical Specification — Agents & Semantic Interpretation  
 > **Prefix**: TS-AGENT-*, TS-SEM-*  
-> **Version**: 1.4  
-> **Last Updated**: 2026-01-20
+> **Version**: 1.5  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -16,6 +16,7 @@
 | 1.2 | 2026-01-20 | Normalized ADE techspec tables to canonical TSD format; removed non-derivable sections; cleaned BRD mappings. |
 | 1.3 | 2026-01-21 | Added terminal outcomes, framework escalation, narrative source, confidence config, and validation extensions per gap analysis. |
 | 1.4 | 2026-01-20 | Converted all TSD IDs to TS- prefix; added implementation-level technical details (file paths, classes, methods, types). |
+| 1.5 | 2026-01-21 | Added V1.3 BRD coverage: TS-AGENT-GEN-004 (agents as specialists), TS-SEM-ADAPTER-006 (intent-derived behavior), TS-AGENT-FRI-006 (platform semantic reliance), TS-AGENT-OUT-018 (reasoning narrative), TS-AGENT-FAIL-001..003 (failure modes). |
 
 ---
 
@@ -26,6 +27,7 @@
 | TS-AGENT-GEN-001 | All agents MUST have descriptors registered in `products/ade/descriptors.py` with `purpose: str`, `capabilities: List[str]`, and `cost_hint: Literal["LOW", "MED", "HIGH"]` fields. | File: `products/ade/descriptors.py`; Class: `AgentDescriptor(BaseModel)`; Registration: `AGENT_DESCRIPTORS: Dict[str, AgentDescriptor]` | MUST | BRD-CONF-001 | Validate via `assert agent_name in AGENT_DESCRIPTORS` |
 | TS-AGENT-GEN-002 | Agents MUST have accurate cost hints: `intent_agent: MED`, `plan_agent: MED`, `plan_proposal_agent: LOW`, `planning_agent: MED`, `sufficiency_evaluator: LOW`, `dashboard_agent: MED`. | File: `products/ade/descriptors.py`; Constant: `AGENT_COST_HINTS: Dict[str, str]` | MUST | BRD-CONF-001 | Used by orchestrator for budget estimation |
 | TS-AGENT-GEN-003 | Agents MUST only be invoked from allowed step types: `plan_proposal_agent` from `agent/plan_proposal`; others from `agent` step type. | File: `products/ade/flows/*.yaml`; Field: `step.type`; Validation: `core.orchestrator.step_executor.validate_step_type()` | MUST | BRD-INTEL-002 | Enforced at flow load time |
+| TS-AGENT-GEN-004 | ADE MUST treat agents as specialists performing scoped tasks (e.g., "summarize risk signals", "interpret intent"); orchestrator SHALL control sequencing and authority; agents SHALL NOT control flow or make autonomous decisions. | File: `products/ade/agents/*.py`; Pattern: Agents return data only, no flow control; Enforcement: `core.orchestrator.step_executor` calls agents, agents do not call other agents or steps | MUST | BRD-AGENT-001 | Agents are advisory only |
 
 ---
 
@@ -132,6 +134,7 @@
 | TS-AGENT-FRI-003 | Product MUST NOT bypass framework governance hooks; all agent calls MUST flow through `core.governance.hooks.pre_agent()` and `post_agent()`. | Enforcement: Agent base class calls hooks automatically; direct instantiation prohibited | MUST | BRD-CONF-005 | — |
 | TS-AGENT-FRI-004 | Framework gaps MUST be logged in `products/ade/docs/FRAMEWORK_GAPS.md` with BRD ID, gap description, and workaround status. | File: `products/ade/docs/FRAMEWORK_GAPS.md`; Format: Markdown table | MUST | BRD-CONF-005 | — |
 | TS-AGENT-FRI-005 | Framework gaps MUST be escalated via `core.governance.hooks.escalate_framework_gap(gap_id: str, description: str)`, not worked around with product-level logic. | Method: `escalate_framework_gap()`; Logged to: `core.memory.observability_store`; Triggers: alert to platform team | MUST | BRD-FRI-005 | — |
+| TS-AGENT-FRI-006 | ADE MUST consume platform-provided semantic envelopes and validation outputs; ADE SHALL NOT re-implement semantic parsing, intent extraction, or validation logic inside product code. | Enforcement: `products/ade/semantic_adapter.py` extends `core.knowledge.semantic_adapter.SemanticAdapterBase`; No duplicate parsing logic; Validation from `core.knowledge.validation` | MUST | BRD-FRI-006 | Platform semantic reliance |
 
 ---
 
@@ -155,6 +158,7 @@
 | TS-SEM-ADAPTER-003 | `SemanticEnvelope` MUST include fields: `intent_type: ADEIntentType`, `requested_outputs: List[str]`, `metrics: List[str]`, `time_scope: Optional[str]`, `constraints: Dict[str, Any]`, `confidence: float`, `raw_input: str`. | Schema: `products/ade/schemas/semantic_envelope.py` | MUST | BRD-SEM-002 | — |
 | TS-SEM-ADAPTER-004 | `ADESemanticAdapter` MUST classify input using deterministic keyword/pattern matching (no LLM); use `INTENT_PATTERNS: Dict[ADEIntentType, List[str]]` for classification. | Method: `ADESemanticAdapter._classify_intent(text: str) -> ADEIntentType`; Patterns: regex and keyword lists | MUST | BRD-SEM-002, BRD-SEM-003 | — |
 | TS-SEM-ADAPTER-005 | `ADESemanticAdapter` MUST compute `confidence: float` in `[0.0, 1.0]` based on pattern match strength and field completeness. | Method: `ADESemanticAdapter._compute_confidence(matches: Dict) -> float`; Formula: `base_score * completeness_factor` | MUST | BRD-SEM-004 | — |
+| TS-SEM-ADAPTER-006 | ADE MUST derive analytical behavior strictly from resolved user intent; analysis types (trend, anomaly, delta) SHALL NOT be assumed unless explicitly specified in the resolved semantic intent. | Enforcement: `ADESemanticAdapter.interpret()` returns only fields present in user input; No default analysis types; Validation: `assert envelope.intent_type in USER_SPECIFIED_INTENTS or envelope.confidence < 0.5` | MUST | BRD-SEM-011 | Intent-only behavior derivation |
 
 ---
 
@@ -248,6 +252,32 @@
 | TSD ID | Technical Specification | Implementation Details | Level | BRD Mapping | Notes |
 |--------|------------------------|------------------------|-------|-------------|-------|
 | TS-AGENT-CONF-003 | Confidence thresholds MUST be configurable via `products/ade/config/confidence.yaml` with keys: `low_threshold: float`, `high_threshold: float`, `sufficiency_thresholds: Dict`. | File: `products/ade/config/confidence.yaml`; Loaded by: `products/ade/config.py::load_confidence_config()`; Schema: `ConfidenceConfig(BaseModel)` | MUST | BRD-CONF-003 | — |
+
+---
+
+## 22. Failure Mode Requirements (TS-AGENT-FAIL)
+
+| TSD ID | Technical Specification | Implementation Details | Level | BRD Mapping | Notes |
+|--------|------------------------|------------------------|-------|-------------|-------|
+| TS-AGENT-FAIL-001 | ADE MUST fail fast when resolved intent is incompatible with the provided data structure; if the intent cannot be executed on the dataset (e.g., anomaly detection without numeric measures, trend analysis without time field), ADE SHALL halt and explain why. | Method: `products/ade/agents/intent_validator.py::validate_intent_data_compatibility(intent: SemanticEnvelope, data: DataReaderOutput) -> ValidationResult`; Returns: `TerminalOutcome.ABORT` with explanation if incompatible | MUST | BRD-FAIL-001 | Fail-fast on incompatibility |
+| TS-AGENT-FAIL-002 | ADE MUST NOT proceed with analysis when required data dimensions are missing; execution SHALL be blocked with structured explanation of the gap. | Method: `products/ade/agents/data_validator.py::validate_required_dimensions(intent: SemanticEnvelope, schema: DatasetSchema) -> ValidationResult`; Returns: `TerminalOutcome.ABORT` or `TerminalOutcome.ASK_USER` with missing dimensions list | MUST | BRD-FAIL-002 | Block on missing dimensions |
+| TS-AGENT-FAIL-003 | ADE MUST prohibit time-series or period-over-period analysis without explicit approval; ADE SHALL stop and request clarification before performing any temporal aggregation, trend analysis, or delta computation. | Method: `products/ade/agents/temporal_validator.py::validate_temporal_analysis(intent: SemanticEnvelope, user_approval: bool) -> ValidationResult`; Logic: `if intent.requires_temporal_analysis and not user_approval: return ASK_USER("Please confirm time-based analysis...")` | MUST | BRD-FAIL-003 | Temporal analysis gating |
+
+---
+
+## 23. Reasoning Narrative Requirements (TS-AGENT-NARRATIVE)
+
+| TSD ID | Technical Specification | Implementation Details | Level | BRD Mapping | Notes |
+|--------|------------------------|------------------------|-------|-------------|-------|
+| TS-AGENT-NARRATIVE-001 | ADE MUST declare "Reasoning Narrative" as a required output artifact; every ADE run SHALL produce a coherent, human-readable reasoning narrative explaining why each analysis or decision was made. | File: `products/ade/tools/narrative_builder.py`; Function: `def build_reasoning_narrative(trace_events: List[TraceEvent], decisions: List[DecisionRecord]) -> str`; Output: `reasoning_narrative: str` in `DecisionPacket` and `BusinessReport`; Schema: `DecisionPacket.reasoning_narrative: Optional[str]`; Validation: `assert reasoning_narrative is not None and len(reasoning_narrative) > 0` | MUST | BRD-OUT-018 | Required output artifact |
+
+---
+
+## 24. Reasoning-Presentation Separation (TS-AGENT-SEPARATION)
+
+| TSD ID | Technical Specification | Implementation Details | Level | BRD Mapping | Notes |
+|--------|------------------------|------------------------|-------|-------------|-------|
+| TS-AGENT-SEPARATION-001 | ADE MUST separate reasoning and business conclusions from HTML or visualization rendering; reasoning artifacts SHALL be generated independently from presentation to ensure auditability and reuse. | Architecture: Reasoning phase produces `ReasoningArtifact` (JSON); Rendering phase consumes `ReasoningArtifact` to produce HTML; Files: `products/ade/tools/reasoning_builder.py` → `products/ade/tools/render_*.py`; No reasoning logic in render modules | MUST | BRD-ALIGN-004 | Separation of concerns |
 
 ---
 

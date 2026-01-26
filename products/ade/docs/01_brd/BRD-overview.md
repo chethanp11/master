@@ -1,8 +1,8 @@
 # ADE Product Overview
 
 > **Document**: Business Requirements — Overview  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Added BRD-OVERVIEW-007 (analysis-agnostic extensibility) |
 
 ## 1. Product Vision
 
@@ -27,6 +28,7 @@ The **Analytical Decision Engine (ADE)** transforms analyst questions and CSV da
 | BRD-OVERVIEW-004 | Confidence, assumptions, and limitations MUST be explicit in outputs | INT-OVERVIEW-004 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-OVERVIEW-005 | Plans MUST require human approval before execution | INT-OVERVIEW-005 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-OVERVIEW-006 | Analyst questions MUST be semantically interpreted before planning | INT-OVERVIEW-006 | P0 | 2026-01-13 | V1.1 | — |
+| BRD-OVERVIEW-007 | ADE MUST remain analysis-agnostic and extensible across use cases (exploratory analysis, risk review, fraud inspection, business summarization) | INT-OVERVIEW-007 | P0 | 2026-01-21 | V1.3 | — |
 
 ---
 

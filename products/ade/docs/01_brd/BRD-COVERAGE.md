@@ -1,9 +1,9 @@
 # ADE BRD Coverage Analysis
 
 > **Document ID**: BRD-COVERAGE  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19  
-> **Status**: V1 Release  
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21  
+> **Status**: V1.3 Release  
 
 > **Purpose**: Track traceability between ADE Intent documents and ADE BRDs.  
 
@@ -15,18 +15,19 @@
 |---------|------|---------|
 | 1.1 | 2026-01-13 | Initial coverage mapping |
 | V1.2 | 2026-01-19 | Standardized coverage schema and refreshed intent-to-BRD mappings |
+| V1.3 | 2026-01-21 | Added V1.3 intents: INT-OVERVIEW-007, INT-AGENTS-001, INT-TOOL-006...012, INT-FMT-006, INT-OUT-018, INT-SEM-011, INT-FAIL-001...003, INT-FRI-006, INT-ALIGN-004. Closed all 7 INT-OBJ gaps. |
 
 ## Coverage Summary
 
 | Intent Document | BRD Document | Intent IDs | Covered | Missing | Clarification Needed |
 |-----------------|--------------|------------|---------|---------|----------------------|
-| [intent-overview-flows.md](../00_product_intent/intent-overview-flows.md) | [BRD-overview.md](BRD-overview.md) | 41 | 34 | 7 | 0 |
-| [intent-overview-flows.md](../00_product_intent/intent-overview-flows.md) | [BRD-flows.md](BRD-flows.md) | 41 | 34 | 7 | 0 |
-| [intent-agents-tools.md](../00_product_intent/intent-agents-tools.md) | [BRD-agents.md](BRD-agents.md) | 62 | 62 | 0 | 0 |
-| [intent-agents-tools.md](../00_product_intent/intent-agents-tools.md) | [BRD-tools.md](BRD-tools.md) | 62 | 62 | 0 | 0 |
-| [intent-data-outputs.md](../00_product_intent/intent-data-outputs.md) | [BRD-data.md](BRD-data.md) | 73 | 73 | 0 | 0 |
-| [intent-data-outputs.md](../00_product_intent/intent-data-outputs.md) | [BRD-outputs.md](BRD-outputs.md) | 73 | 73 | 0 | 0 |
-| [intent-intel-acceptance.md](../00_product_intent/intent-intel-acceptance.md) | All BRDs | 65 | 65 | 0 | 0 |
+| [intent-overview-flows.md](../00_product_intent/intent-overview-flows.md) | [BRD-overview.md](BRD-overview.md) | 42 | 42 | 0 | 0 |
+| [intent-overview-flows.md](../00_product_intent/intent-overview-flows.md) | [BRD-flows.md](BRD-flows.md) | 42 | 42 | 0 | 0 |
+| [intent-agents-tools.md](../00_product_intent/intent-agents-tools.md) | [BRD-agents.md](BRD-agents.md) | 70 | 70 | 0 | 0 |
+| [intent-agents-tools.md](../00_product_intent/intent-agents-tools.md) | [BRD-tools.md](BRD-tools.md) | 70 | 70 | 0 | 0 |
+| [intent-data-outputs.md](../00_product_intent/intent-data-outputs.md) | [BRD-data.md](BRD-data.md) | 75 | 75 | 0 | 0 |
+| [intent-data-outputs.md](../00_product_intent/intent-data-outputs.md) | [BRD-outputs.md](BRD-outputs.md) | 75 | 75 | 0 | 0 |
+| [intent-intel-acceptance.md](../00_product_intent/intent-intel-acceptance.md) | All BRDs | 71 | 71 | 0 | 0 |
 
 ---
 ## 1. Overview & Flows
@@ -39,14 +40,15 @@
 | INT-OVERVIEW-004 | Confidence, assumptions, and limitations must be explicit — Transparency requirement | intent-overview-flows.md | BRD-OVERVIEW-004 | Covered |
 | INT-OVERVIEW-005 | Plans must require human approval before execution — Human oversight by design | intent-overview-flows.md | BRD-OVERVIEW-005 | Covered |
 | INT-OVERVIEW-006 | Analyst questions must be semantically interpreted — Enable natural language interaction | intent-overview-flows.md | BRD-OVERVIEW-006 | Covered |
-| INT-OBJ-001 | 100% of outputs must include evidence references — Evidence-based requirement | intent-overview-flows.md | — | Missing |
-| INT-OBJ-002 | Same inputs must always produce same outputs — Reproducibility requirement | intent-overview-flows.md | — | Missing |
-| INT-OBJ-003 | All plans must require explicit user approval — Human-in-the-loop requirement | intent-overview-flows.md | — | Missing |
-| INT-OBJ-004 | All outputs must include confidence_level, assumptions, limitations — Transparency requirement | intent-overview-flows.md | — | Missing |
-| INT-OBJ-005 | Time from question to report should be < 5 minutes — Usability target | intent-overview-flows.md | — | Missing |
-| INT-OBJ-006 | 4+ chart types must be available — Visualization richness | intent-overview-flows.md | BRD-CHART-002, BRD-CHART-003, BRD-CHART-004, BRD-CHART-005 | Covered |
-| INT-OBJ-007 | Hypothesis checks must be toggleable — Analysis flexibility | intent-overview-flows.md | — | Missing |
-| INT-OBJ-008 | Objectives and success criteria SHALL be expressed through schemas and goals, not embedded logic or heuristics — Keep objectives explicit and auditable | intent-overview-flows.md | — | Missing |
+| INT-OVERVIEW-007 | ADE SHALL remain analysis-agnostic and extensible across use cases — Analysis-agnostic extensibility | intent-overview-flows.md | BRD-OVERVIEW-007 | Covered |
+| INT-OBJ-001 | 100% of outputs must include evidence references — Evidence-based requirement | intent-overview-flows.md | BRD-OBJ-001 | Covered |
+| INT-OBJ-002 | Same inputs must always produce same outputs — Reproducibility requirement | intent-overview-flows.md | BRD-OBJ-002 | Covered |
+| INT-OBJ-003 | All plans must require explicit user approval — Human-in-the-loop requirement | intent-overview-flows.md | BRD-OBJ-003 | Covered |
+| INT-OBJ-004 | All outputs must include confidence_level, assumptions, limitations — Transparency requirement | intent-overview-flows.md | BRD-OBJ-004 | Covered |
+| INT-OBJ-005 | Time from question to report should be < 5 minutes — Usability target | intent-overview-flows.md | BRD-OBJ-005 | Covered |
+| INT-OBJ-006 | 4+ chart types must be available — Visualization richness | intent-overview-flows.md | BRD-OBJ-006, BRD-CHART-002, BRD-CHART-003, BRD-CHART-004, BRD-CHART-005 | Covered |
+| INT-OBJ-007 | Hypothesis checks must be toggleable — Analysis flexibility | intent-overview-flows.md | BRD-OBJ-007 | Covered |
+| INT-OBJ-008 | Objectives and success criteria SHALL be expressed through schemas and goals, not embedded logic or heuristics — Keep objectives explicit and auditable | intent-overview-flows.md | BRD-OBJ-008 | Covered |
 | INT-FLOWS-001 | Provide two entry points for different analyst use cases — Flexibility for different workflows | intent-overview-flows.md | BRD-FLOW-001 | Covered |
 | INT-FLOWS-002 | ade_v1 flow: analyst has a question to answer — Question-first workflow | intent-overview-flows.md | BRD-FLOW-002 | Covered |
 | INT-FLOWS-003 | visualization flow: analyst has a dataset to explore — Dataset-first workflow | intent-overview-flows.md | BRD-FLOW-003 | Covered |
@@ -79,6 +81,7 @@
 
 | Intent ID | Intent | Source File | BRD ID(s) | Covered status |
 |-----------|--------|-------------|-----------|----------------|
+| INT-AGENTS-001 | ADE SHALL treat agents as specialists performing scoped tasks — Agents as specialists | intent-agents-tools.md | BRD-AGENT-001 | Covered |
 | INT-INTENT-001 | Extract intent summary from user question — Structured understanding | intent-agents-tools.md | BRD-INTENT-001 | Covered |
 | INT-INTENT-002 | Identify referenced datasets — Data source identification | intent-agents-tools.md | BRD-INTENT-002 | Covered |
 | INT-INTENT-003 | Identify referenced metrics — Analysis focus | intent-agents-tools.md | BRD-INTENT-003 | Covered |
@@ -115,6 +118,13 @@
 | INT-TOOL-003 | Tools must produce deterministic outputs — Audit requirement | intent-agents-tools.md | BRD-TOOL-002 | Covered |
 | INT-TOOL-004 | Same inputs must produce same outputs — Reproducibility | intent-agents-tools.md | BRD-TOOL-003 | Covered |
 | INT-TOOL-005 | Tools must produce evidence items — Traceability | intent-agents-tools.md | BRD-ANOM-005, BRD-HYP-006, BRD-ITEM-001, BRD-METRIC-003, BRD-TOOL-005 | Covered |
+| INT-TOOL-006 | ADE SHALL bind tool selection directly to declared intent — Intent-bound tool selection | intent-agents-tools.md | BRD-TOOL-006 | Covered |
+| INT-TOOL-007 | ADE SHALL reject tool execution based on mere availability — No availability-based selection | intent-agents-tools.md | BRD-TOOL-007 | Covered |
+| INT-TOOL-008 | ADE SHALL never hard-code tool lists — Dynamic tool discovery | intent-agents-tools.md | BRD-TOOL-008 | Covered |
+| INT-TOOL-009 | ADE SHALL bind tools to intent-derived steps — Intent-driven invocation | intent-agents-tools.md | BRD-TOOL-009 | Covered |
+| INT-TOOL-010 | ADE SHALL declare tool intent at call time — Documented tool rationale | intent-agents-tools.md | BRD-TOOL-010 | Covered |
+| INT-TOOL-011 | ADE SHALL fail if no eligible tools exist for the resolved intent — Fail on tool unavailability | intent-agents-tools.md | BRD-TOOL-011 | Covered |
+| INT-TOOL-012 | ADE SHALL never infer permissions — No permission inference | intent-agents-tools.md | BRD-TOOL-012 | Covered |
 | INT-DATA-001 | Read CSV datasets — Data source support | intent-agents-tools.md | BRD-DATA-001 | Covered |
 | INT-DATA-002 | Extract column metadata — Schema understanding | intent-agents-tools.md | BRD-DATA-002 | Covered |
 | INT-DATA-003 | Extract row data — Data access | intent-agents-tools.md | BRD-DATA-003 | Covered |
@@ -151,6 +161,7 @@
 | INT-FMT-003 | Parse standard CSV headers — Schema extraction | intent-data-outputs.md | BRD-FMT-003 | Covered |
 | INT-FMT-004 | Handle quoted fields — Format robustness | intent-data-outputs.md | BRD-FMT-004 | Covered |
 | INT-FMT-005 | Handle empty values — Data quality | intent-data-outputs.md | BRD-FMT-005 | Covered |
+| INT-FMT-006 | ADE SHALL treat all datasets as transaction-level by default — Transaction-level default | intent-data-outputs.md | BRD-FMT-006 | Covered |
 | INT-LOC-001 | User datasets in staging/input/ — User data isolation | intent-data-outputs.md | BRD-LOC-001 | Covered |
 | INT-LOC-002 | Built-in datasets in data/ — Product data | intent-data-outputs.md | BRD-BUILTIN-001, BRD-BUILTIN-002, BRD-LOC-002 | Covered |
 | INT-LOC-003 | Dataset names resolve to file paths — Abstraction | intent-data-outputs.md | BRD-LOC-003 | Covered |
@@ -200,6 +211,7 @@
 | INT-OUT-015 | Include evidence sections — Traceability | intent-data-outputs.md | BRD-OUT-015 | Covered |
 | INT-OUT-016 | Include assumptions — Transparency | intent-data-outputs.md | BRD-OUT-016 | Covered |
 | INT-OUT-017 | Include limitations — Transparency | intent-data-outputs.md | BRD-OUT-017 | Covered |
+| INT-OUT-018 | ADE SHALL declare "Reasoning Narrative" as a required output artifact — Required reasoning narrative | intent-data-outputs.md | BRD-OUT-018 | Covered |
 | INT-OUTLOC-001 | Outputs written to staging/output/ — Organization | intent-data-outputs.md | BRD-EXP-003, BRD-LOC-001 | Covered |
 | INT-OUTLOC-002 | Create directory if missing — Robustness | intent-data-outputs.md | BRD-LOC-002 | Covered |
 | INT-OUTLOC-003 | Consistent file naming — Predictability | intent-data-outputs.md | BRD-LOC-003 | Covered |
@@ -234,6 +246,7 @@
 | INT-SEM-008 | Ambiguous inputs SHALL be captured in ambiguities list — Transparency | intent-intel-acceptance.md | BRD-SEM-VAL-004 | Covered |
 | INT-SEM-009 | Semantic interpretation SHALL run BEFORE planning phase — Correct ordering | intent-intel-acceptance.md | BRD-ROUTER-001, BRD-ROUTER-002, BRD-ROUTER-003, BRD-ROUTER-004, BRD-SEM-005 | Covered |
 | INT-SEM-010 | Semantic interpretation SHALL be traced with structured events — Observability | intent-intel-acceptance.md | BRD-SEM-OBS-001, BRD-SEM-OBS-002, BRD-SEM-OBS-003, BRD-SEM-OBS-004, BRD-SEM-OBS-005 | Covered |
+| INT-SEM-011 | ADE SHALL derive analytical behavior strictly from resolved user intent — No implicit analysis assumptions | intent-intel-acceptance.md | BRD-SEM-011 | Covered |
 | INT-SEM-VAL-001 | TREND_ANALYSIS without time_axis SHALL trigger clarifying question — Missing required field | intent-intel-acceptance.md | BRD-SEM-VAL-001, BRD-SEM-VAL-003 | Covered |
 | INT-SEM-VAL-002 | COMPARE_PERIODS with single time_window SHALL trigger clarifying question — Insufficient data | intent-intel-acceptance.md | BRD-SEM-VAL-001, BRD-SEM-VAL-003 | Covered |
 | INT-SEM-VAL-003 | Dataset references SHALL be validated against available datasets — Data availability | intent-intel-acceptance.md | BRD-SEM-VAL-006 | Covered |
@@ -262,6 +275,9 @@
 | INT-TOOLSEL-002 | System MAY produce ranked tool suggestions with rationales and exclusions — Informed choice | intent-intel-acceptance.md | BRD-TOOLSEL-002 | Covered |
 | INT-TOOLSEL-003 | Orchestrator SHALL remain the sole authority to approve or reject tool execution based on policy and budgets — Governance boundary | intent-intel-acceptance.md | BRD-TOOLSEL-003 | Covered |
 | INT-TOOLSEL-004 | Advisory tool suggestions SHALL NOT force execution — Advisory only | intent-intel-acceptance.md | BRD-TOOLSEL-004 | Covered |
+| INT-FAIL-001 | ADE SHALL fail fast when resolved intent is incompatible with the provided data structure — Fail-fast on incompatibility | intent-intel-acceptance.md | BRD-FAIL-001 | Covered |
+| INT-FAIL-002 | ADE SHALL NOT proceed with analysis when required data dimensions are missing — No incomplete analysis | intent-intel-acceptance.md | BRD-FAIL-002 | Covered |
+| INT-FAIL-003 | ADE SHALL prohibit time-series or period-over-period analysis without explicit approval — Explicit temporal approval | intent-intel-acceptance.md | BRD-FAIL-003 | Covered |
 | INT-QUAL-001 | All key findings or assertions SHALL be backed by at least one evidence reference — Evidence requirement | intent-intel-acceptance.md | BRD-QUAL-001 | Covered |
 | INT-QUAL-002 | Executive summaries SHALL include scope, key result, confidence, and primary limitation — Completeness | intent-intel-acceptance.md | BRD-QUAL-002 | Covered |
 | INT-QUAL-003 | Recommendations SHALL only be emitted when evidence-supported; otherwise they SHALL be omitted — No speculation | intent-intel-acceptance.md | BRD-QUAL-003 | Covered |
@@ -275,11 +291,13 @@
 | INT-ALIGN-001 | All reasoning, iteration, critique, and governance patterns SHALL rely on framework-provided primitives — Framework leverage | intent-intel-acceptance.md | BRD-ALIGN-001 | Covered |
 | INT-ALIGN-002 | If a product needs to re-implement these mechanisms, it indicates a framework gap—not a product feature — Gap detection | intent-intel-acceptance.md | BRD-ALIGN-002 | Covered |
 | INT-ALIGN-003 | ADE SHALL consume platform-provided reasoning outputs without altering their structure or semantics — Preserve platform meaning | intent-intel-acceptance.md | BRD-ALIGN-003 | Covered |
+| INT-ALIGN-004 | ADE SHALL separate reasoning and business conclusions from HTML or visualization rendering — Reasoning-presentation separation | intent-intel-acceptance.md | BRD-ALIGN-004 | Covered |
 | INT-FRI-001 | Product SHALL NOT re-implement orchestration logic already provided by MASTER framework — No shadow orchestration | intent-intel-acceptance.md | BRD-FRI-001 | Covered |
 | INT-FRI-002 | Product SHALL NOT re-implement iteration control already provided by MASTER framework — No shadow loops | intent-intel-acceptance.md | BRD-FRI-002 | Covered |
 | INT-FRI-003 | Product SHALL NOT re-implement reasoning ladder semantics already provided by MASTER framework — No shadow reasoning | intent-intel-acceptance.md | BRD-FRI-003 | Covered |
 | INT-FRI-004 | Product SHALL NOT bypass framework governance hooks — Governance integrity | intent-intel-acceptance.md | BRD-FRI-004 | Covered |
 | INT-FRI-005 | Any product requirement that cannot be satisfied using existing framework primitives SHALL be treated as a framework gap and escalated, not worked around — Gap escalation | intent-intel-acceptance.md | BRD-FRI-005 | Covered |
+| INT-FRI-006 | ADE SHALL consume platform-provided semantic envelopes and validation outputs — Platform semantic reliance | intent-intel-acceptance.md | BRD-FRI-006 | Covered |
 | INT-DAB-001 | ADE SHALL produce decision-support artifacts, not autonomous decisions — Human authority preserved | intent-intel-acceptance.md | BRD-DAB-005 | Covered |
 | INT-DAB-002 | Final business decisions SHALL always remain with a human or downstream governed system — Accountability clarity | intent-intel-acceptance.md | BRD-DAB-002 | Covered |
 | INT-DAB-003 | DecisionPackets represent recommendations with evidence and confidence, not authoritative outcomes — Semantic precision | intent-intel-acceptance.md | BRD-DAB-004 | Covered |
@@ -296,21 +314,14 @@
 
 | Gap Type | Source File | ID | Detail |
 |---------|-------------|----|--------|
-| Missing | intent-overview-flows.md | INT-OBJ-001 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-002 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-003 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-004 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-005 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-007 | No BRD mapping |
-| Missing | intent-overview-flows.md | INT-OBJ-008 | No BRD mapping |
+| — | — | — | No gaps. All intent IDs are fully covered. |
 
 ## Next BRD Edits Required
 
-- [ ] `products/ade/docs/01_brd/BRD-overview.md` (add mappings for missing INT intents)
-- [ ] `products/ade/docs/01_brd/BRD-flows.md` (add mappings for missing INT intents)
-- [ ] `products/ade/docs/01_brd/BRD-agents.md` (add mappings for missing INT intents)
-- [ ] `products/ade/docs/01_brd/BRD-tools.md` (add mappings for missing INT intents)
-- [ ] `products/ade/docs/01_brd/BRD-data.md` (add mappings for missing INT intents)
-- [ ] `products/ade/docs/01_brd/BRD-outputs.md` (add mappings for missing INT intents)
+- [x] `products/ade/docs/01_brd/BRD-overview.md` — V1.3 intents added (INT-OVERVIEW-007, BRD-OBJ-001...008)
+- [x] `products/ade/docs/01_brd/BRD-agents.md` — V1.3 intents added (INT-AGENTS-001)
+- [x] `products/ade/docs/01_brd/BRD-tools.md` — V1.3 intents added (INT-TOOL-006...012)
+- [x] `products/ade/docs/01_brd/BRD-data.md` — V1.3 intents added (INT-FMT-006)
+- [x] `products/ade/docs/01_brd/BRD-outputs.md` — V1.3 intents added (INT-OUT-018, INT-FAIL-001...003, INT-SEM-011, INT-FRI-006, INT-ALIGN-004)
 
-BRD-COVERAGE GAP COUNT: 7
+BRD-COVERAGE GAP COUNT: 0

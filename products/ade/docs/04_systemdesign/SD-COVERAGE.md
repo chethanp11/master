@@ -1,9 +1,9 @@
 # ADE System Design Coverage Matrix
 
 > **Document**: System Design Coverage (ADE)  
-> **Version**: 1.3  
-> **Last Updated**: 2026-01-21  
-> **Status**: V1.3 Release — 21 IMP Units Complete
+> **Version**: 1.5  
+> **Last Updated**: 2026-01-22  
+> **Status**: V1.5 Release — Code-to-SD Reconciliation Complete
 
 ---
 
@@ -15,6 +15,8 @@
 | 1.1 | 2026-01-17 | Added semantic interpretation coverage |
 | 1.2 | 2026-01-21 | Normalized to TS- prefix format; added 17 new V1.4 Tech Spec IDs; updated gap register with 8 new gaps |
 | 1.3 | 2026-01-21 | Updated coverage status for 21 IMP units implementation; closed gaps for Terminal Outcomes, Narrative, Confidence, Validation, Semantic Validation, Anomaly Severity, Output Directory, Plan Detail, Evidence Schema |
+| 1.4 | 2026-01-21 | Added 21 new V1.5/V1.6 Tech Spec IDs for V1.3 BRD coverage: TS-AGENT-GEN-004, TS-SEM-ADAPTER-006, TS-AGENT-FRI-006, TS-AGENT-FAIL-001..003, TS-AGENT-NARRATIVE-001, TS-AGENT-SEPARATION-001, TS-TOOL-INTENT-001..007, TS-TOOL-ASSEMBLE-008, TS-TOOL-RENDER-005..007, TS-IO-OBJ-009, TS-IO-DATA-009 |
+| 1.5 | 2026-01-22 | Code-to-SD reconciliation: Fixed BRD-INTEL-003 (Missing→Covered), BRD-VER-003 (Partial→Covered), BRD-DAB-003..005 (Partial→Covered) to align with Gap Register closures |
 
 ---
 
@@ -44,7 +46,7 @@
 | TS-AGENT-DASH-002 | TS-agents.md#TS-AGENT-DASH-002 | agents-and-tools.md#agents | Covered |
 | BRD-INTEL-001 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-001` | `products/ade/docs/04_systemdesign/schemas.md#2-8-intentframe` | Covered |
 | BRD-INTEL-002 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-002` | `products/ade/docs/04_systemdesign/schemas.md#2-8-intentframe` | Covered |
-| BRD-INTEL-003 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-003` | `products/ade/docs/04_systemdesign/flows.md#5-error-handling` | Missing |
+| BRD-INTEL-003 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-003` | `products/ade/docs/04_systemdesign/architecture.md#10-framework-alignment` | Covered |
 | BRD-INTEL-004 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-004` | `products/ade/docs/04_systemdesign/agents-and-tools.md#2-5-sufficiency_evaluator` | Covered |
 | BRD-INTEL-005 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-INTEL-005` | `products/ade/docs/04_systemdesign/schemas.md#2-1-decisionpacket` | Covered |
 | BRD-CRIT-001 | `products/ade/docs/02_techspec/AGENT-agents.md#BRD-CRIT-001` | `products/ade/docs/04_systemdesign/agents-and-tools.md#2-6-critic_evaluator` | Covered |
@@ -196,12 +198,12 @@
 | BRD-QUAL-012 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-QUAL-012` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-2-output-quality-gates` | Covered |
 | BRD-VER-001 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-VER-001` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Covered |
 | BRD-VER-002 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-VER-002` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Covered |
-| BRD-VER-003 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-VER-003` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Partial |
+| BRD-VER-003 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-VER-003` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Covered |
 | BRD-DAB-001 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-001` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Covered |
 | BRD-DAB-002 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-002` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Covered |
-| BRD-DAB-003 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-003` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Partial |
-| BRD-DAB-004 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-004` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Partial |
-| BRD-DAB-005 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-005` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#5-1-primary-outputs` | Partial |
+| BRD-DAB-003 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-003` | `products/ade/docs/04_systemdesign/agents-and-tools.md#6-2-advisory-labeling` | Covered |
+| BRD-DAB-004 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-004` | `products/ade/docs/04_systemdesign/agents-and-tools.md#6-2-advisory-labeling` | Covered |
+| BRD-DAB-005 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#BRD-DAB-005` | `products/ade/docs/04_systemdesign/agents-and-tools.md#6-2-advisory-labeling` | Covered |
 | IO-EVID-001 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#IO-EVID-001` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#input-payloads` | Covered |
 | IO-EVID-002 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#IO-EVID-002` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#input-payloads` | Covered |
 | IO-EVID-003 | `products/ade/docs/02_techspec/IO-inputs-outputs.md#IO-EVID-003` | `products/ade/docs/04_systemdesign/inputs-and-outputs.md#input-payloads` | Covered |
@@ -367,6 +369,32 @@
 | TS-SCHEMA-EVITEM-001 | TS-schemas.md#TS-SCHEMA-EVITEM-001 | schemas.md#3-1-evidence-items | Covered |
 | TS-SCHEMA-EVITEM-002 | TS-schemas.md#TS-SCHEMA-EVITEM-002 | schemas.md#3-1-evidence-items | Covered |
 
+### New V1.5/V1.6 Tech Spec Requirements (V1.3 BRD Coverage)
+
+| Tech Spec ID | Tech Spec Source | System Design Reference | Status |
+|--------------|------------------|-------------------------|--------|
+| TS-AGENT-GEN-004 | TS-agents.md#TS-AGENT-GEN-004 | agents-and-tools.md#agents | Covered |
+| TS-SEM-ADAPTER-006 | TS-agents.md#TS-SEM-ADAPTER-006 | agents-and-tools.md#semantic-adapter | Covered |
+| TS-AGENT-FRI-006 | TS-agents.md#TS-AGENT-FRI-006 | architecture.md#10-framework-alignment | Covered |
+| TS-AGENT-FAIL-001 | TS-agents.md#TS-AGENT-FAIL-001 | agents-and-tools.md#failure-modes | Covered |
+| TS-AGENT-FAIL-002 | TS-agents.md#TS-AGENT-FAIL-002 | agents-and-tools.md#failure-modes | Covered |
+| TS-AGENT-FAIL-003 | TS-agents.md#TS-AGENT-FAIL-003 | agents-and-tools.md#failure-modes | Covered |
+| TS-AGENT-NARRATIVE-001 | TS-agents.md#TS-AGENT-NARRATIVE-001 | agents-and-tools.md#6-1-narrative-builder | Covered |
+| TS-AGENT-SEPARATION-001 | TS-agents.md#TS-AGENT-SEPARATION-001 | architecture.md#8-trust-and-audit | Covered |
+| TS-TOOL-INTENT-001 | TS-tools.md#TS-TOOL-INTENT-001 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-002 | TS-tools.md#TS-TOOL-INTENT-002 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-003 | TS-tools.md#TS-TOOL-INTENT-003 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-004 | TS-tools.md#TS-TOOL-INTENT-004 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-005 | TS-tools.md#TS-TOOL-INTENT-005 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-006 | TS-tools.md#TS-TOOL-INTENT-006 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-INTENT-007 | TS-tools.md#TS-TOOL-INTENT-007 | agents-and-tools.md#intent-bound-tool-selection | Covered |
+| TS-TOOL-ASSEMBLE-008 | TS-tools.md#TS-TOOL-ASSEMBLE-008 | agents-and-tools.md#5-assembly-tools | Covered |
+| TS-TOOL-RENDER-005 | TS-tools.md#TS-TOOL-RENDER-005 | agents-and-tools.md#6-rendering-tools | Covered |
+| TS-TOOL-RENDER-006 | TS-tools.md#TS-TOOL-RENDER-006 | agents-and-tools.md#6-rendering-tools | Covered |
+| TS-TOOL-RENDER-007 | TS-tools.md#TS-TOOL-RENDER-007 | agents-and-tools.md#6-rendering-tools | Covered |
+| TS-IO-OBJ-009 | TS-inputs-outputs.md#TS-IO-OBJ-009 | inputs-and-outputs.md#1-input-payloads | Covered |
+| TS-IO-DATA-009 | TS-inputs-outputs.md#TS-IO-DATA-009 | inputs-and-outputs.md#2-datasets | Covered |
+
 ---
 
 ## Gap Register
@@ -400,11 +428,11 @@ All 20 gaps from V1.2 have been closed in V1.3 through implementation of 21 IMP 
 
 ## Summary
 
-- **Total Tech Spec IDs Tracked**: ~200
-- **Covered (✅)**: ~198
+- **Total Tech Spec IDs Tracked**: ~221
+- **Covered (✅)**: ~221
 - **Partial**: 0
 - **Missing/Gaps**: 0
-- **Coverage**: 99%
+- **Coverage**: 100%
 
 ---
 

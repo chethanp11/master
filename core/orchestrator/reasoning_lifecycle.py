@@ -10,6 +10,9 @@ with typed outputs and controlled transitions.
 IMP-010 (ORC-REASON-010..015): Bounded reasoning iteration with
 configurable limits and budget integration.
 
+IMP-034 (ORC-REASON-CONTRACT-001..011): Reasoning contract enforcement
+with mandatory phases and critique waiver support.
+
 This module provides:
 - `ReasoningLifecycle`: Core lifecycle manager
 - `ReasoningTerminationReason`: Termination reasons enum
@@ -17,6 +20,7 @@ This module provides:
 - Phase output persistence
 - Iteration bounding and termination logic
 - Trace event emission
+- Reasoning contract validation (IMP-034)
 
 Phases:
 1. INTERPRET: Parse user intent, extract entities, identify constraints
@@ -39,6 +43,9 @@ from core.contracts.reasoning_schema import (
     ProposeOutput,
     ReasoningPhase,
     RecommendOutput,
+    ReasoningContract,
+    ReasoningContractError,
+    get_default_reasoning_contract,
 )
 
 
@@ -153,6 +160,7 @@ class ReasoningLifecycle:
     Manager for reasoning lifecycle phases.
     
     ORC-REASON-001..005: 4-phase reasoning with controlled transitions.
+    ORC-REASON-CONTRACT-001..011: Contract enforcement (IMP-034).
     
     Example:
         >>> lifecycle = ReasoningLifecycle(run_id="run-123")
@@ -165,6 +173,8 @@ class ReasoningLifecycle:
         self,
         run_id: str = "",
         max_iterations: int = 3,
+        contract: Optional[ReasoningContract] = None,
+        emit_event_fn: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     ) -> None:
         """
         Initialize reasoning lifecycle.
@@ -172,6 +182,8 @@ class ReasoningLifecycle:
         Args:
             run_id: Associated run ID.
             max_iterations: Maximum reasoning iterations (default: 3).
+            contract: Optional reasoning contract. Default contract requires all phases.
+            emit_event_fn: Optional function to emit trace events.
         """
         self._run_id = run_id or str(uuid4())
         self._max_iterations = min(max(max_iterations, 1), 10)  # Clamp 1-10
@@ -186,6 +198,10 @@ class ReasoningLifecycle:
         self._terminated: bool = False
         self._termination_reason: Optional[ReasoningTerminationReason] = None
         self._final_confidence: float = 0.0
+        # IMP-034: Reasoning contract
+        self._contract: ReasoningContract = contract or get_default_reasoning_contract()
+        self._emit_event_fn = emit_event_fn
+        self._critique_waived_emitted: bool = False
         self._budget_consumed: float = 0.0
     
     @property
@@ -248,6 +264,24 @@ class ReasoningLifecycle:
         """Get all phase outputs (read-only copy)."""
         return dict(self._phase_outputs)
     
+    # ==============================
+    # IMP-034: Contract Properties
+    # ==============================
+    @property
+    def contract(self) -> ReasoningContract:
+        """Get the reasoning contract for this lifecycle."""
+        return self._contract
+    
+    @property
+    def critique_waiver(self) -> bool:
+        """Check if critique phase is waived (IMP-034)."""
+        return self._contract.critique_waiver
+    
+    @property
+    def critique_required(self) -> bool:
+        """Check if critique phase is required (not waived)."""
+        return not self._contract.critique_waiver
+    
     @property
     def transitions(self) -> List[PhaseTransitionRecord]:
         """Get all transition records (read-only copy)."""
@@ -260,6 +294,8 @@ class ReasoningLifecycle:
         """
         Check if transition to phase is valid.
         
+        ORC-REASON-CONTRACT-003: RECOMMEND requires prior CRITIQUE unless waived.
+        
         Args:
             to_phase: Target phase.
             
@@ -268,11 +304,21 @@ class ReasoningLifecycle:
         """
         valid_targets = VALID_TRANSITIONS.get(self._current_phase, [])
         if to_phase not in valid_targets:
+            # IMP-034: Allow PROPOSE -> RECOMMEND if critique is waived
+            if (
+                to_phase == ReasoningPhase.RECOMMEND
+                and self._current_phase == ReasoningPhase.PROPOSE
+                and self._contract.critique_waiver
+            ):
+                return True
             return False
         
-        # Special check: RECOMMEND requires CRITIQUE
-        if to_phase == ReasoningPhase.RECOMMEND and not self._critique_completed:
-            return False
+        # Special check: RECOMMEND requires CRITIQUE (unless waived)
+        if to_phase == ReasoningPhase.RECOMMEND:
+            if self._contract.critique_waiver:
+                return True  # Waiver allows skipping CRITIQUE
+            if not self._critique_completed:
+                return False
         
         return True
     
@@ -285,6 +331,7 @@ class ReasoningLifecycle:
         
         ORC-REASON-002: Transitions logged via trace events.
         ORC-REASON-005: RECOMMEND blocked without CRITIQUE.
+        ORC-REASON-CONTRACT-003: Waiver allows skipping CRITIQUE (IMP-034).
         
         Args:
             phase: Target phase.
@@ -294,20 +341,42 @@ class ReasoningLifecycle:
             
         Raises:
             InvalidPhaseTransitionError: If transition is invalid.
-            RecommendWithoutCritiqueError: If RECOMMEND attempted without CRITIQUE.
+            RecommendWithoutCritiqueError: If RECOMMEND attempted without CRITIQUE (and no waiver).
         """
         # Check valid transition
         valid_targets = VALID_TRANSITIONS.get(self._current_phase, [])
-        if phase not in valid_targets:
+        
+        # IMP-034: Allow PROPOSE -> RECOMMEND if critique is waived
+        is_waiver_transition = (
+            phase == ReasoningPhase.RECOMMEND
+            and self._current_phase == ReasoningPhase.PROPOSE
+            and self._contract.critique_waiver
+        )
+        
+        if phase not in valid_targets and not is_waiver_transition:
             raise InvalidPhaseTransitionError(
                 from_phase=self._current_phase,
                 to_phase=phase,
                 reason=f"Valid targets from {self._current_phase}: {[p.value for p in valid_targets]}",
             )
         
-        # Special check: RECOMMEND requires CRITIQUE
+        # Special check: RECOMMEND requires CRITIQUE (unless waived)
         if phase == ReasoningPhase.RECOMMEND and not self._critique_completed:
-            raise RecommendWithoutCritiqueError()
+            if not self._contract.critique_waiver:
+                raise RecommendWithoutCritiqueError()
+            # Emit waiver event (once per lifecycle)
+            if not self._critique_waived_emitted and self._emit_event_fn:
+                self._emit_event_fn(
+                    "critique_phase_waived",
+                    {
+                        "run_id": self._run_id,
+                        "waiver_reason": self._contract.waiver_reason,
+                        "from_phase": self._current_phase.value if self._current_phase else None,
+                        "to_phase": phase.value,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                self._critique_waived_emitted = True
         
         # Record start time on first transition
         if self._started_at is None:
@@ -345,7 +414,6 @@ class ReasoningLifecycle:
         
         ORC-REASON-003: Each phase produces typed output artifact.
         ORC-REASON-004: Phase outputs persisted before transition.
-        
         Args:
             output: Typed output for current phase.
             
@@ -633,22 +701,44 @@ class ReasoningLifecycle:
             "transitions": [t.to_trace_payload() for t in self._transitions],
             "started_at": self._started_at.isoformat() if self._started_at else None,
             "completed_at": self._completed_at.isoformat() if self._completed_at else None,
+            # IMP-034: Include contract info
+            "contract": self._contract.to_trace_payload(),
         }
     
     @classmethod
-    def from_serializable(cls, data: Dict[str, Any]) -> "ReasoningLifecycle":
+    def from_serializable(
+        cls,
+        data: Dict[str, Any],
+        emit_event_fn: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    ) -> "ReasoningLifecycle":
         """
         Restore lifecycle from serialized data.
         
         Args:
             data: Serialized lifecycle data.
+            emit_event_fn: Optional function to emit trace events.
             
         Returns:
             Restored ReasoningLifecycle instance.
         """
+        # IMP-034: Restore contract if present
+        contract = None
+        if data.get("contract"):
+            contract_data = data["contract"]
+            # Handle waiver_reason being None (serialized when critique_waiver=False)
+            waiver_reason = contract_data.get("waiver_reason")
+            if waiver_reason is None:
+                waiver_reason = ""
+            contract = ReasoningContract(
+                critique_waiver=contract_data.get("critique_waiver", False),
+                waiver_reason=waiver_reason,
+            )
+        
         lifecycle = cls(
             run_id=data.get("run_id", ""),
             max_iterations=data.get("max_iterations", 3),
+            contract=contract,
+            emit_event_fn=emit_event_fn,
         )
         
         # Restore state

@@ -1,8 +1,8 @@
 # ADE Flow Business Requirements
 
 > **Document**: Business Requirements — Flows  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Version bump for V1.3 alignment (INT-OBJ-* coverage confirmed) |
 
 ## 1. Flow Overview
 

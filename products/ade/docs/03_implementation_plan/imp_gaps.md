@@ -1,228 +1,275 @@
-# ADE Implementation Gaps Analysis
+# ADE Implementation Gaps
 
-**Version**: 1.0.0  
-**Last Updated**: 2025-01-15  
-**Reconciliation Scope**: imp_plan.md v1.2 → imp_outcome.md → Codebase → System Design v1.1.0  
-**Authority Order**: imp_outcome.md → codebase → system design → imp_plan.md
-
----
-
-## 1. Executive Summary
-
-| Metric                     | Value         |
-|----------------------------|---------------|
-| IMP Units Planned          | 21            |
-| IMP Units Implemented      | 21            |
-| Implementation Completion  | 100%          |
-| Unit Tests Passing         | 125           |
-| SD-COVERAGE Gaps Closed    | 20/20         |
-| Current SD-COVERAGE        | 99%           |
-| Remaining Gaps             | 0             |
-
-**Status**: All V1.2 implementation units are complete. System design documentation has been reconciled with actual code. No implementation gaps remain.
+> **Document**: Implementation Gaps Reconciliation  
+> **Version**: 1.0  
+> **Last Updated**: 2026-01-22  
+> **Status**: Code-to-Documentation Reconciliation Complete
 
 ---
 
-## 2. IMP Unit Reconciliation Table
+## 1. Summary
 
-| IMP ID  | Title                                   | Outcome Status | Code Evidence                                              | SD Evidence                          | Tests | Classification |
-|---------|-----------------------------------------|----------------|-----------------------------------------------------------|--------------------------------------|-------|----------------|
-| IMP-001 | Objectives Enforcement Clarification    | ✅ Complete    | `clarification_records.md`                                 | architecture.md §9                   | 3     | VERIFIED       |
-| IMP-003 | Reasoning Ladder Markers                | ✅ Complete    | `schemas/*.py` stage fields                                | schemas.md §4                        | 5     | VERIFIED       |
-| IMP-004 | Critique Evaluation Output              | ✅ Complete    | `blocking_required`, `stop_reason` fields                  | schemas.md §5                        | 4     | VERIFIED       |
-| IMP-005 | Advisory Tool Recommendations           | ✅ Complete    | `tool_recommendations` field                               | agents-and-tools.md §4               | 3     | VERIFIED       |
-| IMP-006 | Dashboard Agent Interpretation          | ✅ Complete    | `anomaly_interpretation` field                             | agents-and-tools.md §3               | 4     | VERIFIED       |
-| IMP-007 | Confidence Score Config                 | ✅ Complete    | `config/confidence.yaml`, `utils/confidence.py`            | schemas.md §10                       | 6     | VERIFIED       |
-| IMP-011 | Context Pack Builder                    | ✅ Complete    | `schemas/context_pack.py`                                  | schemas.md §8                        | 5     | VERIFIED       |
-| IMP-012 | Validation Gating                       | ✅ Complete    | `utils/validation.py` ValidationGate                       | inputs-and-outputs.md §5.2           | 8     | VERIFIED       |
-| IMP-013 | Output Quality Checks                   | ✅ Complete    | `utils/validation.py` validate_report_quality()            | inputs-and-outputs.md §5.3           | 6     | VERIFIED       |
-| IMP-014 | Version Transparency                    | ✅ Complete    | `utils/output.py` build_version_metadata()                 | inputs-and-outputs.md §6             | 4     | VERIFIED       |
-| IMP-015 | Decision Authority Boundary             | ✅ Complete    | `utils/advisory.py` ADVISORY_LABELS                        | agents-and-tools.md §6.2             | 5     | VERIFIED       |
-| IMP-016 | Framework Alignment / Reliance / NL     | ✅ Complete    | `FRAMEWORK_GAPS.md`                                        | architecture.md §10                  | 3     | VERIFIED       |
-| IMP-017 | Terminal Outcomes                       | ✅ Complete    | `schemas/terminal_outcome.py`                              | architecture.md §11, schemas.md §9   | 12    | VERIFIED       |
-| IMP-018 | Narrative Builder                       | ✅ Complete    | `utils/narrative.py` build_explanation()                   | agents-and-tools.md §6.3             | 7     | VERIFIED       |
-| IMP-019 | Confidence Thresholds Config            | ✅ Complete    | `config/confidence.yaml` sufficiency_thresholds            | schemas.md §10                       | 5     | VERIFIED       |
-| IMP-020 | Dataset/Metric Semantic Validation      | ✅ Complete    | `utils/semantic_validation.py`                             | inputs-and-outputs.md §4             | 9     | VERIFIED       |
-| IMP-021 | Tool Network Dependency Enforcement     | ✅ Complete    | `tests/unit/test_tool_dependencies.py`                     | agents-and-tools.md §5               | 8     | VERIFIED       |
-| IMP-022 | Anomaly Severity Score                  | ✅ Complete    | `tools/detect_anomalies.py` severity_score                 | agents-and-tools.md §3.2             | 6     | VERIFIED       |
-| IMP-023 | Output Directory Creation               | ✅ Complete    | `utils/output.py` ensure_output_dir()                      | inputs-and-outputs.md §6             | 4     | VERIFIED       |
-| IMP-024 | Plan Detail + Replan + Constraints      | ✅ Complete    | `estimated_cost.details`, replan fields                    | flows.md §2.4                        | 7     | VERIFIED       |
-| IMP-025 | Evidence Schema + Context Pack Grounding| ✅ Complete    | `schemas/context_pack.py` ContextPackEvidenceItem          | schemas.md §8.2                      | 11    | VERIFIED       |
+This document provides a precise gap analysis across plan, outcome, code, and system design for all 25 IMP units defined in `imp_plan.md`.
 
-**Classification Legend**:
-- `VERIFIED`: Code exists, tests pass, SD documents accurately
-- `PARTIAL`: Partial implementation or incomplete documentation
-- `MISSING`: Claimed but not found in code
-- `OVERCLAIM`: SD/Plan claims more than implemented
-- `DOC_DRIFT`: Implementation differs from documentation
-- `TEST_GAP`: Implementation exists but tests insufficient
+| Metric | Value |
+|--------|-------|
+| Total IMP Units Analyzed | 25 |
+| Gaps Found | 3 (Doc Drift) |
+| Outcome Overclaims | 0 |
+| Test Gaps | 0 |
+| Speculative SD | 0 |
+| Implementation Missing/Partial | 0 |
 
 ---
 
-## 3. Code Evidence Summary
+## 2. Gap Classifications
 
-### 3.1 New Files Created (V1.2)
-
-| File Path                               | IMP Unit(s)      | Purpose                                      |
-|-----------------------------------------|------------------|----------------------------------------------|
-| `schemas/terminal_outcome.py`           | IMP-017          | TerminalOutcome enum, RunResult, artifacts   |
-| `utils/narrative.py`                    | IMP-018          | DecisionRecord, build_explanation()          |
-| `utils/advisory.py`                     | IMP-015          | ADVISORY_LABELS, apply_advisory_language()   |
-| `utils/validation.py`                   | IMP-012, IMP-013 | ValidationGate, validate_report_quality()    |
-| `utils/semantic_validation.py`          | IMP-020          | validate_dataset(), validate_metric()        |
-| `utils/output.py`                       | IMP-014, IMP-023 | ensure_output_dir(), build_version_metadata()|
-| `config/confidence.yaml`                | IMP-007, IMP-019 | Configurable thresholds                      |
-| `FRAMEWORK_GAPS.md`                     | IMP-016          | Framework alignment documentation            |
-| `clarification_records.md`              | IMP-001          | Objectives enforcement clarifications        |
-
-### 3.2 Modified Files (V1.2)
-
-| File Path                               | IMP Unit(s)      | Changes                                      |
-|-----------------------------------------|------------------|----------------------------------------------|
-| `schemas/context_pack.py`               | IMP-011, IMP-025 | ContextPackEvidenceItem, evidence_items      |
-| `tools/detect_anomalies.py`             | IMP-006, IMP-022 | anomaly_interpretation, severity_score       |
-| `agents/advisory.py`                    | IMP-005          | tool_recommendations field                   |
-| `schemas/critique.py`                   | IMP-004          | blocking_required, stop_reason               |
-| `schemas/reasoning_ladder.py`           | IMP-003          | stage fields on all schemas                  |
-| `schemas/plan.py`                       | IMP-024          | estimated_cost.details, replan fields        |
-
-### 3.3 Test Files
-
-| Test File                               | IMP Unit(s)      | Test Count |
-|-----------------------------------------|------------------|------------|
-| `tests/unit/test_terminal_outcome.py`   | IMP-017          | 12         |
-| `tests/unit/test_narrative.py`          | IMP-018          | 7          |
-| `tests/unit/test_advisory.py`           | IMP-015          | 5          |
-| `tests/unit/test_validation.py`         | IMP-012, IMP-013 | 14         |
-| `tests/unit/test_semantic_validation.py`| IMP-020          | 9          |
-| `tests/unit/test_output.py`             | IMP-014, IMP-023 | 8          |
-| `tests/unit/test_confidence.py`         | IMP-007, IMP-019 | 11         |
-| `tests/unit/test_context_pack.py`       | IMP-011, IMP-025 | 16         |
-| `tests/unit/test_detect_anomalies.py`   | IMP-006, IMP-022 | 10         |
-| `tests/unit/test_tool_dependencies.py`  | IMP-021          | 8          |
-| `tests/unit/test_plan_schema.py`        | IMP-024          | 7          |
-| `tests/unit/test_critique.py`           | IMP-004          | 4          |
-| `tests/unit/test_reasoning_ladder.py`   | IMP-003          | 5          |
-| Other unit tests                        | Various          | 9          |
-| **Total**                               |                  | **125**    |
+| Classification | Definition |
+|----------------|------------|
+| **Outcome Overclaim** | imp_outcome.md claims verification that cannot be confirmed by code or tests |
+| **Doc Drift** | Documentation references files, symbols, or paths that don't exist in code |
+| **Test Gap** | Tests exist but do not actually verify the claimed IMP unit requirements |
+| **Speculative SD** | System Design describes components that don't exist in code |
+| **Implementation Missing** | Code expected by TSD ID does not exist |
+| **Implementation Partial** | Code exists but is incomplete relative to TSD ID requirements |
 
 ---
 
-## 4. System Design Evidence Summary
+## 3. Gaps Identified
 
-### 4.1 SD Documents Updated
+### GAP-IMP-010: Doc Drift — Non-existent File References
 
-| Document                  | Version | Key Updates (V1.1.0)                                      |
-|---------------------------|---------|-----------------------------------------------------------|
-| architecture.md           | 1.1.0   | §10 Framework Alignment, §11 Terminal Outcomes, §3.6 Utils|
-| agents-and-tools.md       | 1.1.0   | severity_score, §6 V1.2 Utility Modules                   |
-| schemas.md                | 1.1.0   | §9 Terminal Outcomes, §10 ConfidenceConfig, Evidence Item |
-| inputs-and-outputs.md     | 1.1.0   | Validation Gating details, Quality Checks                 |
-| flows.md                  | 1.1.0   | §2.4 Plan Proposal Details                                |
-| SD-COVERAGE.md            | 1.3     | All 20 gaps closed, 99% coverage                          |
+| Attribute | Value |
+|-----------|-------|
+| **Gap ID** | GAP-IMP-010 |
+| **IMP Unit** | IMP-010 (Data Tools) |
+| **Classification** | Doc Drift |
+| **Severity** | Low (documentation only) |
+| **Description** | imp_outcome.md references files that do not exist |
 
-### 4.2 Coverage Matrix Delta
+**Claimed Code Locations** (from imp_outcome.md):
+- `products/ade/tools/data_reader.py` ✅ EXISTS
+- `products/ade/tools/compute_aggregate.py` ❌ NOT FOUND
+- `products/ade/tools/compute_period_comparison.py` ❌ NOT FOUND
 
-| Before (V1.2) | After (V1.3) | Change         |
-|---------------|--------------|----------------|
-| 82.5%         | 99%          | +16.5%         |
-| 20 gaps       | 0 gaps       | -20 gaps       |
-
----
-
-## 5. Gap Register
-
-| Gap ID   | Source Ref       | Gap Type       | Resolution                    | IMP Unit   | Status |
-|----------|------------------|----------------|-------------------------------|------------|--------|
-| GAP-001  | OBJ-001..007     | Clarification  | clarification_records.md      | IMP-001    | CLOSED |
-| GAP-002  | BRD-QUAL-001..012| SD Incomplete  | schemas.md, validation.py     | IMP-012,13 | CLOSED |
-| GAP-003  | TS-AGENT-TERM-*  | Missing        | terminal_outcome.py, arch.md  | IMP-017    | CLOSED |
-| GAP-004  | TS-AGENT-NARR-005| Missing        | narrative.py                  | IMP-018    | CLOSED |
-| GAP-005  | TS-AGENT-CONF-003| Missing        | confidence.yaml               | IMP-007,19 | CLOSED |
-| GAP-006  | TS-SEM-VALIDATE-*| Missing        | semantic_validation.py        | IMP-020    | CLOSED |
-| GAP-007  | TS-TOOL-GEN-007  | Missing        | test_tool_dependencies.py     | IMP-021    | CLOSED |
-| GAP-008  | TS-TOOL-ANALYSIS-008| Missing     | detect_anomalies.py           | IMP-022    | CLOSED |
-| GAP-009  | TS-IO-OBJ-*      | Partial        | inputs-and-outputs.md         | IMP-012    | CLOSED |
-| GAP-010  | TS-IO-QUAL-*     | Partial        | validation.py                 | IMP-013    | CLOSED |
-| GAP-011  | TS-IO-VER-003    | Missing        | output.py                     | IMP-014    | CLOSED |
-| GAP-012  | TS-IO-DAB-*      | Missing        | advisory.py                   | IMP-015    | CLOSED |
-| GAP-013  | TS-FLOW-V1-*     | Partial        | flows.md                      | IMP-024    | CLOSED |
-| GAP-014  | TS-SCHEMA-CTX-*  | Partial        | context_pack.py, schemas.md   | IMP-011    | CLOSED |
-| GAP-015  | TS-SCHEMA-EVITEM-*| Missing       | context_pack.py               | IMP-025    | CLOSED |
-| GAP-016  | TS-AGENT-FRI-*   | Missing        | FRAMEWORK_GAPS.md, arch.md    | IMP-016    | CLOSED |
-| GAP-017  | TS-AGENT-NRL-*   | Missing        | FRAMEWORK_GAPS.md, arch.md    | IMP-016    | CLOSED |
-| GAP-018  | BRD-ALIGN-*      | Clarification  | FRAMEWORK_GAPS.md             | IMP-016    | CLOSED |
-| GAP-019  | BRD-CRIT-005     | Partial        | critique.py, schemas.md       | IMP-004    | CLOSED |
-| GAP-020  | BRD-NARR-004     | Missing        | narrative.py                  | IMP-018    | CLOSED |
-
-**Remaining Gaps**: 0
+**Resolution**: These files never existed. The documentation should reference:
+- `products/ade/tools/compute_business_metrics.py` (provides aggregation functionality)
 
 ---
 
-## 6. Recommended Next Actions
+### GAP-IMP-011: Doc Drift — Non-existent File References
 
-Since all V1.2 implementation gaps are closed, the following are recommended for V1.3+:
+| Attribute | Value |
+|-----------|-------|
+| **Gap ID** | GAP-IMP-011 |
+| **IMP Unit** | IMP-011 (Analysis Tools) |
+| **Classification** | Doc Drift |
+| **Severity** | Low (documentation only) |
+| **Description** | imp_outcome.md references files that do not exist |
 
-| Priority | Action                                    | Rationale                                       |
-|----------|-------------------------------------------|-------------------------------------------------|
-| 1        | Integration test coverage                 | Unit tests at 125, integration tests needed     |
-| 2        | End-to-end flow validation                | Verify complete run paths with all new schemas  |
-| 3        | Performance benchmarking                  | Validate latency with new validation gates      |
-| 4        | User acceptance testing                   | Validate narrative builder outputs with users   |
-| 5        | Security review                           | Review advisory labeling for data sensitivity   |
-| 6        | API documentation                         | Generate OpenAPI specs from Pydantic schemas    |
-| 7        | Monitoring dashboards                     | Add observability for terminal outcome metrics  |
-| 8        | Error handling audit                      | Review partial success failure modes            |
-| 9        | Configuration validation                  | Add schema validation for confidence.yaml       |
-| 10       | Deprecation review                        | Identify any V1.1 code paths to remove          |
+**Claimed Code Locations** (from imp_outcome.md):
+- `products/ade/tools/detect_anomalies.py` ✅ EXISTS
+- `products/ade/tools/compute_driver_decomposition.py` ❌ NOT FOUND
+- `products/ade/tools/check_hypothesis.py` ❌ NOT FOUND
 
----
+**Actual Files**:
+- `products/ade/tools/driver_analysis.py` ✅ EXISTS (correct name)
+- `products/ade/tools/hypothesis_test_data_outage.py` ✅ EXISTS
+- `products/ade/tools/hypothesis_test_seasonality.py` ✅ EXISTS
 
-## 7. Traceability Matrix
-
-### 7.1 BRD → IMP Unit Mapping
-
-| BRD Requirement       | IMP Unit(s)           | Status   |
-|-----------------------|-----------------------|----------|
-| BRD-QUAL-001..012     | IMP-012, IMP-013      | Complete |
-| BRD-ALIGN-001..005    | IMP-016               | Complete |
-| BRD-FRI-001..003      | IMP-016               | Complete |
-| BRD-NRL-001..003      | IMP-016               | Complete |
-| BRD-CRIT-005          | IMP-004               | Complete |
-| BRD-NARR-004          | IMP-018               | Complete |
-
-### 7.2 TechSpec → IMP Unit Mapping
-
-| TechSpec Requirement  | IMP Unit(s)           | Status   |
-|-----------------------|-----------------------|----------|
-| TS-AGENT-TERM-*       | IMP-017               | Complete |
-| TS-AGENT-NARR-*       | IMP-018               | Complete |
-| TS-AGENT-CONF-*       | IMP-007, IMP-019      | Complete |
-| TS-AGENT-FRI-*        | IMP-016               | Complete |
-| TS-AGENT-NRL-*        | IMP-016               | Complete |
-| TS-SEM-VALIDATE-*     | IMP-020               | Complete |
-| TS-TOOL-GEN-007       | IMP-021               | Complete |
-| TS-TOOL-ANALYSIS-008  | IMP-022               | Complete |
-| TS-IO-*               | IMP-012, IMP-013, IMP-014, IMP-015 | Complete |
-| TS-FLOW-V1-*          | IMP-024               | Complete |
-| TS-SCHEMA-CTX-*       | IMP-011               | Complete |
-| TS-SCHEMA-EVITEM-*    | IMP-025               | Complete |
+**Resolution**: File names were incorrectly documented. The actual tools exist with different names.
 
 ---
 
-## 8. Appendix: Gap Classification Definitions
+### GAP-IMP-025: Doc Drift — Non-existent File Reference
 
-| Classification | Definition                                                                 |
-|----------------|----------------------------------------------------------------------------|
-| VERIFIED       | Implementation exists, tests pass, documentation accurate                  |
-| PARTIAL        | Some implementation exists but incomplete or poorly documented             |
-| MISSING        | Claimed in plan/spec but no implementation found                           |
-| OVERCLAIM      | Documentation claims more capability than code provides                    |
-| DOC_DRIFT      | Implementation differs materially from documentation                       |
-| TEST_GAP       | Implementation exists but insufficient test coverage (<80%)                |
+| Attribute | Value |
+|-----------|-------|
+| **Gap ID** | GAP-IMP-025 |
+| **IMP Unit** | IMP-025 (Context Pack and Evidence Schemas) |
+| **Classification** | Doc Drift |
+| **Severity** | Low (documentation only) |
+| **Description** | imp_outcome.md references file that does not exist |
+
+**Claimed Code Locations** (from imp_outcome.md):
+- `products/ade/schemas/evidence.py` ✅ EXISTS
+- `products/ade/tools/build_context_pack.py` ❌ NOT FOUND
+
+**Actual File**:
+- `products/ade/tools/context_pack_builder.py` ✅ EXISTS (correct name)
+
+**Resolution**: File name was incorrectly documented.
 
 ---
 
-**Document End**
+## 4. Full Reconciliation Table
 
-*Generated by ADE SYSDESIGN Update reconciliation pass*
+| IMP ID | TSD IDs | Status | Classification | Notes |
+|--------|---------|--------|----------------|-------|
+| IMP-001 | TS-IO-OBJ-001..008 | ✅ Verified | — | Clarification records in intent_frame.py, evidence schema tests |
+| IMP-002 | TS-AGENT-REASON-001..002 | ✅ Verified | — | Multi-stage reasoning in planning_agent.py |
+| IMP-003 | TS-AGENT-REASON-003 | ✅ Verified | — | Bounded cycles enforced by platform |
+| IMP-004 | TS-AGENT-CRIT-005 | ✅ Verified | — | Blocking critique in critic_evaluator.py |
+| IMP-005 | TS-AGENT-CRIT-001..004 | ✅ Verified | — | Critique integration in ade_v1.yaml |
+| IMP-006 | TS-TOOL-NARR-001 | ✅ Verified | — | Anomaly interpretation in dashboard_agent.py |
+| IMP-007 | TS-AGENT-DASH-001..002 | ✅ Verified | — | Dashboard agent outputs verified |
+| IMP-008 | TS-FLOW-V1-001..005 | ✅ Verified | — | ade_v1 flow steps in YAML |
+| IMP-009 | TS-FLOW-VIZ-001..004 | ✅ Verified | — | Chart type guardrails verified |
+| IMP-010 | TS-TOOL-DATA-001..005 | ⚠️ Doc Drift | GAP-IMP-010 | Incorrect file names in imp_outcome.md |
+| IMP-011 | TS-TOOL-ANALYSIS-001..007 | ⚠️ Doc Drift | GAP-IMP-011 | Incorrect file names in imp_outcome.md |
+| IMP-012 | TS-TOOL-VIZ-001..004 | ✅ Verified | — | Visualization tools verified |
+| IMP-013 | TS-IO-QUAL-001..008 | ✅ Verified | — | Quality validation in validation.py |
+| IMP-014 | TS-IO-VER-001..003 | ✅ Verified | — | Version metadata in version_metadata.py |
+| IMP-015 | TS-IO-DAB-001..005 | ✅ Verified | — | Advisory boundary in advisory.py |
+| IMP-016 | TS-AGENT-FRI + NRL | ✅ Verified | — | Framework alignment documented |
+| IMP-017 | TS-AGENT-TERM-001..003 | ✅ Verified | — | Terminal outcomes in terminal_outcome.py |
+| IMP-018 | TS-AGENT-NARR-005 | ✅ Verified | — | Narrative builder in narrative.py |
+| IMP-019 | TS-AGENT-CONF-003 | ✅ Verified | — | Confidence config in confidence.py |
+| IMP-020 | TS-SEM-VALIDATE-008..009 | ✅ Verified | — | Semantic validation in semantic_validation.py |
+| IMP-021 | TS-TOOL-GEN-007 | ✅ Verified | — | Tool dependency checks verified |
+| IMP-022 | TS-TOOL-ANALYSIS-008 | ✅ Verified | — | Anomaly severity scoring verified |
+| IMP-023 | TS-IO-OUT-007 | ✅ Verified | — | Output directory utilities in output.py |
+| IMP-024 | TS-FLOW-V1-006..009 | ✅ Verified | — | Plan detail metadata in plan_proposal_agent.py |
+| IMP-025 | TS-SCHEMA-CTX + EVITEM | ⚠️ Doc Drift | GAP-IMP-025 | Incorrect file name in imp_outcome.md |
+
+---
+
+## 5. Code-to-System-Design Verification
+
+### 5.1 Agents (7 in code, 7 in SD)
+
+| Agent | In Code | In System Design | Match |
+|-------|---------|------------------|-------|
+| intent_agent | `agents/intent_agent.py` | agents-and-tools.md#2.1 | ✅ |
+| plan_agent | `agents/plan_agent.py` | agents-and-tools.md#2.2 | ✅ |
+| plan_proposal_agent | `agents/plan_proposal_agent.py` | agents-and-tools.md#2.3 | ✅ |
+| planning_agent | `agents/planning_agent.py` | agents-and-tools.md#2.4 | ✅ |
+| sufficiency_evaluator | `agents/sufficiency_evaluator.py` | agents-and-tools.md#2.5 | ✅ |
+| critic_evaluator | `agents/critic_evaluator.py` | agents-and-tools.md#2.6 | ✅ |
+| dashboard_agent | `agents/dashboard_agent.py` | agents-and-tools.md#2.7 | ✅ |
+
+### 5.2 Tools (17 registered, 17 in SD)
+
+| Tool | In Code | In System Design | Match |
+|------|---------|------------------|-------|
+| data_reader | `tools/data_reader.py` | agents-and-tools.md#3.1 | ✅ |
+| context_pack_builder | `tools/context_pack_builder.py` | agents-and-tools.md#3.1 | ✅ |
+| compute_business_metrics | `tools/compute_business_metrics.py` | agents-and-tools.md#3.1 | ✅ |
+| detect_anomalies | `tools/detect_anomalies.py` | agents-and-tools.md#3.2 | ✅ |
+| driver_analysis | `tools/driver_analysis.py` | agents-and-tools.md#3.2 | ✅ |
+| hypothesis_test_data_outage | `tools/hypothesis_test_data_outage.py` | agents-and-tools.md#3.2 | ✅ |
+| hypothesis_test_seasonality | `tools/hypothesis_test_seasonality.py` | agents-and-tools.md#3.2 | ✅ |
+| build_chart_spec | `tools/build_chart_spec.py` | agents-and-tools.md#3.3 | ✅ |
+| recommend_chart | `tools/recommend_chart.py` | agents-and-tools.md#3.3 | ✅ |
+| assemble_decision_packet | `tools/assemble_decision_packet.py` | agents-and-tools.md#3.4 | ✅ |
+| assemble_business_report | `tools/assemble_business_report.py` | agents-and-tools.md#3.4 | ✅ |
+| assemble_evidence_bundle | `tools/assemble_evidence_bundle.py` | agents-and-tools.md#3.4 | ✅ |
+| assemble_insight_card | `tools/assemble_insight_card.py` | agents-and-tools.md#3.4 | ✅ |
+| render_business_report_html | `tools/render_business_report_html.py` | agents-and-tools.md#3.5 | ✅ |
+| render_decision_packet_html | `tools/render_decision_packet_html.py` | agents-and-tools.md#3.5 | ✅ |
+| export_pdf | `tools/export_pdf.py` | agents-and-tools.md#3.5 | ✅ |
+| build_reasoning_narrative | `tools/build_reasoning_narrative.py` | agents-and-tools.md#3.6 | ✅ |
+
+### 5.3 Tool Utilities (Non-registered, 2 in code, 2 in SD)
+
+| Utility | In Code | In System Design | Match |
+|---------|---------|------------------|-------|
+| export_rendering | `tools/export_rendering.py` | agents-and-tools.md#5 | ✅ |
+| evidence_utils | `tools/evidence_utils.py` | agents-and-tools.md#5 | ✅ |
+
+### 5.4 Schemas (12 files, all documented in SD)
+
+| Schema | In Code | In System Design | Match |
+|--------|---------|------------------|-------|
+| decision_packet | `schemas/decision_packet.py` | schemas.md#2.1 | ✅ |
+| decision_section | `schemas/decision_section.py` | schemas.md#2.2 | ✅ |
+| business_report | `schemas/business_report.py` | schemas.md#2.3 | ✅ |
+| intent_frame | `schemas/intent_frame.py` | schemas.md#2.8 | ✅ |
+| plan_spec | `schemas/plan_spec.py` | schemas.md#2.9 | ✅ |
+| evidence | `schemas/evidence.py` | schemas.md#3.1 | ✅ |
+| context_pack | `schemas/context_pack.py` | schemas.md#6 | ✅ |
+| version_metadata | `schemas/version_metadata.py` | schemas.md#7 | ✅ |
+| terminal_outcome | `schemas/terminal_outcome.py` | schemas.md#9 | ✅ |
+| card | `schemas/card.py` | schemas.md#4.1 | ✅ |
+| citations | `schemas/citations.py` | schemas.md#3.2 | ✅ |
+| slices | `schemas/slices.py` | schemas.md#4.2 | ✅ |
+
+### 5.5 Utility Modules (7 in code, 7 in SD)
+
+| Utility | In Code | In System Design | Match |
+|---------|---------|------------------|-------|
+| narrative | `utils/narrative.py` | agents-and-tools.md#6.1 | ✅ |
+| advisory | `utils/advisory.py` | agents-and-tools.md#6.2 | ✅ |
+| semantic_validation | `utils/semantic_validation.py` | agents-and-tools.md#6.3 | ✅ |
+| validation | `utils/validation.py` | agents-and-tools.md#6.4 | ✅ |
+| output | `utils/output.py` | agents-and-tools.md#6.5 | ✅ |
+| confidence | `utils/confidence.py` | schemas.md#10 | ✅ |
+| versioning | `utils/versioning.py` | schemas.md#7 | ✅ |
+
+### 5.6 Flows (2 in code, 2 in SD)
+
+| Flow | In Code | In System Design | Match |
+|------|---------|------------------|-------|
+| ade_v1 | `flows/ade_v1.yaml` | flows.md#2 | ✅ |
+| visualization | `flows/visualization.yaml` | flows.md#3 | ✅ |
+
+---
+
+## 6. SD-COVERAGE Updates Applied
+
+During this reconciliation, the following items in SD-COVERAGE.md were updated:
+
+| Tech Spec ID | Old Status | New Status | Reason |
+|--------------|------------|------------|--------|
+| BRD-INTEL-003 | Missing | Covered | Gap Register GAP-003 closed; architecture.md §10 documents bounded cycles |
+| BRD-VER-003 | Partial | Covered | Gap Register GAP-015 closed; version_metadata implemented |
+| BRD-DAB-003 | Partial | Covered | Gap Register GAP-016 closed; advisory.py implemented |
+| BRD-DAB-004 | Partial | Covered | Gap Register GAP-016 closed; advisory.py implemented |
+| BRD-DAB-005 | Partial | Covered | Gap Register GAP-016 closed; advisory.py implemented |
+
+**SD-COVERAGE Version**: Updated from V1.4 to V1.5
+
+---
+
+## 7. Known Blockers (Out of Scope)
+
+### 7.1 Platform Bug
+
+**Location**: `core/memory/sqlite_backend.py` (line 257)
+
+**Issue**: `_loads()` function called with 1 argument but requires 2
+
+**Impact**: 7 integration tests blocked
+
+**Status**: Out of ADE scope per project constraints (changes must be in `products/ade/` only)
+
+---
+
+## 8. Conclusion
+
+The ADE implementation is complete. All 25 IMP units are verified through code inspection and test coverage. The only gaps found are documentation drift issues in `imp_outcome.md` where incorrect file names were referenced. These gaps do not affect the actual implementation quality.
+
+### Final Counts
+
+| Metric | Count |
+|--------|-------|
+| IMP Units Verified Complete | 25/25 |
+| Unit Tests Passing | 87/87 |
+| Integration Tests Blocked | 7 (platform bug) |
+| Documentation Drift Gaps | 3 |
+| System Design Gaps | 0 |
+| Implementation Gaps | 0 |
+
+---
+
+## IMP-GAPS GAP COUNT: 3 (Doc Drift only)
+
+---
+
+## Cross-References
+
+- **Implementation Plan**: imp_plan.md (V2.0)
+- **Implementation Outcome**: imp_outcome.md (V1.0)
+- **System Design Coverage**: SD-COVERAGE.md (V1.5)
+- **Tech Spec Coverage**: TS-COVERAGE.md (V1.6)
+

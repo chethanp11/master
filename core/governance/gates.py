@@ -4,6 +4,7 @@ Unified Governance Gates Module
 This module consolidates all governance gates into a single registry-based system:
 - BranchGate: Validates branch conditions in flows
 - LoopGate: Validates loop stop conditions in flows
+- IntentSufficiencyGate: Gates tool selection based on sufficiency state (IMP-035)
 - PlanGate: Gates action plan execution
 - CriticGate: Gates critic recommendations
 - RetrievalGate: Resolves allowed retrieval sources
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Set, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Protocol, Set, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,6 +41,7 @@ from core.contracts.flow_schema import (
     StopConditionExpr,
     StopConditionGroup,
 )
+from core.contracts.sufficiency_schema import SufficiencyState, Gap
 from core.governance.budgeting import consume_budget, init_budget_state
 
 
@@ -330,6 +332,205 @@ class LoopGate(BaseGate):
                 condition.path, step_ids=step_ids, step_id=step_id
             )
         return [f"loop.{step_id}.unsupported_stop_condition"]
+
+
+# ============================================================================
+# Intent Sufficiency Gate (IMP-035: ORC-SUFF-GATE-001..008)
+# ============================================================================
+
+
+@dataclass(frozen=True)
+class SufficiencyGateDecision:
+    """
+    Structured decision result from sufficiency gate evaluation.
+    
+    ORC-SUFF-GATE-001...008: Intent sufficiency gate at tool selection phase.
+    
+    Attributes:
+        proceed: True if sufficiency check passed, False otherwise
+        reason: Human-readable explanation of decision
+        gap_count: Total number of gaps
+        blocking_gap_count: Number of blocking gaps
+        blocking_gaps: List of blocking gap descriptions
+        is_sufficient: Whether the state is sufficient to proceed
+    """
+    proceed: bool
+    reason: str
+    gap_count: int
+    blocking_gap_count: int
+    blocking_gaps: List[str]
+    is_sufficient: bool
+    
+    def to_trace_payload(self) -> Dict[str, Any]:
+        """Convert to trace event payload format."""
+        return {
+            "proceed": self.proceed,
+            "reason": self.reason,
+            "gap_count": self.gap_count,
+            "blocking_gap_count": self.blocking_gap_count,
+            "blocking_gaps": self.blocking_gaps,
+            "is_sufficient": self.is_sufficient,
+            "decision": "proceed" if self.proceed else "blocked",
+        }
+
+
+class IntentSufficiencyGate(BaseGate):
+    """
+    Gate for validating intent sufficiency before tool selection.
+    
+    ORC-SUFF-GATE-001...008: Evaluates SufficiencyState before proceeding to tool selection.
+    
+    The gate passes if:
+    - There are no gaps, OR
+    - All gaps are non-blocking
+    
+    On failure:
+    - Run should transition to PAUSED_WAITING_FOR_USER
+    - Emit sufficiency_gate_blocked trace event with gap information
+    
+    Example:
+        >>> gate = IntentSufficiencyGate()
+        >>> state = SufficiencyState(run_id="run-1", gaps=[...])
+        >>> decision = gate.check_sufficiency(state)
+        >>> if not decision.proceed:
+        ...     # Transition to PAUSED_WAITING_FOR_USER
+    """
+
+    name = "intent_sufficiency"
+    
+    def __init__(
+        self,
+        emit_event_fn: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    ) -> None:
+        """
+        Initialize the gate.
+        
+        Args:
+            emit_event_fn: Optional function to emit trace events.
+        """
+        self._emit_event = emit_event_fn
+
+    def evaluate(self, context: GateContext) -> GateResult:
+        """
+        Evaluate the sufficiency gate from GateContext.
+        
+        The sufficiency state should be in context.extra["sufficiency_state"].
+        """
+        sufficiency_state = context.extra.get("sufficiency_state")
+        if sufficiency_state is None:
+            return self._failure(
+                "no_sufficiency_state",
+                errors=["SufficiencyState not provided in context.extra"],
+            )
+        
+        if not isinstance(sufficiency_state, SufficiencyState):
+            return self._failure(
+                "invalid_sufficiency_state",
+                errors=["sufficiency_state must be a SufficiencyState instance"],
+            )
+        
+        decision = self.check_sufficiency(sufficiency_state)
+        
+        if decision.proceed:
+            return self._success(decision.to_trace_payload())
+        
+        return self._failure(
+            reason="sufficiency_gate_blocked",
+            errors=[f"Blocking gap: {gap}" for gap in decision.blocking_gaps],
+            details=decision.to_trace_payload(),
+        )
+
+    def check_sufficiency(
+        self,
+        state: SufficiencyState,
+    ) -> SufficiencyGateDecision:
+        """
+        Check if sufficiency state allows proceeding to tool selection.
+        
+        ORC-SUFF-GATE-002: Gate checks gaps.count == 0 or all gaps non-blocking.
+        
+        Args:
+            state: The SufficiencyState to evaluate.
+            
+        Returns:
+            SufficiencyGateDecision with proceed status and details.
+        """
+        gap_count = len(state.gaps)
+        blocking_gaps = state.get_blocking_gaps()
+        blocking_gap_count = len(blocking_gaps)
+        blocking_gap_descriptions = [gap.description for gap in blocking_gaps]
+        is_sufficient = state.is_sufficient()
+        
+        # Emit evaluation event
+        if self._emit_event:
+            self._emit_event("sufficiency_gate_evaluated", {
+                "gap_count": gap_count,
+                "blocking_gap_count": blocking_gap_count,
+                "is_sufficient": is_sufficient,
+            })
+        
+        if is_sufficient:
+            return SufficiencyGateDecision(
+                proceed=True,
+                reason="Sufficiency check passed",
+                gap_count=gap_count,
+                blocking_gap_count=0,
+                blocking_gaps=[],
+                is_sufficient=True,
+            )
+        
+        # Emit blocked event
+        if self._emit_event:
+            self._emit_event("sufficiency_gate_blocked", {
+                "gap_count": gap_count,
+                "blocking_gap_count": blocking_gap_count,
+                "blocking_gaps": blocking_gap_descriptions,
+            })
+        
+        return SufficiencyGateDecision(
+            proceed=False,
+            reason=f"Blocking gaps prevent tool selection: {blocking_gap_count} blocking gap(s)",
+            gap_count=gap_count,
+            blocking_gap_count=blocking_gap_count,
+            blocking_gaps=blocking_gap_descriptions,
+            is_sufficient=False,
+        )
+
+    def check_sufficiency_with_unknowns(
+        self,
+        state: SufficiencyState,
+        include_blocking_unknowns: bool = False,
+    ) -> SufficiencyGateDecision:
+        """
+        Extended check that also considers blocking unknowns.
+        
+        Args:
+            state: The SufficiencyState to evaluate.
+            include_blocking_unknowns: If True, blocking unknowns also block.
+            
+        Returns:
+            SufficiencyGateDecision with proceed status.
+        """
+        decision = self.check_sufficiency(state)
+        
+        if not include_blocking_unknowns:
+            return decision
+        
+        # Also check blocking unknowns
+        if state.has_blocking_unknowns():
+            blocking_unknowns = state.get_blocking_unknowns()
+            unknown_descriptions = [u.question for u in blocking_unknowns]
+            
+            return SufficiencyGateDecision(
+                proceed=False,
+                reason=f"Blocking unknowns prevent tool selection: {len(blocking_unknowns)} blocking unknown(s)",
+                gap_count=len(state.gaps),
+                blocking_gap_count=len(state.get_blocking_gaps()) + len(blocking_unknowns),
+                blocking_gaps=decision.blocking_gaps + unknown_descriptions,
+                is_sufficient=False,
+            )
+        
+        return decision
 
 
 # ============================================================================

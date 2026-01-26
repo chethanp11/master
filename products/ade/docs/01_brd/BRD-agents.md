@@ -1,8 +1,8 @@
 # ADE Agent Business Requirements
 
 > **Document**: Business Requirements — Agents  
-> **Version**: V1.2  
-> **Last Updated**: 2026-01-19
+> **Version**: V1.3  
+> **Last Updated**: 2026-01-21
 
 ---
 
@@ -12,10 +12,17 @@
 |---------|------|---------|
 | 1.0.0 | 2026-01-13 | Initial release |
 | V1.2 | 2026-01-19 | Standardized tables, removed TSD-level detail, and aligned intent traceability |
+| V1.3 | 2026-01-21 | Added BRD-AGENT-001 (agents as specialists), BRD-SEM-011 (intent-derived behavior) |
 
 ## 1. Agent Overview
 
 Agents provide reasoning roles in ADE workflows:
+
+### 1.0 Agent Design Principles
+
+| ID | Requirement | Derived from (Intent ID) | Priority | Added Date | Version | Notes |
+|----|-------------|---------------------------|----------|------------|---------|-------|
+| BRD-AGENT-001 | ADE MUST treat agents as specialists performing scoped tasks (e.g., "summarize risk signals", "interpret intent"); orchestrator SHALL control sequencing and authority; agents SHALL NOT control flow or make autonomous decisions | INT-AGENTS-001 | P0 | 2026-01-21 | V1.3 | — |
 
 ---
 
@@ -160,6 +167,7 @@ Agents provide reasoning roles in ADE workflows:
 | BRD-SEM-003 | System MUST support all ADE intent types | INT-SEM-002 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-SEM-004 | System MUST classify intent with confidence score | INT-SEM-004 | P0 | 2026-01-13 | V1.1 | — |
 | BRD-SEM-005 | Semantic interpretation MUST run before planning phase | INT-SEM-009 | P0 | 2026-01-13 | V1.1 | — |
+| BRD-SEM-011 | ADE MUST derive analytical behavior strictly from resolved user intent; analysis types (trend, anomaly, delta) SHALL NOT be assumed unless explicitly specified in the resolved semantic intent | INT-SEM-011 | P0 | 2026-01-21 | V1.3 | — |
 
 ### 8.2 ADE Intent Taxonomy
 
