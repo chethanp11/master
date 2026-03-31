@@ -18,11 +18,12 @@ Products supply manifests, flows, agents, and tools; the platform executes flows
 4. **Config-first control:** YAML configs and the loader centralize app/policy/logging settings and secrets.
 
 ## Thought process & docs map
-- `docs/core_architecture.md` describes orchestrator/memory/governance/logging layers and the contracts that keep them typed.
-- `docs/component_details.md` catalogs each package path plus storage, gateway, and product subsystems.
-- `docs/product_howto.md` walks you through manifest/config, flows, registry hooks, and regression testing.
-- `docs/overview.md` presents the high-level principles and the hello_world golden path.
-- `docs/governance_and_policies.md` plus `docs/engineering_standards.md` enumerate the safety rules that every commit must respect.
+- `docs/01_vision_and_intent/` captures vision plus platform intent requirements.
+- `docs/02_brd/` maps business requirements and intent coverage.
+- `docs/03_techspec/` defines technical specs and BRD-to-techspec coverage.
+- `docs/04_implementation_plan/` tracks implementation plan, gaps, and outcomes.
+- `docs/05_systemdesign/` provides architecture and implementation coverage references.
+- `docs/howto/product-howto.md` explains how to build and ship products on MASTER.
 
 ## Getting started
 1. Read the architecture & component docs to understand the runtime boundaries.
@@ -31,9 +32,10 @@ Products supply manifests, flows, agents, and tools; the platform executes flows
 4. Use the API/CLI/Streamlit UI to run flows, observe approvals, and resume runs.
 
 ## Docs at a glance
-- `docs/core_architecture.md`: Deep dive into orchestrator, memory, governance, observability, and contract layers.
-- `docs/component_details.md`: Component catalog mapping code paths to responsibilities, storage, gateways, and tests.
-- `docs/overview.md`: High-level principles and the hello_world golden-path demo with UI/API interaction notes.
-- `docs/product_howto.md`: Step-by-step guide to scaffolding manifests, flows, agents/tools, registration, and regression testing.
-- `docs/governance_and_policies.md`: Policy enforcement story, redaction rules, hooks, and governance artifacts.
-- `docs/engineering_standards.md`: Platform laws letting you know what you must never break (env reads, persistence, envelope rules).
+- `docs/01_vision_and_intent/Vision.md`: Platform vision and non-negotiable principles.
+- `docs/02_brd/README.md`: BRD structure plus links to automation/experience/governance/operations BRDs.
+- `docs/03_techspec/README.md`: Technical spec index (`ORC`, `GOV`, `AGT`, `MEM`, `GW`, `PROD`, `INT`, `ACC`) and coverage.
+- `docs/03_techspec/TS-COVERAGE.md`: BRD to TechSpec coverage mapping.
+- `docs/05_systemdesign/SD-ARCH.md`: Stable architecture boundaries, dependency rules, and invariants.
+- `docs/05_systemdesign/SD-COVERAGE.md`: TechSpec ID to implementation mapping for delta detection.
+- `docs/howto/product-howto.md`: Product authoring guide (manifest, flows, registry, tests).
