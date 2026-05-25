@@ -21,19 +21,25 @@ This folder contains **implementation reference documentation** that describes h
 ### Document Hierarchy
 
 ```
-docs/Framework_Dev_Steps/
+docs/
 ├── 01_vision_and_intent/       ← WHY: Vision and intent
-├── 02_business_requirements/   ← WHY: Business requirements
-├── 03_technical_specifications/← WHAT: Technical requirements  
+├── 02_brd/                     ← WHY: Business requirements
+├── 03_techspec/                ← WHAT: Technical requirements
 ├── 04_implementation_plan/     ← HOW: Implementation planning
-└── 05_system_design/           ← HOW: Implementation reference (this folder)
+└── 05_systemdesign/           ← HOW: Implementation reference (this folder)
     ├── README.md               ← Navigation (you are here)
-    ├── architecture-overview.md
-    ├── component-reference.md
-    ├── flows-and-agents-reference.md
-    ├── product-guide.md
-    ├── governance-reference.md
-    └── engineering-standards.md
+    ├── SD-ARCH.md              ← Architecture boundaries
+    ├── SD-COVERAGE.md          ← Requirement coverage matrix
+    ├── SD-INDEX.md             ← System design index
+    └── components/
+        ├── SD-COMP-LIST.md
+        ├── SD-GOV.md
+        ├── SD-GW.md
+        ├── SD-INT.md
+        ├── SD-MEM.md
+        ├── SD-ORC.md
+        ├── SD-PROD.md
+        └── SD-TOOLS.md
 ```
 
 ---
@@ -42,31 +48,29 @@ docs/Framework_Dev_Steps/
 
 | Document | Purpose | Audience |
 |----------|---------|----------|
-| [architecture-overview.md](architecture-overview.md) | High-level architecture, principles, layer diagram, execution flow | All engineers |
-| [component-reference.md](component-reference.md) | Deep-dive into each core module | Core contributors |
-| [flows-and-agents-reference.md](flows-and-agents-reference.md) | Flow definitions, step types, agent/tool contracts | Product builders |
-| [product-guide.md](product-guide.md) | **Start here** to build a new product | Product builders |
-| [governance-reference.md](governance-reference.md) | Governance hooks, policies, security, budgets | All engineers |
-| [engineering-standards.md](engineering-standards.md) | Coding conventions, patterns, testing | All engineers |
+| [SD-ARCH.md](SD-ARCH.md) | High-level architecture, boundaries, and invariants | All engineers |
+| [SD-COVERAGE.md](SD-COVERAGE.md) | Tech Spec ID → implementation mapping | Core contributors |
+| [SD-INDEX.md](SD-INDEX.md) | Navigation, document map, and delta-detection loop | All engineers |
+| [components/SD-COMP-LIST.md](components/SD-COMP-LIST.md) | Component inventory and implementation reference | Core contributors |
 
 ---
 
 ## Reading Order
 
 ### For New Engineers
-1. [architecture-overview.md](architecture-overview.md) — Understand the big picture
-2. [product-guide.md](product-guide.md) — Learn how to build products
-3. [engineering-standards.md](engineering-standards.md) — Follow conventions
+1. [SD-ARCH.md](SD-ARCH.md) — Understand the big picture
+2. [SD-INDEX.md](SD-INDEX.md) — Review the doc map and delta-detection loop
+3. [components/SD-COMP-LIST.md](components/SD-COMP-LIST.md) — Review component inventory
 
 ### For Product Builders
-1. [product-guide.md](product-guide.md) — Step-by-step product creation
-2. [flows-and-agents-reference.md](flows-and-agents-reference.md) — Flow/agent/tool details
-3. [governance-reference.md](governance-reference.md) — Understand governance constraints
+1. `docs/howto/product-howto.md` — Step-by-step product creation
+2. [components/SD-PROD.md](components/SD-PROD.md) — Product contract and isolation
+3. [components/SD-GOV.md](components/SD-GOV.md) — Governance constraints
 
 ### For Core Contributors
-1. [architecture-overview.md](architecture-overview.md) — System design principles
-2. [component-reference.md](component-reference.md) — Module deep-dives
-3. [governance-reference.md](governance-reference.md) — Governance internals
+1. [SD-ARCH.md](SD-ARCH.md) — System design principles
+2. [components/SD-COMP-LIST.md](components/SD-COMP-LIST.md) — Module deep-dives
+3. [components/SD-GOV.md](components/SD-GOV.md) — Governance internals
 
 ---
 
@@ -74,12 +78,12 @@ docs/Framework_Dev_Steps/
 
 | Topic | System Design | BRD | Techspec |
 |-------|---------------|-----|----------|
-| Orchestration | architecture-overview.md | [BRD-automation.md](../02_business_requirements/BRD-automation.md) | [ORC-orchestration.md](../03_technical_specifications/ORC-orchestration.md) |
-| Agents/Tools | flows-and-agents-reference.md | [BRD-automation.md](../02_business_requirements/BRD-automation.md) | [AGT-agents-tools.md](../03_technical_specifications/AGT-agents-tools.md) |
-| Governance | governance-reference.md | [BRD-governance.md](../02_business_requirements/BRD-governance.md) | [GOV-governance.md](../03_technical_specifications/GOV-governance.md) |
-| Products | product-guide.md | [BRD-experience.md](../02_business_requirements/BRD-experience.md) | [PROD-products.md](../03_technical_specifications/PROD-products.md) |
-| Gateway | architecture-overview.md | [BRD-experience.md](../02_business_requirements/BRD-experience.md) | [GW-gateway.md](../03_technical_specifications/GW-gateway.md) |
-| Memory | component-reference.md | [BRD-operations.md](../02_business_requirements/BRD-operations.md) | [MEM-memory.md](../03_technical_specifications/MEM-memory.md) |
+| Orchestration | SD-ARCH.md / components/SD-ORC.md | [BRD-automation.md](../02_brd/BRD-automation.md) | [ORC-orchestration.md](../03_techspec/ORC-orchestration.md) |
+| Agents/Tools | components/SD-TOOLS.md | [BRD-automation.md](../02_brd/BRD-automation.md) | [AGT-agents-tools.md](../03_techspec/AGT-agents-tools.md) |
+| Governance | components/SD-GOV.md | [BRD-governance.md](../02_brd/BRD-governance.md) | [GOV-governance.md](../03_techspec/GOV-governance.md) |
+| Products | components/SD-PROD.md | [BRD-experience.md](../02_brd/BRD-experience.md) | [PROD-products.md](../03_techspec/PROD-products.md) |
+| Gateway | components/SD-GW.md | [BRD-experience.md](../02_brd/BRD-experience.md) | [GW-gateway.md](../03_techspec/GW-gateway.md) |
+| Memory | components/SD-MEM.md | [BRD-operations.md](../02_brd/BRD-operations.md) | [MEM-memory.md](../03_techspec/MEM-memory.md) |
 
 ---
 

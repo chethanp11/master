@@ -20,7 +20,7 @@
 
 ## Governing Architecture Invariants
 
-The following architecture invariants from [Developer Intent](../00_developer_intent/intent.md) govern this BRD:
+The following architecture invariants from [Developer Intent](../01_vision_and_intent/intent.md) govern this BRD:
 
 | INV | Invariant | Implication for Governance |
 |-----|-----------|---------------------------|
@@ -71,7 +71,7 @@ A governance framework that provides:
 
 ## 3. Business Requirements
 
-> **Source**: [INT-GOV](../00_developer_intent/intent.md#2-governance--compliance-int-gov)
+> **Source**: [INT-GOV](../01_vision_and_intent/intent.md#2-governance--compliance-int-gov)
 
 ### 3.1 Human Oversight
 
@@ -203,7 +203,7 @@ A governance framework that provides:
 
 ### 3.8 Semantic Confidence Governance (Added: 2026-01-13)
 
-> **Source**: [INT-GOV-CONF](../00_developer_intent/intent.md#24-semantic-confidence-governance-added-2026-01-13)
+> **Source**: [INT-GOV-CONF](../01_vision_and_intent/intent.md#24-semantic-confidence-governance-added-2026-01-13)
 
 | ID | Requirement | Priority | Source | Ver | Date |
 |----|-------------|----------|--------|-----|------|
@@ -319,7 +319,7 @@ by_product:
 
 ## 7. Cross-Cutting Requirements
 
-> **Source**: [INT-LIFECYCLE](../00_developer_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../00_developer_intent/intent.md#6-product-factory-model-int-factory)
+> **Source**: [INT-LIFECYCLE](../01_vision_and_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../01_vision_and_intent/intent.md#6-product-factory-model-int-factory)
 
 ### 7.1 Intent-to-BRD Traceability
 
@@ -382,7 +382,7 @@ by_product:
 
 ## 11. Framework Laws Governing Governance
 
-> **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
+> **Source**: [Framework Laws](../01_vision_and_intent/intent.md#7-framework-laws)
 
 | Law | Implication |
 |-----|-------------|
@@ -399,8 +399,8 @@ by_product:
 
 ## Related Documents
 
-- [Intent.md](../00_developer_intent/intent.md) — Source developer intent
-- [Vision.md](../00_developer_intent/Vision.md) — Platform vision and principles
+- [Intent.md](../01_vision_and_intent/intent.md) — Source developer intent
+- [Vision.md](../01_vision_and_intent/Vision.md) — Platform vision and principles
 - [BRD-automation.md](BRD-automation.md) — Agent capabilities requiring governance
-- [GOV-governance.md](../techspec/GOV-governance.md) — Technical governance specs
-- [ORC-orchestration.md](../techspec/ORC-orchestration.md) — Pause/resume specs
+- [GOV-governance.md](../03_techspec/GOV-governance.md) — Technical governance specs
+- [ORC-orchestration.md](../03_techspec/ORC-orchestration.md) — Pause/resume specs

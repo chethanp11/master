@@ -3,7 +3,7 @@
 > **Component**: Product Layer  
 > **Version**: 1.1  
 > **Path**: `products/`  
-> **Tech Spec**: [PROD-products.md](../../03_technical_specifications/PROD-products.md)  
+> **Tech Spec**: [PROD-products.md](../../03_techspec/PROD-products.md)  
 > **Last Updated**: 2026-01-16  
 
 ---
@@ -383,15 +383,15 @@ Each product mirrors the framework documentation structure:
 
 ```
 products/{product}/docs/
-├── 00_developer_intent/
+├── 01_vision_and_intent/
 │   └── intent.md              # Why this product exists
-├── 01_brd/
+├── 02_brd/
 │   └── requirements.md        # Business requirements
-├── 02_techspec/
+├── 03_techspec/
 │   └── spec.md                # Technical specifications
-├── 03_implementation_plan/
+├── 04_implementation_plan/
 │   └── plan.md                # Implementation phases
-└── 04_systemdesign/
+└── 05_systemdesign/
     ├── overview.md            # Architecture overview
     └── flows/                 # Flow-specific design
         └── {flow}.md

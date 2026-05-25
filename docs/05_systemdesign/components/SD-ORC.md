@@ -3,7 +3,7 @@
 > **Component**: Orchestration Engine  
 > **Version**: 1.2  
 > **Path**: `core/orchestrator/`  
-> **Tech Spec**: [ORC-orchestration.md](../../03_technical_specifications/ORC-orchestration.md)  
+> **Tech Spec**: [ORC-orchestration.md](../../03_techspec/ORC-orchestration.md)  
 > **Last Updated**: 2026-01-20  
 
 ---

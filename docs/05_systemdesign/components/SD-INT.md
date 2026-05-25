@@ -3,7 +3,7 @@
 > **Component**: Intelligence Middleware  
 > **Version**: 1.2  
 > **Path**: `core/agents/`, `core/knowledge/`  
-> **Tech Spec**: [INT-intelligence.md](../../03_technical_specifications/INT-intelligence.md)  
+> **Tech Spec**: [INT-intelligence.md](../../03_techspec/INT-intelligence.md)  
 > **Last Updated**: 2026-01-20  
 
 ---

@@ -3,7 +3,7 @@
 > **Component**: Governance Layer  
 > **Version**: 1.2  
 > **Path**: `core/governance/`  
-> **Tech Spec**: [GOV-governance.md](../../03_technical_specifications/GOV-governance.md)  
+> **Tech Spec**: [GOV-governance.md](../../03_techspec/GOV-governance.md)  
 > **Last Updated**: 2026-01-20  
 
 ---
@@ -608,4 +608,4 @@ See [SD-COVERAGE.md](../SD-COVERAGE.md#governance-gov) for full matrix.
 
 - [SD-ARCH.md](../SD-ARCH.md) — Architecture overview
 - [SD-ORC.md](SD-ORC.md) — Orchestration integration
-- [governance-reference.md](../governance-reference.md) — Full governance reference
+- [SD-INDEX.md](../SD-INDEX.md) — Navigation and delta-detection loop

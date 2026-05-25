@@ -218,7 +218,7 @@ Once registered, the gateway exposes:
 
 ## Cross-References
 
-- **Flows & Agents**: [flows-and-agents-reference.md](flows-and-agents-reference.md)
-- **Architecture**: [architecture-overview.md](architecture-overview.md)
-- **BRD**: [BRD-experience.md](../brd/BRD-experience.md)
-- **Techspec**: [PROD-products.md](../techspec/PROD-products.md)
+- **System Design**: [SD-INDEX.md](../05_systemdesign/SD-INDEX.md)
+- **Architecture**: [SD-ARCH.md](../05_systemdesign/SD-ARCH.md)
+- **BRD**: [BRD-experience.md](../02_brd/BRD-experience.md)
+- **Techspec**: [PROD-products.md](../03_techspec/PROD-products.md)

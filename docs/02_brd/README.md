@@ -17,7 +17,7 @@
 
 ## Overview
 
-This folder contains Business Requirement Documents (BRDs) that define **what** the MASTER platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../03_technical_specifications/) are derived.
+This folder contains Business Requirement Documents (BRDs) that define **what** the MASTER platform must achieve from a business perspective. BRDs are the source of truth from which [Technical Specifications](../03_techspec/) are derived.
 
 ### Document Hierarchy
 
@@ -26,7 +26,7 @@ docs/01_vision_and_intent/   ← Strategic direction
     ↓
 docs/02_brd/                 ← Business requirements (this folder)
     ↓
-docs/03_technical_specifications/ ← Technical specifications
+docs/03_techspec/ ← Technical specifications
     ↓
 core/, gateway/, products/   ← Implementation
 ```
@@ -160,6 +160,6 @@ Use this routing guide to determine which BRD to update:
 
 ## Cross-References
 
-- **Technical Specifications**: [docs/techspec/](../techspec/)
-- **System Design**: [docs/systemdesign/](../systemdesign/)
-- **Implementation Gaps**: [docs/implementationplan/implementation_gaps.md](../implementationplan/implementation_gaps.md)
+- **Technical Specifications**: [docs/03_techspec/](../03_techspec/)
+- **System Design**: [docs/05_systemdesign/](../05_systemdesign/)
+- **Implementation Gaps**: [docs/04_implementation_plan/](../04_implementation_plan/)

@@ -574,7 +574,7 @@ These indicate MASTER has failed or is failing:
 ## Related Documents
 
 - [intent.md](intent.md) — Framework Developer Intent (requirements for BRDs)
-- [BRD-automation.md](../01_brd/BRD-automation.md) — Intelligent automation requirements
-- [BRD-governance.md](../01_brd/BRD-governance.md) — Governance & compliance requirements
-- [BRD-experience.md](../01_brd/BRD-experience.md) — Developer & user experience
-- [BRD-operations.md](../01_brd/BRD-operations.md) — Operational excellence
+- [BRD-automation.md](../02_brd/BRD-automation.md) — Intelligent automation requirements
+- [BRD-governance.md](../02_brd/BRD-governance.md) — Governance & compliance requirements
+- [BRD-experience.md](../02_brd/BRD-experience.md) — Developer & user experience
+- [BRD-operations.md](../02_brd/BRD-operations.md) — Operational excellence

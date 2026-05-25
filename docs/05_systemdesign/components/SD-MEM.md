@@ -3,7 +3,7 @@
 > **Component**: Memory & Persistence Layer  
 > **Version**: 1.2  
 > **Path**: `core/memory/`  
-> **Tech Spec**: [MEM-memory.md](../../03_technical_specifications/MEM-memory.md)  
+> **Tech Spec**: [MEM-memory.md](../../03_techspec/MEM-memory.md)  
 > **Last Updated**: 2026-01-20  
 
 ---

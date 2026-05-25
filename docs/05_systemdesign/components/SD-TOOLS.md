@@ -3,7 +3,7 @@
 > **Component**: Tool Execution Layer  
 > **Version**: 1.1  
 > **Path**: `core/tools/`  
-> **Tech Spec**: [AGT-agents-tools.md](../../03_technical_specifications/AGT-agents-tools.md) (TOOL-* requirements)  
+> **Tech Spec**: [AGT-agents-tools.md](../../03_techspec/AGT-agents-tools.md) (TOOL-* requirements)  
 > **Last Updated**: 2026-01-16  
 
 ---

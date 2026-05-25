@@ -57,7 +57,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Orchestration (ORC)
 
-> Source: [../03_techspecs/ORC-orchestration.md](../03_techspecs/ORC-orchestration.md)
+> Source: [../03_techspec/ORC-orchestration.md](../03_techspec/ORC-orchestration.md)
 
 ### Run Lifecycle (ORC-RUN)
 
@@ -187,7 +187,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Agents & Tools (AGT, TOOL)
 
-> Source: [../03_techspecs/AGT-agents-tools.md](../03_techspecs/AGT-agents-tools.md)
+> Source: [../03_techspec/AGT-agents-tools.md](../03_techspec/AGT-agents-tools.md)
 
 ### BaseAgent Contract (AGT-BASE)
 
@@ -253,7 +253,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Governance (GOV)
 
-> Source: [../03_techspecs/GOV-governance.md](../03_techspecs/GOV-governance.md)
+> Source: [../03_techspec/GOV-governance.md](../03_techspec/GOV-governance.md)
 
 ### Hook Architecture (GOV-HOOK)
 
@@ -328,7 +328,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Memory (MEM)
 
-> Source: [../03_techspecs/MEM-memory.md](../03_techspecs/MEM-memory.md)
+> Source: [../03_techspec/MEM-memory.md](../03_techspec/MEM-memory.md)
 
 ### Data Schemas (MEM-SCHEMA)
 
@@ -402,7 +402,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Intelligence (INT)
 
-> Source: [../03_techspecs/INT-intelligence.md](../03_techspecs/INT-intelligence.md)
+> Source: [../03_techspec/INT-intelligence.md](../03_techspec/INT-intelligence.md)
 
 ### Advisory Agents (INT-ADV)
 
@@ -512,7 +512,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Gateway (GW)
 
-> Source: [../03_techspecs/GW-gateway.md](../03_techspecs/GW-gateway.md)
+> Source: [../03_techspec/GW-gateway.md](../03_techspec/GW-gateway.md)
 
 ### HTTP API Server (GW-API)
 
@@ -589,7 +589,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Products (PROD)
 
-> Source: [../03_techspecs/PROD-products.md](../03_techspecs/PROD-products.md)
+> Source: [../03_techspec/PROD-products.md](../03_techspec/PROD-products.md)
 
 ### Directory Structure (PROD-DIR)
 
@@ -640,7 +640,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ## Acceptance (ACC)
 
-> Source: [../03_techspecs/ACC-acceptance.md](../03_techspecs/ACC-acceptance.md)
+> Source: [../03_techspec/ACC-acceptance.md](../03_techspec/ACC-acceptance.md)
 
 | Tech Spec ID | Requirement (short) | Status | Implemented In | Trace/Artifact | Tests | Notes |
 |--------------|---------------------|--------|----------------|----------------|-------|-------|

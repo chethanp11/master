@@ -3,7 +3,7 @@
 > **Component**: Gateway Layer (API, CLI, UI)  
 > **Version**: 1.1  
 > **Path**: `gateway/`  
-> **Tech Spec**: [GW-gateway.md](../../03_technical_specifications/GW-gateway.md)  
+> **Tech Spec**: [GW-gateway.md](../../03_techspec/GW-gateway.md)  
 > **Last Updated**: 2026-01-16  
 
 ---

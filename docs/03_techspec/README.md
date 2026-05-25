@@ -126,7 +126,7 @@ Current coverage: **348+ tests passing**
 
 ## References
 
-- [docs/overview.md](../docs/overview.md) — High-level architecture
-- [docs/core_architecture.md](../docs/core_architecture.md) — Detailed core design
-- [docs/engineering_standards.md](../docs/engineering_standards.md) — Development standards
-- [docs/implementation_gaps.md](../docs/implementation_gaps.md) — Gap analysis
+- [../05_systemdesign/SD-ARCH.md](../05_systemdesign/SD-ARCH.md) — High-level architecture
+- [../05_systemdesign/SD-INDEX.md](../05_systemdesign/SD-INDEX.md) — System design navigation and component map
+- [../howto/HOWTO-enhance-framework.md](../howto/HOWTO-enhance-framework.md) — Development workflow and implementation loop
+- [../04_implementation_plan/imp_gaps.md](../04_implementation_plan/imp_gaps.md) — Gap analysis

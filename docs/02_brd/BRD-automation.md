@@ -20,7 +20,7 @@
 
 ## Governing Architecture Invariants
 
-The following architecture invariants from [Developer Intent](../00_developer_intent/intent.md) govern this BRD:
+The following architecture invariants from [Developer Intent](../01_vision_and_intent/intent.md) govern this BRD:
 
 | INV | Invariant | Implication for Automation |
 |-----|-----------|---------------------------|
@@ -68,7 +68,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ## 3. Business Requirements
 
-> **Source**: [INT-AUTO](../00_developer_intent/intent.md#1-intelligent-automation-int-auto)
+> **Source**: [INT-AUTO](../01_vision_and_intent/intent.md#1-intelligent-automation-int-auto)
 
 ### 3.1 Agent Capabilities
 
@@ -146,7 +146,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.6 Semantic Interpretation Phase (Added: 2026-01-13)
 
-> **Source**: [INT-AUTO-SEM](../00_developer_intent/intent.md#11-semantic-interpretation-phase-added-2026-01-13)
+> **Source**: [INT-AUTO-SEM](../01_vision_and_intent/intent.md#11-semantic-interpretation-phase-added-2026-01-13)
 
 | ID | Requirement | Priority | Source | Ver | Date |
 |----|-------------|----------|--------|-----|------|
@@ -183,7 +183,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.7 Product Semantic Adapter (Added: 2026-01-13)
 
-> **Source**: [INT-AUTO-ADAPT](../00_developer_intent/intent.md#12-product-semantic-adapter-added-2026-01-13)
+> **Source**: [INT-AUTO-ADAPT](../01_vision_and_intent/intent.md#12-product-semantic-adapter-added-2026-01-13)
 
 | ID | Requirement | Priority | Source | Ver | Date |
 |----|-------------|----------|--------|-----|------|
@@ -208,7 +208,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ### 3.8 Stop/Pause Mechanism (Added: 2026-01-13)
 
-> **Source**: [INT-AUTO-STOP](../00_developer_intent/intent.md#13-stoppause-mechanism-added-2026-01-13)
+> **Source**: [INT-AUTO-STOP](../01_vision_and_intent/intent.md#13-stoppause-mechanism-added-2026-01-13)
 
 | ID | Requirement | Priority | Source | Ver | Date |
 |----|-------------|----------|--------|-----|------|
@@ -348,7 +348,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ## 7. Cross-Cutting Requirements
 
-> **Source**: [INT-LIFECYCLE](../00_developer_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../00_developer_intent/intent.md#6-product-factory-model-int-factory)
+> **Source**: [INT-LIFECYCLE](../01_vision_and_intent/intent.md#5-developer-intent-lifecycle-int-lifecycle), [INT-FACTORY](../01_vision_and_intent/intent.md#6-product-factory-model-int-factory)
 
 ### 7.1 Intent-to-BRD Traceability
 
@@ -393,7 +393,7 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ## 10. Framework Laws Governing Automation
 
-> **Source**: [Framework Laws](../00_developer_intent/intent.md#7-framework-laws)
+> **Source**: [Framework Laws](../01_vision_and_intent/intent.md#7-framework-laws)
 
 | Law | Implication | Ver |
 |-----|-------------|-----|
@@ -412,8 +412,8 @@ A platform that provides structured, composable, and governed AI agents that can
 
 ## Related Documents
 
-- [Intent.md](../00_developer_intent/intent.md) — Source developer intent
-- [Vision.md](../00_developer_intent/Vision.md) — Platform vision and principles
+- [Intent.md](../01_vision_and_intent/intent.md) — Source developer intent
+- [Vision.md](../01_vision_and_intent/Vision.md) — Platform vision and principles
 - [BRD-governance.md](BRD-governance.md) — Human oversight for high-risk actions
-- [AGT-agents-tools.md](../techspec/AGT-agents-tools.md) — Technical agent/tool specs
-- [INT-intelligence.md](../techspec/INT-intelligence.md) — Technical intelligence specs
+- [AGT-agents-tools.md](../03_techspec/AGT-agents-tools.md) — Technical agent/tool specs
+- [INT-intelligence.md](../03_techspec/INT-intelligence.md) — Technical intelligence specs

@@ -77,8 +77,11 @@ MASTER chooses **(C) Spec-Driven + Traceable** — everything maps to requiremen
 
 | Document | Purpose |
 |----------|---------|
-| [engineering-standards.md](engineering-standards.md) | Coding conventions, patterns |
-| [product-guide.md](product-guide.md) | How to build products |
+| [SD-ARCH.md](SD-ARCH.md) | Architecture boundaries, dependency rules, invariants |
+| [SD-COVERAGE.md](SD-COVERAGE.md) | Requirement-to-implementation mapping |
+| [components/SD-COMP-LIST.md](components/SD-COMP-LIST.md) | Component inventory and implementation reference |
+| [../howto/HOWTO-enhance-framework.md](../howto/HOWTO-enhance-framework.md) | End-to-end framework change workflow |
+| [../howto/product-howto.md](../howto/product-howto.md) | Product build and ship guide |
 
 ---
 

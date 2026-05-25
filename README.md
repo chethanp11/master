@@ -38,4 +38,5 @@ Products supply manifests, flows, agents, and tools; the platform executes flows
 - `docs/03_techspec/TS-COVERAGE.md`: BRD to TechSpec coverage mapping.
 - `docs/05_systemdesign/SD-ARCH.md`: Stable architecture boundaries, dependency rules, and invariants.
 - `docs/05_systemdesign/SD-COVERAGE.md`: TechSpec ID to implementation mapping for delta detection.
+- `docs/05_systemdesign/SD-INDEX.md`: System design entry point and doc map.
 - `docs/howto/product-howto.md`: Product authoring guide (manifest, flows, registry, tests).

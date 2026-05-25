@@ -304,4 +304,4 @@ Each component has a detailed design doc following the **contracts + evidence** 
 
 - [SD-INDEX.md](SD-INDEX.md) — Navigation and delta detection loop
 - [SD-COVERAGE.md](SD-COVERAGE.md) — Requirement → implementation mapping
-- [../03_technical_specifications/](../03_technical_specifications/) — Source requirements
+- [../03_techspec/](../03_techspec/) — Source requirements

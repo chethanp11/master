@@ -31,7 +31,10 @@ Developer intent for framework changes lives in:
 ```
 docs/01_vision_and_intent/
 ├── Vision.md    ← Strategic direction, philosophy, actors
-└── intent.md    ← Specific requirements (INT-*, INV-*)
+├── intent-automation.md   ← Intelligent automation intent
+├── intent-governance.md   ← Governance intent
+├── intent-experience.md   ← Experience intent
+└── intent-operations.md   ← Operational intent
 ```
 
 ### How to Add New Intent
@@ -45,7 +48,7 @@ docs/01_vision_and_intent/
    - `INT-LIFECYCLE-*` — Developer intent lifecycle
    - `INT-FACTORY-*` — Product factory model
 
-2. **Add your intent** to the appropriate section in `intent.md`:
+2. **Add your intent** to the appropriate intent document:
    ```markdown
    ### INT-AUTO-XXX: Short Title
    
@@ -63,7 +66,7 @@ docs/01_vision_and_intent/
 ### Where BRDs Live
 
 ```
-docs/02_business_requirements/
+docs/02_brd/
 ├── README.md
 ├── BRD-automation.md   ← Agents, tools, reasoning
 ├── BRD-governance.md   ← Approval, security, audit
@@ -109,7 +112,7 @@ docs/02_business_requirements/
 ### Where TechSpecs Live
 
 ```
-docs/03_technical_specifications/
+docs/03_techspec/
 ├── README.md
 ├── ORC-orchestration.md    ← Orchestration engine
 ├── AGT-agents-tools.md     ← Agent/tool contracts
@@ -153,7 +156,7 @@ docs/03_technical_specifications/
 
 ### What is SD-COVERAGE?
 
-[SD-COVERAGE.md](../05_system_design/SD-COVERAGE.md) is the **heart of delta detection**. It maps every Tech Spec requirement ID to its implementation status:
+[SD-COVERAGE.md](../05_systemdesign/SD-COVERAGE.md) is the **heart of delta detection**. It maps every Tech Spec requirement ID to its implementation status:
 
 ```
 Tech Spec IDs − Implemented IDs = Implementation Backlog
@@ -171,7 +174,7 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ### How to Update SD-COVERAGE
 
-1. **Find the relevant section** in [SD-COVERAGE.md](../05_system_design/SD-COVERAGE.md) (grouped by Tech Spec document).
+1. **Find the relevant section** in [SD-COVERAGE.md](../05_systemdesign/SD-COVERAGE.md) (grouped by Tech Spec document).
 
 2. **Update the row** for your requirement:
    ```markdown
@@ -193,13 +196,13 @@ Tech Spec IDs − Implemented IDs = Implementation Backlog
 
 ```bash
 # Count unimplemented requirements
-grep -c "❌ Not Implemented" docs/05_system_design/SD-COVERAGE.md
+grep -c "❌ Not Implemented" docs/05_systemdesign/SD-COVERAGE.md
 
 # List partial implementations
-grep "🟡 Partial" docs/05_system_design/SD-COVERAGE.md
+grep "🟡 Partial" docs/05_systemdesign/SD-COVERAGE.md
 
 # Find all requirements needing work
-grep -E "❌|🟡" docs/05_system_design/SD-COVERAGE.md
+grep -E "❌|🟡" docs/05_systemdesign/SD-COVERAGE.md
 ```
 
 ### The Mechanical Planning Loop
@@ -307,7 +310,7 @@ These tests verify:
 ### System Design Structure
 
 ```
-docs/05_system_design/
+docs/05_systemdesign/
 ├── SD-INDEX.md          ← Entry point, delta detection loop
 ├── SD-ARCH.md           ← Architecture boundaries, invariants
 ├── SD-COVERAGE.md       ← Tech Spec → Implementation mapping (delta enabler)
@@ -319,8 +322,7 @@ docs/05_system_design/
 │   ├── SD-TOOLS.md      ← Tools
 │   ├── SD-GW.md         ← Gateway
 │   └── SD-PROD.md       ← Products
-├── engineering-standards.md
-└── product-guide.md
+└── SD-COMP-LIST.md      ← Component inventory
 ```
 
 ### When to Regenerate
@@ -342,7 +344,7 @@ Regenerate system design documentation when:
    grep -r "def " core/ --include="*.py" | grep -v "__" | grep -v "test"
    ```
 
-2. **Update the appropriate component doc** in `docs/05_system_design/components/`:
+2. **Update the appropriate component doc** in `docs/05_systemdesign/components/`:
 
    | Component | Document |
    |-----------|----------|
@@ -382,13 +384,13 @@ This single rule makes diffs possible. Prose rots. Contracts don't.
 │                    ENHANCEMENT WORKFLOW                       │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
-│  1. Add Intent (01_vision_and_intent/intent.md)               │
+│  1. Add Intent (01_vision_and_intent/intent-*.md)             │
 │         │                                                     │
 │         ▼                                                     │
-│  2. Derive BRD (02_business_requirements/BRD-*.md)            │
+│  2. Derive BRD (02_brd/BRD-*.md)            │
 │         │                                                     │
 │         ▼                                                     │
-│  3. Create TechSpec (03_technical_specifications/*.md)        │
+│  3. Create TechSpec (03_techspec/*.md)        │
 │         │                                                     │
 │         ▼                                                     │
 │  4. Implement in core/, gateway/, etc.                        │
@@ -400,7 +402,7 @@ This single rule makes diffs possible. Prose rots. Contracts don't.
 │  6. Validate (pytest + trace inspection)                      │
 │         │                                                     │
 │         ▼                                                     │
-│  7. Update System Design (05_system_design/*.md)              │
+│  7. Update System Design (05_systemdesign/*.md)              │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -409,10 +411,10 @@ This single rule makes diffs possible. Prose rots. Contracts don't.
 
 ## See Also
 
-- [SD-INDEX.md](../05_system_design/SD-INDEX.md) — System design entry point
-- [SD-COVERAGE.md](../05_system_design/SD-COVERAGE.md) — Requirement coverage matrix
-- [SD-ARCH.md](../05_system_design/SD-ARCH.md) — Architecture boundaries
+- [SD-INDEX.md](../05_systemdesign/SD-INDEX.md) — System design entry point
+- [SD-COVERAGE.md](../05_systemdesign/SD-COVERAGE.md) — Requirement coverage matrix
+- [SD-ARCH.md](../05_systemdesign/SD-ARCH.md) — Architecture boundaries
 - [Vision.md](../01_vision_and_intent/Vision.md) — Framework philosophy
-- [intent.md](../01_vision_and_intent/intent.md) — Developer intent requirements
-- [engineering-standards.md](../05_system_design/engineering-standards.md) — Coding conventions
-- [ACC-acceptance.md](../03_technical_specifications/ACC-acceptance.md) — Test acceptance criteria
+- [01_vision_and_intent/](../01_vision_and_intent/) — Developer intent requirements
+- [product-howto.md](product-howto.md) — Coding conventions
+- [ACC-acceptance.md](../03_techspec/ACC-acceptance.md) — Test acceptance criteria
